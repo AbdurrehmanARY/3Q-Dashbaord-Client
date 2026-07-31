@@ -8,11 +8,26 @@ import { DatePicker } from "@/shared/components/date-picker";
 import { useCompanies } from "@/features/companies";
 import { useWorkOrders } from "../hooks/use-work-orders";
 import { workOrderColumns } from "./work-order-columns";
-import { WORK_ORDER_STATUS_META, type WorkOrder, type WorkOrderStatus } from "../types";
+import {
+  WORK_ORDER_STATUS_META,
+  PRODUCT_TYPE_META,
+  type WorkOrder,
+  type WorkOrderStatus,
+  type ProductType,
+} from "../types";
 
 const STATUS_OPTIONS: ComboboxOption<WorkOrderStatus>[] = (
   Object.keys(WORK_ORDER_STATUS_META) as WorkOrderStatus[]
 ).map((status) => ({ value: status, label: WORK_ORDER_STATUS_META[status].label }));
+
+/** Both workflows share this list; this narrows it to one of them. */
+const PRODUCT_TYPE_OPTIONS: ComboboxOption<ProductType>[] = (
+  Object.keys(PRODUCT_TYPE_META) as ProductType[]
+).map((type) => ({
+  value: type,
+  label: PRODUCT_TYPE_META[type].label,
+  hint: PRODUCT_TYPE_META[type].description,
+}));
 
 /**
  * Composes the generic DataTable with the work-order column definitions. This is the
@@ -32,6 +47,7 @@ export function WorkOrderTable({ onCreateNew }: WorkOrderTableProps) {
   const { data: companies } = useCompanies();
 
   const [status, setStatus] = React.useState<WorkOrderStatus | null>(null);
+  const [productType, setProductType] = React.useState<ProductType | null>(null);
   const [companyId, setCompanyId] = React.useState<number | null>(null);
   const [dueBefore, setDueBefore] = React.useState<string | null>(null);
 
@@ -47,9 +63,11 @@ export function WorkOrderTable({ onCreateNew }: WorkOrderTableProps) {
     [companies]
   );
 
-  const hasExternalFilters = status !== null || companyId !== null || dueBefore !== null;
+  const hasExternalFilters =
+    status !== null || productType !== null || companyId !== null || dueBefore !== null;
   const clearExternalFilters = () => {
     setStatus(null);
+    setProductType(null);
     setCompanyId(null);
     setDueBefore(null);
   };
@@ -57,10 +75,12 @@ export function WorkOrderTable({ onCreateNew }: WorkOrderTableProps) {
   const rows = React.useMemo<WorkOrder[]>(() => {
     let result = data ?? [];
     if (status) result = result.filter((wo) => wo.status === status);
+    // Rows created before the woven workflow have no productType — treat them as printed.
+    if (productType) result = result.filter((wo) => (wo.productType ?? "printed") === productType);
     if (companyId != null) result = result.filter((wo) => wo.companyId === companyId);
     if (dueBefore) result = result.filter((wo) => !!wo.dueDate && wo.dueDate <= dueBefore);
     return result;
-  }, [data, status, companyId, dueBefore]);
+  }, [data, status, productType, companyId, dueBefore]);
 
   // Two distinct empty states: no work orders exist at all (offer to create the first
   // one), versus some exist but the current filters/search hide all of them (offer to
@@ -107,7 +127,17 @@ export function WorkOrderTable({ onCreateNew }: WorkOrderTableProps) {
           )
         }
         toolbar={(table) => (
-          <DataTableToolbar table={table} searchPlaceholder="Search SO, PO, company…">
+          <DataTableToolbar table={table} searchPlaceholder="Search SO, PO, design, DC/LC…">
+            <div className="sm:w-44">
+              <Combobox
+                options={PRODUCT_TYPE_OPTIONS}
+                value={productType}
+                onChange={setProductType}
+                placeholder="All types"
+                emptyText="No types."
+                aria-label="Filter by product type"
+              />
+            </div>
             <div className="sm:w-44">
               <Combobox
                 options={STATUS_OPTIONS}

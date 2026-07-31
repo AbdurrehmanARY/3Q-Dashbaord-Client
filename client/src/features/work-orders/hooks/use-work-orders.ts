@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { workOrderService } from "../services/work-order-service";
-import type { WorkOrderInput } from "../types";
+import type { WorkOrderInput, DispatchInput } from "../types";
 
 export const WORK_ORDER_KEYS = {
   all: ["work-orders"] as const,
@@ -47,6 +47,25 @@ export function useUpdateWorkOrder() {
       qc.invalidateQueries({ queryKey: WORK_ORDER_KEYS.all });
       qc.invalidateQueries({ queryKey: WORK_ORDER_KEYS.detail(variables.id) });
       toast.success("Work order updated");
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+}
+
+/**
+ * Completes dispatch. Also invalidates production orders — dispatching is the final step of
+ * an order's life, and the dashboards surface it.
+ */
+export function useDispatchWorkOrder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: DispatchInput }) =>
+      workOrderService.dispatch(id, body),
+    onSuccess: (_, variables) => {
+      qc.invalidateQueries({ queryKey: WORK_ORDER_KEYS.all });
+      qc.invalidateQueries({ queryKey: WORK_ORDER_KEYS.detail(variables.id) });
+      qc.invalidateQueries({ queryKey: ["production-orders"] });
+      toast.success("Order dispatched");
     },
     onError: (err: any) => toast.error(err.message),
   });

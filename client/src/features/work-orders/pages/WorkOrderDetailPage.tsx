@@ -140,10 +140,53 @@ export function WorkOrderDetailPage() {
                 <StatusBadge variant={statusMeta.variant}>{statusMeta.label}</StatusBadge>
               </dd>
             </div>
-            {isComplete && <Field label="DC Number" value={wo.dcNumber ?? "—"} mono />}
-            {isComplete && <Field label="Dispatched Date" value={formatDate(wo.dispatchedDate)} />}
+            <div>
+              <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">Product Type</dt>
+              <dd className="mt-0.5">
+                <StatusBadge variant={wo.productType === "woven" ? "active" : "pending"}>
+                  {wo.productType === "woven" ? "Woven" : "Printed"}
+                </StatusBadge>
+              </dd>
+            </div>
           </dl>
         </AppCard>
+
+        {/* ---------------- Woven design specification ---------------- */}
+        {wo.productType === "woven" && (
+          <AppCard title="Woven Design Specification">
+            <dl className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3 lg:grid-cols-5">
+              <Field label="Design Code" value={wo.designCode ?? "—"} mono />
+              <Field label="Pick" value={formatNumber(wo.pick, 0)} />
+              <Field label="Repeat" value={formatNumber(wo.repeat, 2)} />
+              <Field label="Density" value={formatNumber(wo.density, 0)} />
+              <Field label="Extra" value={formatNumber(wo.extra, 2)} />
+            </dl>
+          </AppCard>
+        )}
+
+        {/* ---------------- Dispatch ---------------- */}
+        {isComplete && (
+          <AppCard
+            title="Dispatch"
+            description="DC Number and LC Number are both required to complete dispatch."
+          >
+            <dl className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4">
+              <Field label="DC Number" value={wo.dcNumber ?? "—"} mono />
+              <Field label="LC Number" value={wo.lcNumber ?? "—"} mono />
+              <Field label="Dispatched Date" value={formatDate(wo.dispatchedDate)} />
+              <Field
+                label="Dispatched Qty"
+                value={wo.dispatchedQty != null ? formatNumber(wo.dispatchedQty, 0) : "—"}
+              />
+            </dl>
+            {(!wo.dcNumber || !wo.lcNumber) && (
+              <p className="mt-3 text-xs font-medium text-warning">
+                This order has not been dispatched yet — use “Dispatch Details” above to record the
+                DC and LC numbers.
+              </p>
+            )}
+          </AppCard>
+        )}
 
         {!productionOrder ? (
           <AppCard title="Production">

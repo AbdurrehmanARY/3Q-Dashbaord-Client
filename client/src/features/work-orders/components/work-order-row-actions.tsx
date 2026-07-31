@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
-import { EyeIcon, MoreHorizontalIcon, PencilIcon, Trash2Icon } from "lucide-react";
+import { EyeIcon, MoreHorizontalIcon, PencilIcon, Trash2Icon, TruckIcon } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useDeleteWorkOrder } from "../hooks/use-work-orders";
 import { WorkOrderDialog } from "./WorkOrderDialog";
+import { DispatchDialog } from "./DispatchDialog";
 import type { WorkOrder } from "../types";
 
 /**
@@ -37,10 +38,13 @@ export function WorkOrderRowActions({ workOrder }: { workOrder: WorkOrder }) {
   const deleteWorkOrder = useDeleteWorkOrder();
   const [confirmOpen, setConfirmOpen] = React.useState(false);
   const [editOpen, setEditOpen] = React.useState(false);
+  const [dispatchOpen, setDispatchOpen] = React.useState(false);
 
   // Only an untouched sales order can be edited or deleted; once production owns it the
   // server rejects both, so the menu does not offer dead actions.
   const isEditable = workOrder.status === "initiate_production";
+  // Dispatch is the final step, available only once production has completed the order.
+  const canDispatch = workOrder.status === "complete";
 
   return (
     <div className="flex justify-end">
@@ -65,6 +69,13 @@ export function WorkOrderRowActions({ workOrder }: { workOrder: WorkOrder }) {
             <PencilIcon className="text-muted-foreground" />
             Edit
           </DropdownMenuItem>
+
+          {canDispatch && (
+            <DropdownMenuItem onClick={() => setDispatchOpen(true)}>
+              <TruckIcon className="text-muted-foreground" />
+              {workOrder.dispatchedDate ? "Edit Dispatch" : "Dispatch"}
+            </DropdownMenuItem>
+          )}
 
           <DropdownMenuSeparator />
 
@@ -109,6 +120,10 @@ export function WorkOrderRowActions({ workOrder }: { workOrder: WorkOrder }) {
 
       {editOpen && (
         <WorkOrderDialog open workOrder={workOrder} onClose={() => setEditOpen(false)} />
+      )}
+
+      {dispatchOpen && (
+        <DispatchDialog open workOrder={workOrder} onClose={() => setDispatchOpen(false)} />
       )}
     </div>
   );
