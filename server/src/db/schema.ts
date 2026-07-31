@@ -12,6 +12,17 @@ export * from "./tables/production-stage-events.table";
 export * from "./tables/production-roll-issuances.table";
 export * from "./tables/purchase-record.table";
 export * from "./tables/inventory-rolls.table";
+/* ---------- Woven Labels workflow ---------- */
+export * from "./tables/product-type.enum";
+export * from "./tables/woven-work-order-details.table";
+export * from "./tables/woven-production-lines.table";
+export * from "./tables/woven-thread-plan-items.table";
+/* ---------- Thread inventory ---------- */
+export * from "./tables/thread.enums";
+export * from "./tables/thread-stocks.table";
+export * from "./tables/thread-purchases.table";
+export * from "./tables/thread-dye-batches.table";
+export * from "./tables/thread-stock-movements.table";
 export * from "./relations/index";
 
 import { companies } from "./tables/companies.table";
@@ -27,6 +38,13 @@ import { productionStageEvents } from "./tables/production-stage-events.table";
 import { productionRollIssuances } from "./tables/production-roll-issuances.table";
 import { purchaseRecords } from "./tables/purchase-record.table";
 import { inventoryRolls } from "./tables/inventory-rolls.table";
+import { wovenWorkOrderDetails } from "./tables/woven-work-order-details.table";
+import { wovenProductionLines } from "./tables/woven-production-lines.table";
+import { wovenThreadPlanItems } from "./tables/woven-thread-plan-items.table";
+import { threadStocks } from "./tables/thread-stocks.table";
+import { threadPurchases } from "./tables/thread-purchases.table";
+import { threadDyeBatches } from "./tables/thread-dye-batches.table";
+import { threadStockMovements } from "./tables/thread-stock-movements.table";
 
 export type Company = typeof companies.$inferSelect;
 export type NewCompany = typeof companies.$inferInsert;
@@ -54,3 +72,21 @@ export type PurchaseRecord = typeof purchaseRecords.$inferSelect;
 export type NewPurchaseRecord = typeof purchaseRecords.$inferInsert;
 export type InventoryRoll = typeof inventoryRolls.$inferSelect;
 export type NewInventoryRoll = typeof inventoryRolls.$inferInsert;
+
+/* ---------- Woven Labels workflow ---------- */
+export type WovenWorkOrderDetail = typeof wovenWorkOrderDetails.$inferSelect;
+export type NewWovenWorkOrderDetail = typeof wovenWorkOrderDetails.$inferInsert;
+export type WovenProductionLine = typeof wovenProductionLines.$inferSelect;
+export type NewWovenProductionLine = typeof wovenProductionLines.$inferInsert;
+export type WovenThreadPlanItem = typeof wovenThreadPlanItems.$inferSelect;
+export type NewWovenThreadPlanItem = typeof wovenThreadPlanItems.$inferInsert;
+
+/* ---------- Thread inventory ---------- */
+export type ThreadStock = typeof threadStocks.$inferSelect;
+export type NewThreadStock = typeof threadStocks.$inferInsert;
+export type ThreadPurchase = typeof threadPurchases.$inferSelect;
+export type NewThreadPurchase = typeof threadPurchases.$inferInsert;
+export type ThreadDyeBatch = typeof threadDyeBatches.$inferSelect;
+export type NewThreadDyeBatch = typeof threadDyeBatches.$inferInsert;
+export type ThreadStockMovement = typeof threadStockMovements.$inferSelect;
+export type NewThreadStockMovement = typeof threadStockMovements.$inferInsert;

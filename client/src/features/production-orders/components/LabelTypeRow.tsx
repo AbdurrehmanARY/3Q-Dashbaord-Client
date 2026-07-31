@@ -6,6 +6,7 @@ import { Progress } from "@/components/ui/progress";
 import { formatNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { ProductionLineStatusBadge } from "./ProductionStatusBadge";
+import { stickyCellClass } from "./progress-table-styles";
 import type { LineDraft } from "../utils/line-draft";
 import type { ProductionLineOverview } from "../types";
 
@@ -68,7 +69,7 @@ function NumberCell({
         value={Number.isFinite(value) ? value : 0}
         onChange={(e) => onChange(e.target.value === "" ? 0 : Number(e.target.value))}
         className={cn(
-          "h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2 py-1 text-sm tabular-nums transition-colors outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50",
+          "h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2 py-1 text-right text-sm tabular-nums transition-colors outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50",
           disabled && "cursor-not-allowed bg-muted/50 text-muted-foreground",
           error && "border-destructive focus-visible:ring-destructive/40"
         )}
@@ -148,10 +149,13 @@ export const LabelTypeRow = React.memo(function LabelTypeRow({
   };
 
   return (
-    <TableRow className={cn(isEditing && "bg-primary/5")}>
-      <TableCell className="min-w-[140px]">
-        <p className="font-medium">{line.labelType}</p>
-        <ProductionLineStatusBadge status={line.status} />
+    <TableRow className={cn("bg-card", isEditing && "bg-primary/5")}>
+      {/* Frozen identity column — stays visible while the stage columns scroll. */}
+      <TableCell className={cn("min-w-[160px] align-top", stickyCellClass("first", { editing: isEditing }))}>
+        <p className="font-medium leading-tight">{line.labelType}</p>
+        <div className="mt-1">
+          <ProductionLineStatusBadge status={line.status} />
+        </div>
         {/* Workflow steps 3-5 gate step 6 — surfaced here so the block is visible before
             the operator types a count and gets rejected. */}
         {!line.readiness.canStart && (
@@ -162,12 +166,12 @@ export const LabelTypeRow = React.memo(function LabelTypeRow({
         )}
       </TableCell>
 
-      {/* Printing = totalRolls, the planned ceiling set during planning — read-only here. */}
-      <TableCell className="text-right tabular-nums text-muted-foreground">
+      {/* Planned rolls = totalRolls, the ceiling set during planning — read-only here. */}
+      <TableCell className="whitespace-nowrap text-right tabular-nums text-muted-foreground">
         {formatNumber(line.planning.totalRolls, 2)}
       </TableCell>
 
-      <TableCell>
+      <TableCell className="text-right">
         {isEditing && draft ? (
           <NumberCell
             value={draft.printedRolls}
@@ -208,7 +212,7 @@ export const LabelTypeRow = React.memo(function LabelTypeRow({
         )}
       </TableCell>
 
-      <TableCell>
+      <TableCell className="text-right">
         {isEditing && draft ? (
           <NumberCell
             value={draft.sentToCuttingRolls}
@@ -223,7 +227,7 @@ export const LabelTypeRow = React.memo(function LabelTypeRow({
         )}
       </TableCell>
 
-      <TableCell>
+      <TableCell className="text-right">
         {isEditing && draft ? (
           <NumberCell
             value={draft.cutRolls}
@@ -264,7 +268,7 @@ export const LabelTypeRow = React.memo(function LabelTypeRow({
         )}
       </TableCell>
 
-      <TableCell>
+      <TableCell className="text-right">
         {isEditing && draft ? (
           <NumberCell
             value={draft.sentToPackagingRolls}
@@ -279,7 +283,7 @@ export const LabelTypeRow = React.memo(function LabelTypeRow({
         )}
       </TableCell>
 
-      <TableCell>
+      <TableCell className="text-right">
         {isEditing && draft ? (
           <NumberCell
             value={draft.packagedRolls}
@@ -294,7 +298,7 @@ export const LabelTypeRow = React.memo(function LabelTypeRow({
         )}
       </TableCell>
 
-      <TableCell>
+      <TableCell className="text-right">
         {isEditing && draft ? (
           <NumberCell
             value={draft.packagedQty}
@@ -331,9 +335,10 @@ export const LabelTypeRow = React.memo(function LabelTypeRow({
         </div>
       </TableCell>
 
-      <TableCell className="min-w-[120px]">
+      {/* Frozen actions column — Save/Cancel stay reachable without scrolling back. */}
+      <TableCell className={cn("min-w-[104px]", stickyCellClass("last", { editing: isEditing }))}>
         {isEditing ? (
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center justify-end gap-1.5">
             <AppButton
               size="sm"
               className="h-7 px-2"
@@ -356,15 +361,17 @@ export const LabelTypeRow = React.memo(function LabelTypeRow({
             </AppButton>
           </div>
         ) : (
-          <AppButton
-            size="sm"
-            variant="ghost"
-            className="h-7 px-2"
-            onClick={() => onEdit(line)}
-            aria-label={`Edit ${line.labelType}`}
-          >
-            <Pencil className="h-3.5 w-3.5" />
-          </AppButton>
+          <div className="flex justify-end">
+            <AppButton
+              size="sm"
+              variant="ghost"
+              className="h-7 px-2"
+              onClick={() => onEdit(line)}
+              aria-label={`Edit ${line.labelType}`}
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </AppButton>
+          </div>
         )}
       </TableCell>
     </TableRow>

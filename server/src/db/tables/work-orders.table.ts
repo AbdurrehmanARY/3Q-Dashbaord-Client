@@ -1,5 +1,6 @@
 import { pgTable, serial, varchar, date, integer, timestamp, unique, text, index, pgEnum } from "drizzle-orm/pg-core";
 import { brands } from "./brands.table";
+import { productTypeEnum } from "./product-type.enum";
 
 /**
  * Work order status is **derived from the production order**, never set by hand:
@@ -29,10 +30,20 @@ export const workOrders = pgTable(
     brandId: integer("brand_id").references(() => brands.id),
     comment: text("comment"),
     status: workOrderStatusEnum("status").default("initiate_production").notNull(),
-    /** Dispatch chalan number — required and shown only once the order is `complete`. */
+    /**
+     * Which manufacturing workflow this order runs through. Defaults to `printed`, so every
+     * pre-existing row keeps its current behaviour untouched. Woven orders additionally
+     * carry a `woven_work_order_details` row with the loom specification.
+     */
+    productType: productTypeEnum("product_type").default("printed").notNull(),
+    /** Dispatch chalan number — required to complete dispatch, and searchable. */
     dcNumber: varchar("dc_number", { length: 100 }),
-    /** Dispatch date — required and shown only once the order is `complete`. */
+    /** Letter-of-credit number — required to complete dispatch, and searchable. */
+    lcNumber: varchar("lc_number", { length: 100 }),
+    /** Dispatch date — captured against a completed order. */
     dispatchedDate: date("dispatched_date"),
+    /** Quantity actually dispatched; may differ from `totalQty` on a short shipment. */
+    dispatchedQty: integer("dispatched_qty"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
@@ -40,5 +51,9 @@ export const workOrders = pgTable(
     soNumberIdx: unique("work_orders_so_number_idx").on(table.soNumber),
     brandIdx: index("work_orders_brand_idx").on(table.brandId),
     statusIdx: index("work_orders_status_idx").on(table.status),
+    productTypeIdx: index("work_orders_product_type_idx").on(table.productType),
+    // Dispatch paperwork is searchable, so both numbers get an index.
+    dcNumberIdx: index("work_orders_dc_number_idx").on(table.dcNumber),
+    lcNumberIdx: index("work_orders_lc_number_idx").on(table.lcNumber),
   })
 );

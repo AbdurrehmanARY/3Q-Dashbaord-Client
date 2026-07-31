@@ -4,6 +4,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useUpdateLineFull, useAvailableResources } from "../hooks/use-production-orders";
 import { LabelTypeRow } from "./LabelTypeRow";
 import { lineToDraft, diffLineDraft, validateLineDraft, cascadeDraft, type LineDraft } from "../utils/line-draft";
+import { PROGRESS_COLUMNS, alignClass, stickyCellClass } from "./progress-table-styles";
+import { cn } from "@/lib/utils";
 import type { ProductionLineOverview } from "../types";
 
 interface EditableLabelTypeTableProps {
@@ -12,28 +14,16 @@ interface EditableLabelTypeTableProps {
   loading?: boolean;
 }
 
-const COLUMNS = [
-  "Label Type",
-  "Printing",
-  "Printed",
-  "Printing Machine",
-  "Printed By",
-  "Cutting",
-  "Cutted",
-  "Cutting Machine",
-  "Cutted By",
-  "Packaging",
-  "Packaged",
-  "Packaged Qty",
-  "Packaged By",
-  "Completion",
-  "Actions",
-];
-
 /**
  * The Production Progress table with row-level inline editing. Only one row edits at a
  * time; every other row keeps referentially-stable props (see `LabelTypeRow`) so editing
  * never re-renders the rest of the table.
+ *
+ * It is far too wide for one screen, so the Label Type and Actions columns are frozen at
+ * the edges while the fifteen stage columns scroll between them — you always know which
+ * row you're reading and can always reach Save/Cancel. Column definitions (labels,
+ * alignment, which edges freeze) live in `progress-table-styles` and are shared with
+ * `LabelTypeRow` so header and body cannot fall out of alignment.
  */
 export function EditableLabelTypeTable({ orderId, lines, loading }: EditableLabelTypeTableProps) {
   const updateLine = useUpdateLineFull(orderId);
@@ -121,17 +111,22 @@ export function EditableLabelTypeTable({ orderId, lines, loading }: EditableLabe
     [updateLine]
   );
 
+  // `Table` supplies its own `overflow-x-auto` container — the frozen columns stick
+  // against that, so no second scroll wrapper is needed (or wanted) here.
   return (
-    <div className="overflow-x-auto">
-      <Table>
+    <Table>
         <TableHeader>
           <TableRow className="bg-muted/30 hover:bg-muted/30">
-            {COLUMNS.map((col) => (
+            {PROGRESS_COLUMNS.map((col) => (
               <TableHead
-                key={col}
-                className="h-10 whitespace-nowrap text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+                key={col.label}
+                className={cn(
+                  "h-10 whitespace-nowrap text-xs font-semibold uppercase tracking-wider text-muted-foreground",
+                  alignClass(col.align),
+                  stickyCellClass(col.sticky, { header: true })
+                )}
               >
-                {col}
+                {col.label}
               </TableHead>
             ))}
           </TableRow>
@@ -139,9 +134,9 @@ export function EditableLabelTypeTable({ orderId, lines, loading }: EditableLabe
         <TableBody>
           {loading &&
             Array.from({ length: 4 }).map((_, i) => (
-              <TableRow key={`skeleton-${i}`}>
-                {COLUMNS.map((col) => (
-                  <TableCell key={col}>
+              <TableRow key={`skeleton-${i}`} className="bg-card">
+                {PROGRESS_COLUMNS.map((col) => (
+                  <TableCell key={col.label} className={stickyCellClass(col.sticky)}>
                     <Skeleton className="h-4 w-full max-w-[100px]" />
                   </TableCell>
                 ))}
@@ -150,7 +145,10 @@ export function EditableLabelTypeTable({ orderId, lines, loading }: EditableLabe
 
           {!loading && lines.length === 0 && (
             <TableRow>
-              <TableCell colSpan={COLUMNS.length} className="h-32 text-center text-sm text-muted-foreground">
+              <TableCell
+                colSpan={PROGRESS_COLUMNS.length}
+                className="h-32 text-center text-sm text-muted-foreground"
+              >
                 No label types planned yet.
               </TableCell>
             </TableRow>
@@ -180,8 +178,7 @@ export function EditableLabelTypeTable({ orderId, lines, loading }: EditableLabe
               );
             })}
         </TableBody>
-      </Table>
-    </div>
+    </Table>
   );
 }
 
