@@ -3,6 +3,17 @@ import { cva, type VariantProps } from "class-variance-authority"
 
 import { cn } from "@/lib/utils"
 
+/**
+ * NOTE: this file was scaffolded from the `base-nova` registry, which targets Tailwind v4.
+ * This project is on Tailwind v3.4, where v4-only variants (`data-horizontal:`,
+ * `data-active:`, `group-data-horizontal/tabs:`) compile to nothing — the component then
+ * renders unstyled and, worse, its flex container never becomes a column, laying the tab
+ * list and panels out side by side. The layout-critical variants below are written in v3
+ * arbitrary-variant syntax (`data-[orientation=horizontal]:`) so they actually compile.
+ *
+ * For a simple two-way view switch prefer `shared/components/segmented-tabs`, which owns
+ * its markup and has no dependency on the primitive's state attributes.
+ */
 function Tabs({
   className,
   orientation = "horizontal",
@@ -13,7 +24,7 @@ function Tabs({
       data-slot="tabs"
       data-orientation={orientation}
       className={cn(
-        "group/tabs flex gap-2 data-horizontal:flex-col",
+        "group/tabs flex gap-2 data-[orientation=horizontal]:flex-col",
         className
       )}
       {...props}
@@ -22,7 +33,7 @@ function Tabs({
 }
 
 const tabsListVariants = cva(
-  "group/tabs-list inline-flex w-fit items-center justify-center rounded-lg p-[3px] text-muted-foreground group-data-horizontal/tabs:h-8 group-data-vertical/tabs:h-fit group-data-vertical/tabs:flex-col data-[variant=line]:rounded-none",
+  "group/tabs-list inline-flex w-fit items-center justify-center rounded-lg p-[3px] text-muted-foreground group-data-[orientation=horizontal]/tabs:h-8 group-data-[orientation=vertical]/tabs:h-fit group-data-[orientation=vertical]/tabs:flex-col data-[variant=line]:rounded-none",
   {
     variants: {
       variant: {
