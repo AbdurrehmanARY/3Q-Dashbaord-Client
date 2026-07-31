@@ -57,11 +57,13 @@ export const navigation: NavItem[] = [
     ],
   },
   {
-    title: "Purchases",
+    // Covers both material purchases (printed) and thread receiving (woven), as tabs.
+    title: "Purchases & Receiving",
     url: "/purchases",
     icon: ShoppingCart,
   },
   {
+    // Covers both roll stock (printed) and thread stock + dyeing (woven), as tabs.
     title: "Inventory",
     url: "/inventory",
     icon: Package,

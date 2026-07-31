@@ -12,7 +12,7 @@ export function WorkOrderListPage() {
     <div className="space-y-6">
       <PageHeader
         title="Work Orders"
-        description="Create and manage customer manufacturing work orders."
+        description="Sales orders for both product lines — printed and woven labels."
         actions={
           <AppButton
             onClick={() => setCreateOpen(true)}
