@@ -9,6 +9,7 @@ import operatorsRoutes from "./operators.routes";
 import usersRoutes from "./users.routes";
 import workOrdersRoutes from "./work-orders.routes";
 import productionOrdersRoutes from "./production-orders.routes";
+import wovenProductionRoutes from "./woven-production.routes";
 import inventoryRoutes from "./inventory.routes";
 import analyticsRoutes from "./analytics.routes";
 
@@ -24,6 +25,8 @@ router.use("/operators", operatorsRoutes);
 router.use("/users", usersRoutes);
 router.use("/work-orders", workOrdersRoutes);
 router.use("/production-orders", productionOrdersRoutes);
+/** Woven workflow — same production_orders header, woven-specific stages. */
+router.use("/woven-production", wovenProductionRoutes);
 router.use("/inventory", inventoryRoutes);
 router.use("/analytics", analyticsRoutes);
 
