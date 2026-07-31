@@ -9,11 +9,18 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { StatusBadge } from "@/components/feedback/StatusBadge";
 import { SubmitOnEnter } from "@/components/forms/SubmitOnEnter";
-import { workOrderSchema, type WorkOrderSchemaInput } from "../schemas/work-order-schemas";
-import { WORK_ORDER_STATUS_META, type WorkOrder, type WorkOrderDetail } from "../types";
+import { workOrderFormSchema, type WorkOrderSchemaInput } from "../schemas/work-order-schemas";
+import {
+  WORK_ORDER_STATUS_META,
+  PRODUCT_TYPE_META,
+  type ProductType,
+  type WorkOrder,
+  type WorkOrderDetail,
+} from "../types";
 import { useCreateWorkOrder, useUpdateWorkOrder } from "../hooks/use-work-orders";
 import { useCompanies, useCompanyBrands } from "@/features/companies";
 import { todayISO } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 interface WorkOrderDialogProps {
   open: boolean;
@@ -38,8 +45,16 @@ function defaultsFor(wo: WorkOrder | WorkOrderDetail | null): WorkOrderSchemaInp
     companyId: wo?.companyId ?? null,
     brandId: wo?.brandId ?? null,
     comment: wo?.comment ?? "",
+    productType: wo?.productType ?? "printed",
+    designCode: wo?.designCode ?? "",
+    pick: wo?.pick ?? "",
+    repeat: wo?.repeat != null ? Number(wo.repeat) : "",
+    density: wo?.density ?? "",
+    extra: wo?.extra != null ? Number(wo.extra) : "",
     dcNumber: wo?.dcNumber ?? "",
+    lcNumber: wo?.lcNumber ?? "",
     dispatchedDate: wo?.dispatchedDate ?? "",
+    dispatchedQty: wo?.dispatchedQty ?? "",
   };
 }
 
@@ -67,11 +82,15 @@ export function WorkOrderDialog({ open, workOrder, onClose }: WorkOrderDialogPro
     reset,
     formState: { errors },
   } = useForm<WorkOrderSchemaInput>({
-    resolver: zodResolver(workOrderSchema) as any,
+    resolver: zodResolver(workOrderFormSchema) as any,
     defaultValues: defaultsFor(workOrder),
   });
 
   const selectedCompanyId = useWatch({ control, name: "companyId" });
+  // The whole dialog serves both workflows; this is the switch that decides which extra
+  // fields appear. Product type is fixed once created — an order cannot change workflow.
+  const productType = (useWatch({ control, name: "productType" }) ?? "printed") as ProductType;
+  const isWoven = productType === "woven";
   const { data: companies } = useCompanies();
   const { data: brands, isLoading: brandsLoading } = useCompanyBrands(
     selectedCompanyId ? String(selectedCompanyId) : null
@@ -106,16 +125,32 @@ export function WorkOrderDialog({ open, workOrder, onClose }: WorkOrderDialogPro
       comment: data.comment || undefined,
     };
 
+    // Only a woven order carries a loom spec; the server rejects it on a printed one.
+    const wovenDetail = isWoven
+      ? {
+          designCode: String(data.designCode ?? ""),
+          pick: Number(data.pick),
+          repeat: Number(data.repeat),
+          density: Number(data.density),
+          extra: data.extra === "" || data.extra == null ? 0 : Number(data.extra),
+        }
+      : undefined;
+
     try {
       if (isEdit && workOrder) {
         // A completed order accepts only its dispatch paperwork; sending the commercial
         // header alongside it is what the server rejects.
+        const dispatch = {
+          dcNumber: data.dcNumber || undefined,
+          lcNumber: data.lcNumber || undefined,
+          dispatchedDate: data.dispatchedDate || undefined,
+        };
         const body = isComplete
-          ? { dcNumber: data.dcNumber || undefined, dispatchedDate: data.dispatchedDate || undefined }
-          : { ...header, dcNumber: data.dcNumber || undefined, dispatchedDate: data.dispatchedDate || undefined };
+          ? dispatch
+          : { ...header, ...dispatch, ...(wovenDetail ? { wovenDetail } : {}) };
         await updateWorkOrder.mutateAsync({ id: workOrder.id, body });
       } else {
-        await createWorkOrder.mutateAsync(header);
+        await createWorkOrder.mutateAsync({ ...header, productType, wovenDetail });
       }
       handleClose();
     } catch {
@@ -148,6 +183,50 @@ export function WorkOrderDialog({ open, workOrder, onClose }: WorkOrderDialogPro
     >
       <form className="grid gap-4 sm:grid-cols-2" onSubmit={handleSubmit(onSubmit)}>
         <SubmitOnEnter disabled={isSaving} />
+
+        {/* Product type drives which workflow the order runs through, and therefore which
+            extra fields this dialog shows. Fixed after creation — changing workflow
+            mid-order would invalidate any production already planned against it. */}
+        <div className="sm:col-span-2">
+          <Label className="text-xs font-semibold">Product Type *</Label>
+          <Controller
+            control={control}
+            name="productType"
+            render={({ field: { value, onChange } }) => (
+              <div className="mt-1.5 grid gap-2 sm:grid-cols-2">
+                {(Object.keys(PRODUCT_TYPE_META) as ProductType[]).map((type) => {
+                  const meta = PRODUCT_TYPE_META[type];
+                  const selected = value === type;
+                  return (
+                    <button
+                      key={type}
+                      type="button"
+                      disabled={isEdit || isLocked}
+                      aria-pressed={selected}
+                      onClick={() => onChange(type)}
+                      className={cn(
+                        "rounded-lg border px-3 py-2 text-left transition-colors",
+                        selected
+                          ? "border-primary bg-primary/5 ring-1 ring-primary/30"
+                          : "border-input hover:bg-muted/50",
+                        (isEdit || isLocked) && "cursor-not-allowed opacity-60"
+                      )}
+                    >
+                      <span className="block text-sm font-medium">{meta.label}</span>
+                      <span className="block text-[11px] text-muted-foreground">{meta.description}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          />
+          {isEdit && (
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Product type is fixed once the order is created.
+            </p>
+          )}
+        </div>
+
         <AppInput
           label="SO Number *"
           disabled={isLocked}
@@ -226,6 +305,58 @@ export function WorkOrderDialog({ open, workOrder, onClose }: WorkOrderDialogPro
           </p>
         )}
 
+        {/* Loom specification — woven orders only. */}
+        {isWoven && (
+          <div className="grid gap-4 rounded-lg border border-dashed bg-muted/20 p-3 sm:col-span-2 sm:grid-cols-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground sm:col-span-4">
+              Woven Design Specification
+            </p>
+            <div className="sm:col-span-2">
+              <AppInput
+                label="Design Code *"
+                placeholder="e.g. Guess 13R"
+                disabled={isLocked}
+                error={errors.designCode?.message}
+                {...register("designCode")}
+              />
+            </div>
+            <AppInput
+              label="Pick *"
+              type="number"
+              placeholder="e.g. 853"
+              disabled={isLocked}
+              error={errors.pick?.message}
+              {...register("pick")}
+            />
+            <AppInput
+              label="Repeat *"
+              type="number"
+              step="any"
+              placeholder="e.g. 60"
+              disabled={isLocked}
+              error={errors.repeat?.message}
+              {...register("repeat")}
+            />
+            <AppInput
+              label="Density *"
+              type="number"
+              placeholder="e.g. 560"
+              disabled={isLocked}
+              error={errors.density?.message}
+              {...register("density")}
+            />
+            <AppInput
+              label="Extra"
+              type="number"
+              step="any"
+              placeholder="e.g. 150"
+              disabled={isLocked}
+              error={errors.extra?.message}
+              {...register("extra")}
+            />
+          </div>
+        )}
+
         {isEdit && workOrder && (
           <div className="grid gap-1.5 sm:col-span-2">
             <Label className="text-xs font-semibold">Status</Label>
@@ -244,12 +375,16 @@ export function WorkOrderDialog({ open, workOrder, onClose }: WorkOrderDialogPro
         {isComplete && (
           <>
             <AppInput label="DC Number" error={errors.dcNumber?.message} {...register("dcNumber")} />
+            <AppInput label="LC Number" error={errors.lcNumber?.message} {...register("lcNumber")} />
             <AppInput
               label="Dispatched Date"
               type="date"
               error={errors.dispatchedDate?.message}
               {...register("dispatchedDate")}
             />
+            <p className="text-[11px] text-muted-foreground sm:col-span-2">
+              DC Number and LC Number are both required to complete dispatch.
+            </p>
           </>
         )}
 

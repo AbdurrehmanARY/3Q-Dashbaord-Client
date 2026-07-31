@@ -22,6 +22,31 @@ export const workOrderColumns: ColumnDef<WorkOrder>[] = [
     cell: ({ row }) => row.original.poNumber ?? "—",
   },
   {
+    // Both workflows share this one list — the badge is how you tell them apart at a glance.
+    accessorKey: "productType",
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Type" />,
+    cell: ({ row }) => {
+      const type = row.original.productType ?? "printed";
+      return (
+        <StatusBadge variant={type === "woven" ? "active" : "pending"}>
+          {type === "woven" ? "Woven" : "Printed"}
+        </StatusBadge>
+      );
+    },
+    filterFn: (row, id, value) => !value || row.getValue(id) === value,
+  },
+  {
+    id: "designCode",
+    accessorFn: (wo) => wo.designCode ?? "",
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Design Code" />,
+    cell: ({ row }) =>
+      row.original.designCode ? (
+        <span className="font-mono text-xs">{row.original.designCode}</span>
+      ) : (
+        <span className="text-muted-foreground">—</span>
+      ),
+  },
+  {
     accessorKey: "companyName",
     header: ({ column }) => <DataTableColumnHeader column={column} title="Company" />,
     cell: ({ row }) => row.original.companyName ?? "—",
@@ -57,6 +82,22 @@ export const workOrderColumns: ColumnDef<WorkOrder>[] = [
     },
     // Exact match: the status filter is a picker, not a search box.
     filterFn: (row, id, value) => !value || row.getValue(id) === value,
+  },
+  {
+    // Dispatch paperwork — searchable via the toolbar's global filter.
+    id: "dispatch",
+    accessorFn: (wo) => [wo.dcNumber, wo.lcNumber].filter(Boolean).join(" "),
+    header: ({ column }) => <DataTableColumnHeader column={column} title="DC / LC" />,
+    cell: ({ row }) => {
+      const { dcNumber, lcNumber } = row.original;
+      if (!dcNumber && !lcNumber) return <span className="text-muted-foreground">—</span>;
+      return (
+        <div className="text-xs leading-tight">
+          <div className="font-mono">{dcNumber ?? "—"}</div>
+          <div className="font-mono text-muted-foreground">{lcNumber ?? "—"}</div>
+        </div>
+      );
+    },
   },
   {
     id: "actions",

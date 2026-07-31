@@ -9,6 +9,20 @@
  */
 export type WorkOrderStatus = "initiate_production" | "production" | "complete";
 
+/**
+ * Which manufacturing workflow the order runs through. Both share Company / Brand / PO /
+ * SO / Quantity; woven orders additionally carry a loom specification.
+ *
+ *   printed — Printing -> Cutting -> Packaging -> Dispatch
+ *   woven   — Planning -> Weaving -> Cutting -> Packaging -> Dispatch
+ */
+export type ProductType = "printed" | "woven";
+
+export const PRODUCT_TYPE_META: Record<ProductType, { label: string; description: string }> = {
+  printed: { label: "Printed Labels", description: "Printing → Cutting → Packaging" },
+  woven: { label: "Woven Labels", description: "Planning → Weaving → Cutting → Packaging" },
+};
+
 /** Display label + StatusBadge variant per work-order status. */
 export const WORK_ORDER_STATUS_META: Record<
   WorkOrderStatus,
@@ -32,9 +46,19 @@ export interface WorkOrder {
   companyName: string | null;
   comment: string | null;
   status: WorkOrderStatus;
-  /** Present only once the order is `complete`. */
+  productType: ProductType;
+  /** Dispatch paperwork — recorded once production has completed the order. */
   dcNumber: string | null;
+  lcNumber: string | null;
   dispatchedDate: string | null;
+  dispatchedQty: number | null;
+  /* ---- Woven loom spec: populated only when productType is "woven" ---- */
+  designCode: string | null;
+  pick: number | null;
+  /** Decimal columns arrive from Postgres as strings — convert before arithmetic. */
+  repeat: string | null;
+  density: number | null;
+  extra: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -51,6 +75,15 @@ export interface WorkOrderDetail extends WorkOrder {
   productionOrder: LinkedProductionOrder | null;
 }
 
+/** The loom specification carried by a woven order. */
+export interface WovenDetailInput {
+  designCode: string;
+  pick: number;
+  repeat: number;
+  density: number;
+  extra?: number;
+}
+
 export interface WorkOrderInput {
   soNumber: string;
   poNumber?: string;
@@ -59,7 +92,20 @@ export interface WorkOrderInput {
   totalQty: number;
   brandId?: number;
   comment?: string;
+  productType?: ProductType;
+  /** Required when `productType` is "woven". */
+  wovenDetail?: WovenDetailInput;
   /** Dispatch paperwork, recorded once production has completed the order. */
   dcNumber?: string;
+  lcNumber?: string;
   dispatchedDate?: string;
+  dispatchedQty?: number;
+}
+
+/** Completing dispatch — DC and LC numbers are both mandatory. */
+export interface DispatchInput {
+  dcNumber: string;
+  lcNumber: string;
+  dispatchedDate: string;
+  dispatchedQty: number;
 }

@@ -27,6 +27,13 @@ export const listWorkOrdersQuerySchema = z.object({
   soNumber: z.string().optional(),
   poNumber: z.string().optional(),
   status: z.enum(["initiate_production", "production", "complete"]).optional(),
+  /** Filters the shared list down to one workflow. Omitted = both. */
+  productType: z.enum(["printed", "woven"]).optional(),
+  /** Dispatch paperwork is searchable. */
+  dcNumber: z.string().optional(),
+  lcNumber: z.string().optional(),
+  /** Woven-only search. */
+  designCode: z.string().optional(),
   startDate: z.string().optional(),
   endDate: z.string().optional(),
 });

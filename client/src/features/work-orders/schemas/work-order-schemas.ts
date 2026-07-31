@@ -28,11 +28,50 @@ export const workOrderSchema = z.object({
     .nullable()
     .refine((v): v is number => v != null, { message: "Please select a brand" }),
   comment: z.string().optional().or(z.literal("")),
+  productType: z.enum(["printed", "woven"]).default("printed"),
+  /* ---- Woven loom spec. Only required when productType is "woven" (see superRefine). ---- */
+  designCode: z.string().optional().or(z.literal("")),
+  pick: z.union([z.coerce.number(), z.literal("")]).optional(),
+  repeat: z.union([z.coerce.number(), z.literal("")]).optional(),
+  density: z.union([z.coerce.number(), z.literal("")]).optional(),
+  extra: z.union([z.coerce.number(), z.literal("")]).optional(),
   dcNumber: z.string().optional().or(z.literal("")),
+  lcNumber: z.string().optional().or(z.literal("")),
   dispatchedDate: z.string().optional().or(z.literal("")),
+  dispatchedQty: z.union([z.coerce.number(), z.literal("")]).optional(),
+});
+
+/**
+ * One schema for both workflows — the woven loom fields are declared optional above and
+ * made mandatory here only when `productType` is "woven". Keeping it in a single schema
+ * (rather than two) is what lets the same dialog serve both product types.
+ */
+export const workOrderFormSchema = workOrderSchema.superRefine((v, ctx) => {
+  if (v.productType !== "woven") return;
+  const required = [
+    ["designCode", v.designCode, "Design code is required"],
+    ["pick", v.pick, "Pick is required"],
+    ["repeat", v.repeat, "Repeat is required"],
+    ["density", v.density, "Density is required"],
+  ] as const;
+  for (const [path, value, message] of required) {
+    if (value === "" || value === undefined || value === null || Number.isNaN(value)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: [path], message });
+    }
+  }
 });
 
 // `z.input`, not `z.infer` (= `z.output`) — the `.refine` type-guard on companyId/brandId
 // narrows the *output* to non-null `number`, but RHF's form state holds the pre-validation
 // shape, which is still `number | null` until submit. Mirrors `PlanLineSchemaInput`.
 export type WorkOrderSchemaInput = z.input<typeof workOrderSchema>;
+
+/** Dispatch completion — both paperwork numbers are mandatory. */
+export const dispatchSchema = z.object({
+  dcNumber: z.string().min(1, "DC Number is required"),
+  lcNumber: z.string().min(1, "LC Number is required"),
+  dispatchedDate: z.string().min(1, "Dispatch date is required"),
+  dispatchedQty: z.coerce.number().positive("Dispatch quantity must be greater than 0"),
+});
+
+export type DispatchSchemaInput = z.input<typeof dispatchSchema>;

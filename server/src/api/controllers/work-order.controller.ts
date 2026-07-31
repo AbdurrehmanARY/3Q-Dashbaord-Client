@@ -1,19 +1,17 @@
 import { Request, Response, NextFunction } from "express";
 import { asyncHandler } from "../utils/asyncHandler";
 import { workOrderService } from "../services/work-order.service";
-import type { CreateWorkOrderDTO, UpdateWorkOrderDTO } from "../validations/work-orders.validation";
+import type {
+  CreateWorkOrderDTO,
+  UpdateWorkOrderDTO,
+  DispatchWorkOrderDTO,
+} from "../validations/work-orders.validation";
 import type { ListWorkOrdersQueryDTO } from "../validations/query.validation";
 
 class WorkOrderController {
   getWorkOrders = asyncHandler(async (req: Request, res: Response) => {
-    const { soNumber, poNumber, status, startDate, endDate } = (req.validatedQuery ?? req.query) as ListWorkOrdersQueryDTO;
-    const data = await workOrderService.getWorkOrders({
-      soNumber,
-      poNumber,
-      status,
-      startDate,
-      endDate,
-    });
+    const query = (req.validatedQuery ?? req.query) as ListWorkOrdersQueryDTO;
+    const data = await workOrderService.getWorkOrders(query);
     res.json({ data });
   });
 
@@ -38,6 +36,14 @@ class WorkOrderController {
     } catch (error) {
       next(error);
     }
+  });
+
+  /** Completes dispatch. DC Number and LC Number are both mandatory (see the service). */
+  dispatchWorkOrder = asyncHandler(async (req: Request, res: Response) => {
+    const { id } = (req.validatedParams ?? req.params) as { id: string };
+    const input = (req.validatedBody ?? req.body) as DispatchWorkOrderDTO;
+    const data = await workOrderService.dispatchWorkOrder(id, input);
+    res.json({ data });
   });
 
   deleteWorkOrder = asyncHandler(async (req: Request, res: Response) => {
