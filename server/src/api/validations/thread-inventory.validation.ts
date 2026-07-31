@@ -1,0 +1,55 @@
+import { z } from "zod";
+
+const denierEnum = z.enum(["45", "75", "100", "150"]);
+const baseColorEnum = z.enum(["White", "Black"]);
+
+/**
+ * Thread receiving. `totalWeightKg` is deliberately absent — it is always calculated
+ * server-side as `weightPerCtnKg × totalCtns`, mirroring the printed purchase formulas.
+ */
+export const createThreadPurchaseSchema = z.object({
+  body: z.object({
+    receivedDate: z.string().min(1, "Received date is required"),
+    denier: denierEnum,
+    threadColor: baseColorEnum,
+    vendor: z.string().trim().min(1, "Vendor is required"),
+    invoiceNumber: z.string().trim().min(1, "Invoice number is required"),
+    totalCtns: z.coerce.number().int().positive("Total cartons must be greater than 0"),
+    weightPerCtnKg: z.coerce.number().positive("Weight per carton must be greater than 0"),
+    notes: z.string().optional(),
+    actorUserId: z.coerce.number().int().positive().optional(),
+  }),
+});
+
+/** Converts undyed primary stock into dyed secondary stock. */
+export const createDyeBatchSchema = z.object({
+  body: z.object({
+    denier: denierEnum,
+    fromColorName: baseColorEnum,
+    toColorName: z.string().trim().min(1, "Colour name is required"),
+    toColorCode: z.string().trim().min(1, "Colour code is required"),
+    inputWeightKg: z.coerce.number().positive("Input weight must be greater than 0"),
+    outputWeightKg: z.coerce.number().positive("Output weight must be greater than 0"),
+    notes: z.string().optional(),
+    actorUserId: z.coerce.number().int().positive().optional(),
+  }),
+});
+
+export const listThreadStocksQuerySchema = z.object({
+  stockType: z.enum(["primary", "secondary"]).optional(),
+  denier: denierEnum.optional(),
+  colorName: z.string().optional(),
+});
+
+export const listThreadPurchasesQuerySchema = z.object({
+  vendor: z.string().optional(),
+  denier: denierEnum.optional(),
+});
+
+export const listThreadMovementsQuerySchema = z.object({
+  threadStockId: z.coerce.number().int().positive().optional(),
+  limit: z.coerce.number().int().positive().max(500).optional(),
+});
+
+export type CreateThreadPurchaseDTO = z.infer<typeof createThreadPurchaseSchema>["body"];
+export type CreateDyeBatchDTO = z.infer<typeof createDyeBatchSchema>["body"];
