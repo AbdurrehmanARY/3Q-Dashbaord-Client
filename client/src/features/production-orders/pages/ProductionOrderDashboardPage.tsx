@@ -10,6 +10,9 @@ import { formatDate, formatNumber } from "@/lib/format";
 import { ProductionOrderStatusBadge } from "../components/ProductionStatusBadge";
 import { EditableLabelTypeTable } from "../components/EditableLabelTypeTable";
 import { RollTrackingTable } from "../components/RollTrackingTable";
+import { WovenProductionPanel } from "../components/WovenProductionPanel";
+import { StatusBadge } from "@/components/feedback/StatusBadge";
+import type { ProductionOrderOverview } from "../types";
 import { useProductionOrderOverview } from "../hooks/use-production-orders";
 import { useCompletionCelebration } from "../hooks/use-completion-celebration";
 
@@ -47,6 +50,9 @@ export function ProductionOrderDashboardPage() {
 
   const { productionOrder: order, lines, totals } = overview;
   const needsPlanning = lines.length === 0;
+  // The two workflows share this page's header, order info and status; only the production
+  // body differs — rolls through five stages for printed, pieces through three for woven.
+  const isWoven = order.productType === "woven";
 
   return (
     <div>
@@ -59,10 +65,16 @@ export function ProductionOrderDashboardPage() {
         description={`Sales order ${order.soNumber} · ${order.companyName ?? "No company"} · ${order.brandName ?? "No brand"}`}
         actions={
           <div className="flex items-center gap-2">
+            <StatusBadge variant={isWoven ? "active" : "pending"}>
+              {isWoven ? "Woven" : "Printed"}
+            </StatusBadge>
             <ProductionOrderStatusBadge status={order.status} />
-            <AppButton variant="outline" onClick={() => navigate(`/production-orders/${id}/plan`)}>
-              {needsPlanning ? "Plan Production" : "Edit Plan"}
-            </AppButton>
+            {/* Woven planning lives inline on this page; printed planning has its own page. */}
+            {!isWoven && (
+              <AppButton variant="outline" onClick={() => navigate(`/production-orders/${id}/plan`)}>
+                {needsPlanning ? "Plan Production" : "Edit Plan"}
+              </AppButton>
+            )}
           </div>
         }
       />
@@ -82,6 +94,41 @@ export function ProductionOrderDashboardPage() {
         </AppCard>
       </div>
 
+      {/* Woven orders carry their own stats, planning and stage board. */}
+      {isWoven ? (
+        <WovenProductionPanel orderId={id} totalQty={order.totalQty} />
+      ) : (
+        <PrintedProductionBody
+          id={id}
+          order={order}
+          lines={lines}
+          totals={totals}
+          needsPlanning={needsPlanning}
+          navigate={navigate}
+        />
+      )}
+    </div>
+  );
+}
+
+/** The printed workflow's body: roll planning stats, the progress table and roll tracking. */
+function PrintedProductionBody({
+  id,
+  order,
+  lines,
+  totals,
+  needsPlanning,
+  navigate,
+}: {
+  id: string;
+  order: ProductionOrderOverview["productionOrder"];
+  lines: ProductionOrderOverview["lines"];
+  totals: ProductionOrderOverview["totals"];
+  needsPlanning: boolean;
+  navigate: ReturnType<typeof useNavigate>;
+}) {
+  return (
+    <>
       <div className="mb-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard title="Label Types" value={totals.labelTypeCount} icon={Layers} />
         <StatCard
@@ -133,7 +180,7 @@ export function ProductionOrderDashboardPage() {
           </AppCard>
         </div>
       )}
-    </div>
+    </>
   );
 }
 

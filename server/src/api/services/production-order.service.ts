@@ -932,6 +932,7 @@ export class ProductionOrderService {
         companyId: order.companyId,
         companyName: order.companyName,
         customer: order.companyName,
+        productType: order.productType,
         brandId: order.brandId,
         brandName: order.brandName,
         totalQty: order.totalQty,

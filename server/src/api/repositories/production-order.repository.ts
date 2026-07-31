@@ -80,6 +80,8 @@ const productionOrderSelect = {
   orderDate: workOrders.orderDate,
   dueDate: workOrders.dueDate,
   salesOrderQty: workOrders.totalQty,
+  /** Which workflow this order runs — the dashboard branches on it. */
+  productType: workOrders.productType,
   brandId: brands.id,
   brandName: brands.name,
   companyId: companies.id,

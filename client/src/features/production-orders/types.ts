@@ -185,6 +185,8 @@ export interface ProductionOrderHeader {
   companyName: string | null;
   /** The customer is the company that owns the brand; both resolve to the same name. */
   customer: string | null;
+  /** Which workflow this order runs — the dashboard renders printed or woven accordingly. */
+  productType: "printed" | "woven";
   brandId: number | null;
   brandName: string | null;
   totalQty: number;
