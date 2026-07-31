@@ -52,6 +52,9 @@ export function PurchaseTable({ onCreateNew }: PurchaseTableProps) {
         data={data ?? []}
         loading={isLoading}
         getRowId={(row) => row.id}
+        // Wide table — keep the identity and Actions columns reachable while scrolling.
+        stickyFirstColumn
+        stickyLastColumn
         empty={
           (data ?? []).length === 0 && !hasFilters ? (
             <DataTableEmpty icon={<ShoppingCartIcon />} title="No purchase records yet" description="Record the first incoming material purchase.">

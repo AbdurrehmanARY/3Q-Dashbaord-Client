@@ -248,7 +248,8 @@ export class WovenProductionRepository {
             status: patch.status === "complete" ? "complete" : "production",
             updatedAt: new Date(),
           })
-          .where(eq(workOrders.id, order.workOrderId));
+          // `dispatched` is terminal and owned by dispatch — never downgrade it here.
+          .where(and(eq(workOrders.id, order.workOrderId), sql`${workOrders.status} <> 'dispatched'`));
       }
     }
   }

@@ -6,4 +6,5 @@ export { DataTableEmpty } from "./data-table-empty";
 export { DataTableSkeleton } from "./data-table-skeleton";
 export { EditableCell, EditableCellInput, useEditableCell } from "./editable-cell";
 export { EditableCellNumber } from "./editable-cell-number";
+export { stickyCellClass } from "./sticky-columns";
 import "./types";

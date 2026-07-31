@@ -45,6 +45,7 @@ export const updateWorkOrderSchema = z.object({
     // production order, and a sales order cannot change which workflow it runs through.
     dcNumber: z.string().optional(),
     lcNumber: z.string().optional(),
+    fbrInvoiceNumber: z.string().optional(),
     dispatchedDate: z.string().optional(),
     dispatchedQty: z.coerce.number().int().positive().optional(),
     /** Loom spec edits for a woven order (only while it is still editable). */
@@ -60,6 +61,7 @@ export const dispatchWorkOrderSchema = z.object({
   body: z.object({
     dcNumber: z.string().trim().min(1, "DC Number is required to dispatch"),
     lcNumber: z.string().trim().min(1, "LC Number is required to dispatch"),
+    fbrInvoiceNumber: z.string().trim().min(1, "FBR Invoice Number is required to dispatch"),
     dispatchedDate: z.string().min(1, "Dispatch date is required"),
     dispatchedQty: z.coerce.number().int().positive("Dispatch quantity must be greater than 0"),
   }),

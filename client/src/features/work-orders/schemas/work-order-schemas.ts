@@ -37,6 +37,7 @@ export const workOrderSchema = z.object({
   extra: z.union([z.coerce.number(), z.literal("")]).optional(),
   dcNumber: z.string().optional().or(z.literal("")),
   lcNumber: z.string().optional().or(z.literal("")),
+  fbrInvoiceNumber: z.string().optional().or(z.literal("")),
   dispatchedDate: z.string().optional().or(z.literal("")),
   dispatchedQty: z.union([z.coerce.number(), z.literal("")]).optional(),
 });
@@ -70,6 +71,7 @@ export type WorkOrderSchemaInput = z.input<typeof workOrderSchema>;
 export const dispatchSchema = z.object({
   dcNumber: z.string().min(1, "DC Number is required"),
   lcNumber: z.string().min(1, "LC Number is required"),
+  fbrInvoiceNumber: z.string().min(1, "FBR Invoice Number is required"),
   dispatchedDate: z.string().min(1, "Dispatch date is required"),
   dispatchedQty: z.coerce.number().positive("Dispatch quantity must be greater than 0"),
 });

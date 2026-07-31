@@ -56,7 +56,9 @@ async function syncWorkOrderStatusTx(
   await tx
     .update(workOrders)
     .set({ status: workOrderStatusFor(productionStatus), updatedAt: new Date() })
-    .where(eq(workOrders.id, order.workOrderId));
+    // `dispatched` is terminal and owned by dispatch, not production. Without this guard a
+    // later progress edit would silently drag a shipped order back to `complete`.
+    .where(and(eq(workOrders.id, order.workOrderId), sql`${workOrders.status} <> 'dispatched'`));
 }
 
 /**

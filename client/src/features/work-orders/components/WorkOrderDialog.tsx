@@ -53,6 +53,7 @@ function defaultsFor(wo: WorkOrder | WorkOrderDetail | null): WorkOrderSchemaInp
     extra: wo?.extra != null ? Number(wo.extra) : "",
     dcNumber: wo?.dcNumber ?? "",
     lcNumber: wo?.lcNumber ?? "",
+    fbrInvoiceNumber: wo?.fbrInvoiceNumber ?? "",
     dispatchedDate: wo?.dispatchedDate ?? "",
     dispatchedQty: wo?.dispatchedQty ?? "",
   };
@@ -66,7 +67,10 @@ function defaultsFor(wo: WorkOrder | WorkOrderDetail | null): WorkOrderSchemaInp
  */
 export function WorkOrderDialog({ open, workOrder, onClose }: WorkOrderDialogProps) {
   const isEdit = !!workOrder;
-  const isComplete = workOrder?.status === "complete";
+  // Production has handed over. The commercial header locks, but the dispatch paperwork
+  // (DC / LC / FBR invoice) stays editable — filling it in is what marks the order dispatched.
+  const isComplete = workOrder?.status === "complete" || workOrder?.status === "dispatched";
+  const isDispatched = workOrder?.status === "dispatched";
   const isLocked = isComplete;
   const productionOrder = workOrder && "productionOrder" in workOrder ? workOrder.productionOrder : null;
   const hasProductionOrder = !!productionOrder;
@@ -143,6 +147,7 @@ export function WorkOrderDialog({ open, workOrder, onClose }: WorkOrderDialogPro
         const dispatch = {
           dcNumber: data.dcNumber || undefined,
           lcNumber: data.lcNumber || undefined,
+          fbrInvoiceNumber: data.fbrInvoiceNumber || undefined,
           dispatchedDate: data.dispatchedDate || undefined,
         };
         const body = isComplete
@@ -377,13 +382,20 @@ export function WorkOrderDialog({ open, workOrder, onClose }: WorkOrderDialogPro
             <AppInput label="DC Number" error={errors.dcNumber?.message} {...register("dcNumber")} />
             <AppInput label="LC Number" error={errors.lcNumber?.message} {...register("lcNumber")} />
             <AppInput
+              label="FBR Invoice Number"
+              error={errors.fbrInvoiceNumber?.message}
+              {...register("fbrInvoiceNumber")}
+            />
+            <AppInput
               label="Dispatched Date"
               type="date"
               error={errors.dispatchedDate?.message}
               {...register("dispatchedDate")}
             />
             <p className="text-[11px] text-muted-foreground sm:col-span-2">
-              DC Number and LC Number are both required to complete dispatch.
+              {isDispatched
+                ? "This order is dispatched. These fields stay editable so the paperwork can be corrected."
+                : "DC Number, LC Number and FBR Invoice Number are all required to dispatch — use the Dispatch action to complete it."}
             </p>
           </>
         )}

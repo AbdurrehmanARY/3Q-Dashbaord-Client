@@ -18,13 +18,30 @@ export function PurchaseRecordPage() {
   const [tab, setTab] = useState("materials");
   const { data: materials } = useMaterials();
 
+  const isMaterials = tab === "materials";
+
   return (
-    <div className="space-y-6">
+    // The product-line switcher sits at the very top: which line you're receiving for is the
+    // first decision, and it changes the header, the action button and the whole body below.
+    <Tabs value={tab} onValueChange={setTab} className="space-y-4">
+      <TabsList className="w-full sm:w-auto">
+        <TabsTrigger value="materials" className="flex-1 sm:flex-none">
+          Material Purchases
+        </TabsTrigger>
+        <TabsTrigger value="thread" className="flex-1 sm:flex-none">
+          Thread Receiving
+        </TabsTrigger>
+      </TabsList>
+
       <PageHeader
-        title="Purchases & Receiving"
-        description="Record incoming material and thread purchases. Stock is credited immediately."
+        title={isMaterials ? "Material Purchases" : "Thread Receiving"}
+        description={
+          isMaterials
+            ? "Incoming material for printed labels. Approved quantities credit roll stock immediately."
+            : "Incoming thread for woven labels. Received weight credits undyed (primary) stock immediately."
+        }
         actions={
-          tab === "materials" ? (
+          isMaterials ? (
             <AppButton leftIcon={<Plus className="h-4 w-4" />} onClick={() => setCreateOpen(true)}>
               New Purchase
             </AppButton>
@@ -32,24 +49,17 @@ export function PurchaseRecordPage() {
         }
       />
 
-      <Tabs value={tab} onValueChange={setTab}>
-        <TabsList>
-          <TabsTrigger value="materials">Material Purchases</TabsTrigger>
-          <TabsTrigger value="thread">Thread Receiving</TabsTrigger>
-        </TabsList>
+      <TabsContent value="materials">
+        <PurchaseTable onCreateNew={() => setCreateOpen(true)} />
+      </TabsContent>
 
-        <TabsContent value="materials" className="mt-4">
-          <PurchaseTable onCreateNew={() => setCreateOpen(true)} />
-        </TabsContent>
-
-        <TabsContent value="thread" className="mt-4">
-          <ThreadPurchasePanel />
-        </TabsContent>
-      </Tabs>
+      <TabsContent value="thread">
+        <ThreadPurchasePanel />
+      </TabsContent>
 
       {createOpen && materials && (
         <PurchaseForm open materials={materials} onClose={() => setCreateOpen(false)} />
       )}
-    </div>
+    </Tabs>
   );
 }

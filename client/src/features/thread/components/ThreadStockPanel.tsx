@@ -6,6 +6,8 @@ import { AppButton } from "@/components/forms/AppButton";
 import { StatusBadge } from "@/components/feedback/StatusBadge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { stickyCellClass } from "@/shared/components/data-table";
+import { cn } from "@/lib/utils";
 import { formatNumber } from "@/lib/format";
 import { useThreadStockSummary } from "../hooks/use-thread";
 import { DyeThreadDialog } from "./DyeThreadDialog";
@@ -26,7 +28,12 @@ function StockTable({ rows, showCode }: { rows: ThreadStock[]; showCode: boolean
     <Table>
       <TableHeader>
         <TableRow className="bg-muted/30 hover:bg-muted/30">
-          <TableHead className="h-10 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          <TableHead
+            className={cn(
+              "h-10 whitespace-nowrap text-xs font-semibold uppercase tracking-wider text-muted-foreground",
+              stickyCellClass("first", { header: true, tint: "muted" })
+            )}
+          >
             Colour
           </TableHead>
           {showCode && (
@@ -46,15 +53,22 @@ function StockTable({ rows, showCode }: { rows: ThreadStock[]; showCode: boolean
           <TableHead className="h-10 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Consumed
           </TableHead>
-          <TableHead className="h-10 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          <TableHead
+            className={cn(
+              "h-10 whitespace-nowrap text-xs font-semibold uppercase tracking-wider text-muted-foreground",
+              stickyCellClass("last", { header: true, tint: "muted" })
+            )}
+          >
             Status
           </TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {rows.map((row) => (
-          <TableRow key={row.id}>
-            <TableCell className="font-medium">{row.colorName}</TableCell>
+          <TableRow key={row.id} className="bg-card">
+            <TableCell className={cn("whitespace-nowrap font-medium", stickyCellClass("first"))}>
+              {row.colorName}
+            </TableCell>
             {showCode && (
               <TableCell className="font-mono text-xs">{row.colorCode ?? "—"}</TableCell>
             )}
@@ -68,7 +82,7 @@ function StockTable({ rows, showCode }: { rows: ThreadStock[]; showCode: boolean
             <TableCell className="text-right tabular-nums text-muted-foreground">
               {formatNumber(row.consumedKg, 3)}
             </TableCell>
-            <TableCell>
+            <TableCell className={stickyCellClass("last")}>
               <StatusBadge
                 variant={
                   row.balanceKg <= 0

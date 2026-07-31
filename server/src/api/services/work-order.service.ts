@@ -91,18 +91,31 @@ export class WorkOrderService {
   }
 
   /**
-   * Completes dispatch. DC Number and LC Number are both mandatory here — the paperwork is
-   * the record that the goods left the facility, so an order cannot be dispatched without
-   * them. Only a `complete` order (production finished) can be dispatched.
+   * Completes dispatch and moves the order to `dispatched`.
+   *
+   * DC Number, LC Number and FBR Invoice Number are all mandatory: they are the paperwork
+   * proving the goods left the facility, and filling them in is precisely what the
+   * `dispatched` status records. A `complete` order stays editable for exactly these
+   * fields, which is how production handover works — production finishes the goods, the
+   * office finishes the paperwork.
+   *
+   * Re-dispatching an already-dispatched order is allowed (correcting a typo'd DC number
+   * shouldn't require unwinding the order), but production must have finished first.
    */
   async dispatchWorkOrder(
     id: number | string,
-    data: { dcNumber: string; lcNumber: string; dispatchedDate: string; dispatchedQty: number }
+    data: {
+      dcNumber: string;
+      lcNumber: string;
+      fbrInvoiceNumber: string;
+      dispatchedDate: string;
+      dispatchedQty: number;
+    }
   ) {
     const existing = await workOrderRepository.findRawById(id);
     if (!existing) throw new NotFoundError(Messages.notFound(Entity.WORK_ORDER));
 
-    if (existing.status !== "complete") {
+    if (existing.status !== "complete" && existing.status !== "dispatched") {
       throw new ApiError(
         "This order cannot be dispatched yet — production must finish it first (packaging complete)",
         400
@@ -118,8 +131,11 @@ export class WorkOrderService {
     return workOrderRepository.update(id, {
       dcNumber: data.dcNumber,
       lcNumber: data.lcNumber,
+      fbrInvoiceNumber: data.fbrInvoiceNumber,
       dispatchedDate: data.dispatchedDate,
       dispatchedQty: data.dispatchedQty,
+      // Paperwork complete — this is the only place the status becomes `dispatched`.
+      status: "dispatched",
     });
   }
 
@@ -140,6 +156,7 @@ export class WorkOrderService {
     comment?: string;
     dcNumber?: string;
     lcNumber?: string;
+    fbrInvoiceNumber?: string;
     dispatchedDate?: string;
     dispatchedQty?: number;
     wovenDetail?: { designCode?: string; pick?: number; repeat?: number; density?: number; extra?: number };
@@ -147,11 +164,22 @@ export class WorkOrderService {
     const existing = await workOrderRepository.findRawById(id);
     if (!existing) throw new NotFoundError(Messages.notFound(Entity.WORK_ORDER));
 
-    const { dcNumber, lcNumber, dispatchedDate, dispatchedQty, wovenDetail, ...commercial } = data;
+    const {
+      dcNumber,
+      lcNumber,
+      fbrInvoiceNumber,
+      dispatchedDate,
+      dispatchedQty,
+      wovenDetail,
+      ...commercial
+    } = data;
 
-    if (existing.status === "complete" && Object.keys(commercial).length > 0) {
+    // Production has handed over: the commercial header locks, but the dispatch paperwork
+    // stays editable so the office can fill in DC / LC / FBR invoice.
+    const productionFinished = existing.status === "complete" || existing.status === "dispatched";
+    if (productionFinished && Object.keys(commercial).length > 0) {
       throw new ApiError(
-        "This work order is complete — only the dispatch paperwork (DC number, LC number, date, quantity) can still be edited",
+        "This work order is finished — only the dispatch paperwork (DC number, LC number, FBR invoice, date, quantity) can still be edited",
         400
       );
     }
@@ -160,8 +188,8 @@ export class WorkOrderService {
       if (existing.productType !== "woven") {
         throw new ApiError("Only a woven work order carries a design specification", 400);
       }
-      if (existing.status === "complete") {
-        throw new ApiError("This work order is complete — its design specification is locked", 400);
+      if (productionFinished) {
+        throw new ApiError("This work order is finished — its design specification is locked", 400);
       }
       // A renamed design code still has to stay unique across the facility.
       if (wovenDetail.designCode) {
@@ -194,6 +222,7 @@ export class WorkOrderService {
       ...commercial,
       ...(dcNumber !== undefined ? { dcNumber } : {}),
       ...(lcNumber !== undefined ? { lcNumber } : {}),
+      ...(fbrInvoiceNumber !== undefined ? { fbrInvoiceNumber } : {}),
       ...(dispatchedDate !== undefined ? { dispatchedDate } : {}),
       ...(dispatchedQty !== undefined ? { dispatchedQty } : {}),
     });

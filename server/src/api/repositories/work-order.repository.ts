@@ -21,6 +21,7 @@ const workOrderWithBrandSelect = {
   productType: workOrders.productType,
   dcNumber: workOrders.dcNumber,
   lcNumber: workOrders.lcNumber,
+  fbrInvoiceNumber: workOrders.fbrInvoiceNumber,
   dispatchedDate: workOrders.dispatchedDate,
   dispatchedQty: workOrders.dispatchedQty,
   createdAt: workOrders.createdAt,
@@ -165,6 +166,7 @@ export class WorkOrderRepository {
     status?: WorkOrder["status"];
     dcNumber?: string | null;
     lcNumber?: string | null;
+    fbrInvoiceNumber?: string | null;
     dispatchedDate?: string | null;
     dispatchedQty?: number | null;
   }) {

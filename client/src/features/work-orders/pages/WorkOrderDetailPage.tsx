@@ -38,7 +38,9 @@ export function WorkOrderDetailPage() {
   if (!wo) return <p className="text-muted-foreground p-6">Work order not found.</p>;
 
   const statusMeta = WORK_ORDER_STATUS_META[wo.status];
-  const isComplete = wo.status === "complete";
+  // Production has handed over — the dispatch card shows, and the header is locked while the
+  // paperwork stays editable.
+  const isComplete = wo.status === "complete" || wo.status === "dispatched";
   const canDelete = wo.status === "initiate_production";
   const lines = overview?.lines ?? [];
   const totals = overview?.totals;
@@ -168,21 +170,22 @@ export function WorkOrderDetailPage() {
         {isComplete && (
           <AppCard
             title="Dispatch"
-            description="DC Number and LC Number are both required to complete dispatch."
+            description="DC Number, LC Number and FBR Invoice Number are all required to dispatch."
           >
-            <dl className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4">
+            <dl className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-5">
               <Field label="DC Number" value={wo.dcNumber ?? "—"} mono />
               <Field label="LC Number" value={wo.lcNumber ?? "—"} mono />
+              <Field label="FBR Invoice" value={wo.fbrInvoiceNumber ?? "—"} mono />
               <Field label="Dispatched Date" value={formatDate(wo.dispatchedDate)} />
               <Field
                 label="Dispatched Qty"
                 value={wo.dispatchedQty != null ? formatNumber(wo.dispatchedQty, 0) : "—"}
               />
             </dl>
-            {(!wo.dcNumber || !wo.lcNumber) && (
+            {wo.status !== "dispatched" && (
               <p className="mt-3 text-xs font-medium text-warning">
-                This order has not been dispatched yet — use “Dispatch Details” above to record the
-                DC and LC numbers.
+                Not dispatched yet — record the DC, LC and FBR invoice numbers to move this order to
+                Dispatched.
               </p>
             )}
           </AppCard>

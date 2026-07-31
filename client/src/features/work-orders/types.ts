@@ -7,7 +7,7 @@
  * Derived from the production order, never set by hand:
  *   none -> initiate_production · planned|production -> production · complete -> complete
  */
-export type WorkOrderStatus = "initiate_production" | "production" | "complete";
+export type WorkOrderStatus = "initiate_production" | "production" | "complete" | "dispatched";
 
 /**
  * Which manufacturing workflow the order runs through. Both share Company / Brand / PO /
@@ -26,11 +26,13 @@ export const PRODUCT_TYPE_META: Record<ProductType, { label: string; description
 /** Display label + StatusBadge variant per work-order status. */
 export const WORK_ORDER_STATUS_META: Record<
   WorkOrderStatus,
-  { label: string; variant: "pending" | "active" | "completed" }
+  { label: string; variant: "pending" | "active" | "completed" | "info" }
 > = {
   initiate_production: { label: "Initiate Production", variant: "pending" },
   production: { label: "Production", variant: "active" },
   complete: { label: "Completed", variant: "completed" },
+  /** Terminal — reached by filling in DC, LC and FBR invoice numbers. */
+  dispatched: { label: "Dispatched", variant: "info" },
 };
 
 export interface WorkOrder {
@@ -50,6 +52,7 @@ export interface WorkOrder {
   /** Dispatch paperwork — recorded once production has completed the order. */
   dcNumber: string | null;
   lcNumber: string | null;
+  fbrInvoiceNumber: string | null;
   dispatchedDate: string | null;
   dispatchedQty: number | null;
   /* ---- Woven loom spec: populated only when productType is "woven" ---- */
@@ -98,14 +101,19 @@ export interface WorkOrderInput {
   /** Dispatch paperwork, recorded once production has completed the order. */
   dcNumber?: string;
   lcNumber?: string;
+  fbrInvoiceNumber?: string;
   dispatchedDate?: string;
   dispatchedQty?: number;
 }
 
-/** Completing dispatch — DC and LC numbers are both mandatory. */
+/**
+ * Completing dispatch. All three paperwork numbers are mandatory — filling them in is what
+ * moves the order to `dispatched`.
+ */
 export interface DispatchInput {
   dcNumber: string;
   lcNumber: string;
+  fbrInvoiceNumber: string;
   dispatchedDate: string;
   dispatchedQty: number;
 }

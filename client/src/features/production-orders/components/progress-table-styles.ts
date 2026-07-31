@@ -1,4 +1,4 @@
-import { cn } from "@/lib/utils";
+import { stickyCellClass as sharedStickyCellClass } from "@/shared/components/data-table";
 
 /**
  * Column definitions for the Production Progress table, shared by the header
@@ -34,28 +34,16 @@ export const PROGRESS_COLUMNS: ProgressColumn[] = [
 export const alignClass = (align?: "right") => (align === "right" ? "text-right" : undefined);
 
 /**
- * Classes that freeze a column in place during horizontal scroll.
- *
- * A frozen cell needs an OPAQUE background of its own or the scrolling cells slide visibly
- * underneath it. `bg-card` provides that fill; the row-state tint (header shading, or the
- * editing highlight) is layered on as a background-IMAGE — a flat one-colour gradient — so
- * it composites over the fill within a single element, which a second `bg-*` class cannot
- * do. The edge shadow is what makes the freeze read as deliberate rather than as clipping.
+ * Freezes the identity / actions column, delegating to the shared table helper so every
+ * frozen column in the app looks and behaves identically. The only local concern is mapping
+ * this table's row states (header shading, the editing highlight) onto its tint option.
  */
 export function stickyCellClass(
   sticky: ProgressColumn["sticky"],
   opts: { editing?: boolean; header?: boolean } = {}
 ): string | undefined {
-  if (!sticky) return undefined;
-  return cn(
-    "sticky bg-card",
-    sticky === "first"
-      ? "left-0 shadow-[1px_0_0_0_hsl(var(--border))]"
-      : "right-0 shadow-[-1px_0_0_0_hsl(var(--border))]",
-    // Header cells sit above body cells so they stay opaque when both axes scroll.
-    opts.header
-      ? "z-20 bg-[linear-gradient(hsl(var(--muted)/0.3),hsl(var(--muted)/0.3))]"
-      : "z-10",
-    opts.editing && "bg-[linear-gradient(hsl(var(--primary)/0.05),hsl(var(--primary)/0.05))]"
-  );
+  return sharedStickyCellClass(sticky, {
+    header: opts.header,
+    tint: opts.header ? "muted" : opts.editing ? "primary" : undefined,
+  });
 }

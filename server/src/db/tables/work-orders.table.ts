@@ -16,6 +16,13 @@ export const workOrderStatusEnum = pgEnum("work_order_status", [
   "initiate_production",
   "production",
   "complete",
+  /**
+   * Goods have left the facility. Reached only by recording the dispatch paperwork
+   * (DC number, LC number and FBR invoice number) against a `complete` order — it is the
+   * one status that dispatch, not production, decides. Terminal: production re-syncs never
+   * downgrade a dispatched order.
+   */
+  "dispatched",
 ]);
 
 export const workOrders = pgTable(
@@ -40,6 +47,8 @@ export const workOrders = pgTable(
     dcNumber: varchar("dc_number", { length: 100 }),
     /** Letter-of-credit number — required to complete dispatch, and searchable. */
     lcNumber: varchar("lc_number", { length: 100 }),
+    /** FBR (tax authority) invoice number — required to complete dispatch, and searchable. */
+    fbrInvoiceNumber: varchar("fbr_invoice_number", { length: 100 }),
     /** Dispatch date — captured against a completed order. */
     dispatchedDate: date("dispatched_date"),
     /** Quantity actually dispatched; may differ from `totalQty` on a short shipment. */
@@ -55,5 +64,6 @@ export const workOrders = pgTable(
     // Dispatch paperwork is searchable, so both numbers get an index.
     dcNumberIdx: index("work_orders_dc_number_idx").on(table.dcNumber),
     lcNumberIdx: index("work_orders_lc_number_idx").on(table.lcNumber),
+    fbrInvoiceIdx: index("work_orders_fbr_invoice_idx").on(table.fbrInvoiceNumber),
   })
 );

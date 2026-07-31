@@ -70,6 +70,9 @@ export function InventoryStockTable() {
         loading={stock.isLoading || materials.isLoading}
         meta={meta}
         getRowId={(row) => row.id}
+        // Wide table — keep the material code and Actions columns fixed while scrolling.
+        stickyFirstColumn
+        stickyLastColumn
         empty={
           <DataTableEmpty
             icon={<PackageIcon />}

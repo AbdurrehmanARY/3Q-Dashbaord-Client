@@ -37,6 +37,7 @@ export function DispatchDialog({ open, workOrder, onClose }: DispatchDialogProps
     defaultValues: {
       dcNumber: workOrder.dcNumber ?? "",
       lcNumber: workOrder.lcNumber ?? "",
+      fbrInvoiceNumber: workOrder.fbrInvoiceNumber ?? "",
       dispatchedDate: workOrder.dispatchedDate ?? todayISO(),
       dispatchedQty: workOrder.dispatchedQty ?? workOrder.totalQty,
     },
@@ -54,6 +55,7 @@ export function DispatchDialog({ open, workOrder, onClose }: DispatchDialogProps
         body: {
           dcNumber: String(data.dcNumber),
           lcNumber: String(data.lcNumber),
+          fbrInvoiceNumber: String(data.fbrInvoiceNumber),
           dispatchedDate: String(data.dispatchedDate),
           dispatchedQty: Number(data.dispatchedQty),
         },
@@ -91,6 +93,13 @@ export function DispatchDialog({ open, workOrder, onClose }: DispatchDialogProps
         <SubmitOnEnter disabled={dispatchOrder.isPending} />
         <AppInput label="DC Number *" error={errors.dcNumber?.message} {...register("dcNumber")} />
         <AppInput label="LC Number *" error={errors.lcNumber?.message} {...register("lcNumber")} />
+        <div className="sm:col-span-2">
+          <AppInput
+            label="FBR Invoice Number *"
+            error={errors.fbrInvoiceNumber?.message}
+            {...register("fbrInvoiceNumber")}
+          />
+        </div>
         <AppInput
           label="Dispatch Date *"
           type="date"
@@ -104,8 +113,9 @@ export function DispatchDialog({ open, workOrder, onClose }: DispatchDialogProps
           {...register("dispatchedQty")}
         />
         <p className="text-[11px] text-muted-foreground sm:col-span-2">
-          Both the DC and LC numbers are required. Dispatch quantity cannot exceed the ordered
-          quantity of {formatNumber(workOrder.totalQty, 0)}.
+          The DC, LC and FBR invoice numbers are all required — recording them moves this order to{" "}
+          <strong>Dispatched</strong>. Dispatch quantity cannot exceed the ordered quantity of{" "}
+          {formatNumber(workOrder.totalQty, 0)}.
         </p>
       </form>
     </AppDialog>

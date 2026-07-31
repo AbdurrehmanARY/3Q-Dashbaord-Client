@@ -9,6 +9,8 @@ import { AppButton } from "@/components/forms/AppButton";
 import { SubmitOnEnter } from "@/components/forms/SubmitOnEnter";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { stickyCellClass } from "@/shared/components/data-table";
+import { cn } from "@/lib/utils";
 import { formatDate, formatNumber, todayISO } from "@/lib/format";
 import { threadPurchaseSchema, type ThreadPurchaseSchemaInput } from "../schemas/thread-schemas";
 import { useThreadPurchases, useCreateThreadPurchase, useDeleteThreadPurchase } from "../hooks/use-thread";
@@ -172,12 +174,18 @@ export function ThreadPurchasePanel() {
             <TableHeader>
               <TableRow className="bg-muted/30 hover:bg-muted/30">
                 {["Date", "Item Code", "Colour", "Vendor", "Invoice", "CTNs", "Wt/CTN", "Total (kg)", ""].map(
-                  (h, i) => (
+                  (h, i, arr) => (
                     <TableHead
                       key={h || `sp-${i}`}
-                      className={`h-10 whitespace-nowrap text-xs font-semibold uppercase tracking-wider text-muted-foreground ${
-                        ["CTNs", "Wt/CTN", "Total (kg)"].includes(h) ? "text-right" : ""
-                      }`}
+                      className={cn(
+                        "h-10 whitespace-nowrap text-xs font-semibold uppercase tracking-wider text-muted-foreground",
+                        ["CTNs", "Wt/CTN", "Total (kg)"].includes(h) && "text-right",
+                        // Date and the actions column stay put while the middle scrolls.
+                        stickyCellClass(i === 0 ? "first" : i === arr.length - 1 ? "last" : undefined, {
+                          header: true,
+                          tint: "muted",
+                        })
+                      )}
                     >
                       {h}
                     </TableHead>
@@ -187,8 +195,10 @@ export function ThreadPurchasePanel() {
             </TableHeader>
             <TableBody>
               {(purchases ?? []).map((p) => (
-                <TableRow key={p.id}>
-                  <TableCell className="whitespace-nowrap">{formatDate(p.receivedDate)}</TableCell>
+                <TableRow key={p.id} className="bg-card">
+                  <TableCell className={cn("whitespace-nowrap", stickyCellClass("first"))}>
+                    {formatDate(p.receivedDate)}
+                  </TableCell>
                   <TableCell>{p.denier}D</TableCell>
                   <TableCell>{p.threadColor}</TableCell>
                   <TableCell>{p.vendor}</TableCell>
@@ -200,7 +210,7 @@ export function ThreadPurchasePanel() {
                   <TableCell className="text-right font-medium tabular-nums">
                     {formatNumber(p.totalWeightKg, 3)}
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className={cn("text-right", stickyCellClass("last"))}>
                     <AppButton
                       size="sm"
                       variant="ghost"

@@ -43,8 +43,9 @@ export function WorkOrderRowActions({ workOrder }: { workOrder: WorkOrder }) {
   // Only an untouched sales order can be edited or deleted; once production owns it the
   // server rejects both, so the menu does not offer dead actions.
   const isEditable = workOrder.status === "initiate_production";
-  // Dispatch is the final step, available only once production has completed the order.
-  const canDispatch = workOrder.status === "complete";
+  // Dispatch is the final step, available once production has completed the order. It stays
+  // available afterwards so a typo'd DC/LC/FBR number can be corrected.
+  const canDispatch = workOrder.status === "complete" || workOrder.status === "dispatched";
 
   return (
     <div className="flex justify-end">
@@ -73,7 +74,7 @@ export function WorkOrderRowActions({ workOrder }: { workOrder: WorkOrder }) {
           {canDispatch && (
             <DropdownMenuItem onClick={() => setDispatchOpen(true)}>
               <TruckIcon className="text-muted-foreground" />
-              {workOrder.dispatchedDate ? "Edit Dispatch" : "Dispatch"}
+              {workOrder.status === "dispatched" ? "Edit Dispatch" : "Dispatch"}
             </DropdownMenuItem>
           )}
 
