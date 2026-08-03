@@ -34,6 +34,8 @@ export const routes: AppRoute[] = [
   { path: "/materials", component: page(() => import("@/features/materials/pages/MaterialMasterPage"), "MaterialMasterPage") },
   { path: "/purchases", component: page(() => import("@/features/purchases/pages/PurchaseRecordPage"), "PurchaseRecordPage") },
   { path: "/inventory", component: page(() => import("@/features/inventory/pages/InventoryStockPage"), "InventoryStockPage") },
+  { path: "/machines", component: page(() => import("@/features/machines-operators/pages/MachinesPage"), "MachinesPage") },
+  { path: "/operators", component: page(() => import("@/features/machines-operators/pages/OperatorsPage"), "OperatorsPage") },
   { path: "/machines-operators", component: page(() => import("@/features/machines-operators/pages/MachinesOperatorsPage"), "MachinesOperatorsPage") },
 ];
 
@@ -41,4 +43,6 @@ export const routes: AppRoute[] = [
 export const redirects: RedirectRoute[] = [
   { path: "/production", to: "/production-orders" },
   { path: "/production/:id", to: "/production-orders" },
+  { path: "/machines-operators", to: "/machines" },
 ];
+

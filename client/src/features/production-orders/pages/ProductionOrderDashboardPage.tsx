@@ -1,9 +1,10 @@
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, ClipboardList, Layers, Package, Percent } from "lucide-react";
+import { ArrowLeft, ClipboardList, Layers, Package, Percent, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { AppCard } from "@/components/cards/AppCard";
 import { AppButton } from "@/components/forms/AppButton";
+import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { StatCard } from "@/components/cards/StatCard";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatDate, formatNumber } from "@/lib/format";
@@ -13,7 +14,7 @@ import { RollTrackingTable } from "../components/RollTrackingTable";
 import { WovenProductionPanel } from "../components/WovenProductionPanel";
 import { StatusBadge } from "@/components/feedback/StatusBadge";
 import type { ProductionOrderOverview } from "../types";
-import { useProductionOrderOverview } from "../hooks/use-production-orders";
+import { useProductionOrderOverview, useDeleteProductionOrder } from "../hooks/use-production-orders";
 import { useCompletionCelebration } from "../hooks/use-completion-celebration";
 
 /** The Production Manager dashboard: order header + the editable Production Progress table. */
@@ -22,6 +23,8 @@ export function ProductionOrderDashboardPage() {
   const navigate = useNavigate();
 
   const { data: overview, isLoading, isError, error } = useProductionOrderOverview(id);
+  const deleteOrder = useDeleteProductionOrder();
+
 
   // Party poppers + a congratulation chime the moment this order becomes fully complete.
   useCompletionCelebration(overview?.productionOrder.status);
@@ -75,6 +78,21 @@ export function ProductionOrderDashboardPage() {
                 {needsPlanning ? "Plan Production" : "Edit Plan"}
               </AppButton>
             )}
+            <ConfirmDialog
+              trigger={
+                <AppButton variant="destructive" leftIcon={<Trash2 className="h-4 w-4" />}>
+                  Delete Order
+                </AppButton>
+              }
+              title="Delete production order?"
+              description={`This will permanently delete ${order.productionNumber} and release any reserved material stock.`}
+              confirmLabel="Delete"
+              loading={deleteOrder.isPending}
+              onConfirm={async () => {
+                await deleteOrder.mutateAsync(id);
+                navigate("/production-orders");
+              }}
+            />
           </div>
         }
       />

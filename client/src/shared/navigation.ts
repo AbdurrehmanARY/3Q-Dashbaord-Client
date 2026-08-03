@@ -7,6 +7,7 @@ import {
   ShoppingCart,
   Package,
   Cpu,
+  Users,
   Settings,
   type LucideIcon,
 } from "lucide-react";
@@ -50,9 +51,14 @@ export const navigation: NavItem[] = [
         icon: Boxes,
       },
       {
-        title: "Machines & Operators",
-        url: "/machines-operators",
+        title: "Machines",
+        url: "/machines",
         icon: Cpu,
+      },
+      {
+        title: "Operators",
+        url: "/operators",
+        icon: Users,
       },
     ],
   },

@@ -22,6 +22,29 @@ class ThreadInventoryController {
     res.json({ data });
   });
 
+  createStock = asyncHandler(async (req: Request, res: Response) => {
+    const input = (req.validatedBody ?? req.body) as Parameters<
+      typeof threadInventoryService.createStock
+    >[0];
+    const data = await threadInventoryService.createStock(input);
+    res.status(201).json({ data });
+  });
+
+  updateStock = asyncHandler(async (req: Request, res: Response) => {
+    const { id } = (req.validatedParams ?? req.params) as { id: string };
+    const input = (req.validatedBody ?? req.body) as Parameters<
+      typeof threadInventoryService.updateStock
+    >[1];
+    const data = await threadInventoryService.updateStock(Number(id), input);
+    res.json({ data });
+  });
+
+  deleteStock = asyncHandler(async (req: Request, res: Response) => {
+    const { id } = (req.validatedParams ?? req.params) as { id: string };
+    await threadInventoryService.deleteStock(Number(id));
+    res.status(204).send();
+  });
+
   getMovements = asyncHandler(async (req: Request, res: Response) => {
     const { threadStockId, limit } = (req.validatedQuery ?? req.query) as {
       threadStockId?: number;

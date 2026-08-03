@@ -36,6 +36,11 @@ export const workOrders = pgTable(
     totalQty: integer("total_qty").notNull(),
     brandId: integer("brand_id").references(() => brands.id),
     comment: text("comment"),
+    /**
+     * Artwork / reference image for the order, rendered on the detail page. Plain URL text
+     * today; a Cloudinary-hosted URL would drop in here unchanged.
+     */
+    imageUrl: text("image_url"),
     status: workOrderStatusEnum("status").default("initiate_production").notNull(),
     /**
      * Which manufacturing workflow this order runs through. Defaults to `printed`, so every

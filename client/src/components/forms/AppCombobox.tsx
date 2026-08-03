@@ -1,5 +1,5 @@
 import { Label } from "@/components/ui/label";
-import { Combobox, type ComboboxOption } from "@/shared/components/combobox";
+import { ComboboxSelect, type ComboboxOption } from "@/components/ui/combobox";
 import { cn } from "@/lib/utils";
 
 export type { ComboboxOption as AppComboboxOption };
@@ -20,9 +20,8 @@ interface AppComboboxProps<TValue extends string | number> {
 
 /**
  * Field-wrapped combobox — the searchable-select counterpart to `AppInput`/`AppSelect`,
- * built on the official registry `combobox` primitive (`shared/components/combobox.tsx`)
- * rather than a hand-rolled popover. Use this (not the bare `Combobox`) inside forms so
- * label/error styling stays consistent with every other field.
+ * built on the official registry `combobox` primitive (`components/ui/combobox.tsx`).
+ * Use this inside forms so label/error styling stays consistent with every other field.
  */
 export function AppCombobox<TValue extends string | number>({
   value,
@@ -46,7 +45,7 @@ export function AppCombobox<TValue extends string | number>({
           {label}
         </Label>
       )}
-      <Combobox
+      <ComboboxSelect
         id={fieldId}
         options={options}
         value={value}
@@ -61,3 +60,4 @@ export function AppCombobox<TValue extends string | number>({
     </div>
   );
 }
+

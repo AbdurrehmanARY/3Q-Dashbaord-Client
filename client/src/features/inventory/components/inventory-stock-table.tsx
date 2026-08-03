@@ -1,7 +1,7 @@
 import * as React from "react";
 import { PackageIcon } from "lucide-react";
 import { DataTable, DataTableEmpty, DataTableToolbar } from "@/shared/components/data-table";
-import { Combobox, type ComboboxOption } from "@/shared/components/combobox";
+import { ComboboxSelect as Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { useInventoryStock, useUpdateInventoryRoll } from "../hooks/use-inventory";
 import { useMaterials, MATERIAL_TYPES } from "@/features/materials";
 import { inventoryColumns } from "./inventory-columns";

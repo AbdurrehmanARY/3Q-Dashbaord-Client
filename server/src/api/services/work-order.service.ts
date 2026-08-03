@@ -44,6 +44,8 @@ export class WorkOrderService {
     totalQty: number;
     brandId?: number;
     comment?: string;
+    /** Artwork / reference image URL. Blank clears it. */
+    imageUrl?: string;
     productType?: "printed" | "woven";
     wovenDetail?: {
       designCode: string;
@@ -66,6 +68,7 @@ export class WorkOrderService {
       totalQty: data.totalQty,
       brandId: data.brandId,
       comment: data.comment,
+      imageUrl: data.imageUrl?.trim() ? data.imageUrl.trim() : null,
     };
 
     if (data.productType === "woven") {
@@ -154,6 +157,7 @@ export class WorkOrderService {
     totalQty?: number;
     brandId?: number;
     comment?: string;
+    imageUrl?: string;
     dcNumber?: string;
     lcNumber?: string;
     fbrInvoiceNumber?: string;

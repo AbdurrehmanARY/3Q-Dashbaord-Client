@@ -85,6 +85,30 @@ export function cascadeChain(chain: {
   };
 }
 
+/**
+ * Stamps (or clears) each stage's completion time against the merged line.
+ *
+ * A stage is complete once its counter reaches the planned roll count. The timestamp is set
+ * the first time that happens and preserved thereafter, so a later unrelated edit doesn't
+ * keep bumping it. If a count is corrected back below the target the stamp is cleared —
+ * leaving a completion time on a stage that is no longer complete would be a lie in the
+ * traceability record.
+ */
+export function stageCompletionPatch(
+  merged: ProductionOrderLine
+): Pick<ProductionOrderLine, "printingCompletedAt" | "cuttingCompletedAt" | "packagingCompletedAt"> {
+  const n = toNumbers(merged);
+  const done = (value: number) => n.totalRolls > 0 && value >= n.totalRolls;
+  const stamp = (isDone: boolean, existing: Date | null) =>
+    isDone ? (existing ?? new Date()) : null;
+
+  return {
+    printingCompletedAt: stamp(done(n.printedRolls), merged.printingCompletedAt),
+    cuttingCompletedAt: stamp(done(n.cutRolls), merged.cuttingCompletedAt),
+    packagingCompletedAt: stamp(done(n.packagedRolls), merged.packagingCompletedAt),
+  };
+}
+
 export function hasAnyProgress(line: ProductionOrderLine): boolean {
   const n = toNumbers(line);
   return (

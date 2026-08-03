@@ -12,6 +12,7 @@ import {
 } from "../hooks/use-woven-production";
 import { WovenPlanningForm } from "./WovenPlanningForm";
 import { WovenStageBoard } from "./WovenStageBoard";
+import { WovenTrackingTable } from "./WovenTrackingTable";
 import type { WovenLineOverview, PlanWovenInput } from "../woven-types";
 
 /**
@@ -136,6 +137,14 @@ export function WovenProductionPanel({ orderId, totalQty }: { orderId: string; t
               Plan Another Line
             </AppButton>
           )}
+
+          <AppCard
+            title="Woven Production Tracking Summary"
+            description="A read-only summary of planned, woven, cut, and packaged quantities per line."
+            contentClassName="p-0"
+          >
+            <WovenTrackingTable lines={lines} />
+          </AppCard>
         </div>
       )}
     </div>

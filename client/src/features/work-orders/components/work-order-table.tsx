@@ -3,7 +3,7 @@ import { FileTextIcon, FilterXIcon, Plus } from "lucide-react";
 import { DataTable, DataTableEmpty, DataTableToolbar } from "@/shared/components/data-table";
 import { EmptyContent } from "@/components/ui/empty";
 import { AppButton } from "@/components/forms/AppButton";
-import { Combobox, type ComboboxOption } from "@/shared/components/combobox";
+import { ComboboxSelect as Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { DatePicker } from "@/shared/components/date-picker";
 import { useCompanies } from "@/features/companies";
 import { useWorkOrders } from "../hooks/use-work-orders";

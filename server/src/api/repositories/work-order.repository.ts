@@ -17,6 +17,7 @@ const workOrderWithBrandSelect = {
   totalQty: workOrders.totalQty,
   brandId: workOrders.brandId,
   comment: workOrders.comment,
+  imageUrl: workOrders.imageUrl,
   status: workOrders.status,
   productType: workOrders.productType,
   dcNumber: workOrders.dcNumber,
@@ -115,6 +116,7 @@ export class WorkOrderRepository {
     totalQty: number;
     brandId?: number;
     comment?: string;
+    imageUrl?: string | null;
     productType?: WorkOrder["productType"];
   }) {
     const [workOrder] = await db.insert(workOrders).values(data).returning();
@@ -134,6 +136,7 @@ export class WorkOrderRepository {
       totalQty: number;
       brandId?: number;
       comment?: string;
+      imageUrl?: string | null;
     },
     detail: Omit<NewWovenWorkOrderDetail, "workOrderId">
   ) {
@@ -162,6 +165,7 @@ export class WorkOrderRepository {
     totalQty?: number;
     brandId?: number;
     comment?: string;
+    imageUrl?: string | null;
     /** Derived from the production order — see production-order.repository.ts. */
     status?: WorkOrder["status"];
     dcNumber?: string | null;

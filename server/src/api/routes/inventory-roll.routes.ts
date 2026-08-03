@@ -1,17 +1,40 @@
 import { Router } from "express";
 import { inventoryRollController } from "@api/controllers/inventory-roll.controller";
-import { validateRequest } from "@api/middleware/validateRequest";
-import { validateParams } from "@api/middleware/validateRequest";
-import { validateQuery } from "@api/middleware/validateRequest";
-import { createInventoryRollSchema, updateInventoryRollSchema, inventoryRollParamsSchema } from "@api/validations/inventory-roll.validation";
-import { listStockQuerySchema } from "@api/validations/query.validation";
+import { validateRequest, validateParams, validateQuery } from "@api/middleware/validateRequest";
+import {
+  createInventoryRollSchema,
+  updateInventoryRollSchema,
+  inventoryRollParamsSchema,
+  listInventoryRollsQuerySchema,
+  listRollMovementsQuerySchema,
+} from "@api/validations/inventory-roll.validation";
 
 const router = Router();
 
-router.get("/", validateQuery(listStockQuerySchema), inventoryRollController.getInventoryRolls);
+/* Search / filter / sort / paging all live on the list query. */
+router.get("/", validateQuery(listInventoryRollsQuerySchema), inventoryRollController.getInventoryRolls);
+/* Declared before "/:materialCode" so it isn't swallowed by it. */
+router.get(
+  "/movements",
+  validateQuery(listRollMovementsQuerySchema),
+  inventoryRollController.getMovements
+);
 router.post("/", validateRequest(createInventoryRollSchema), inventoryRollController.createInventoryRoll);
-router.get("/:materialCode", validateParams(inventoryRollParamsSchema), inventoryRollController.getInventoryRollByMaterialCode);
-router.put("/:materialCode", validateRequest(updateInventoryRollSchema), inventoryRollController.updateInventoryRoll);
-router.delete("/:materialCode", validateParams(inventoryRollParamsSchema), inventoryRollController.deleteInventoryRoll);
+router.get(
+  "/:materialCode",
+  validateParams(inventoryRollParamsSchema),
+  inventoryRollController.getInventoryRollByMaterialCode
+);
+router.put(
+  "/:materialCode",
+  validateParams(inventoryRollParamsSchema),
+  validateRequest(updateInventoryRollSchema),
+  inventoryRollController.updateInventoryRoll
+);
+router.delete(
+  "/:materialCode",
+  validateParams(inventoryRollParamsSchema),
+  inventoryRollController.deleteInventoryRoll
+);
 
 export default router;

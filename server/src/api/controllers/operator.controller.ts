@@ -5,8 +5,10 @@ import type { CreateOperatorDTO, UpdateOperatorDTO } from "../validations/operat
 
 class OperatorController {
   getOperators = asyncHandler(async (req: Request, res: Response) => {
-    const { designation, includeInactive } = (req.validatedQuery ?? req.query) as { designation?: string; includeInactive?: boolean };
-    const data = await operatorService.getOperators({ designation, includeInactive });
+    const query = (req.validatedQuery ?? req.query) as Parameters<
+      typeof operatorService.getOperators
+    >[0];
+    const data = await operatorService.getOperators(query);
     res.json({ data });
   });
 

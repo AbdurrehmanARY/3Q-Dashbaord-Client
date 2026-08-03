@@ -56,6 +56,84 @@ export class ThreadInventoryRepository {
     return row;
   }
 
+  async countStocks(filters?: { stockType?: StockType; denier?: Denier; colorName?: string }) {
+    const conditions = [];
+    if (filters?.stockType) conditions.push(eq(threadStocks.stockType, filters.stockType));
+    if (filters?.denier) conditions.push(eq(threadStocks.denier, filters.denier));
+    if (filters?.colorName) {
+      conditions.push(sql`${threadStocks.colorName} ILIKE ${"%" + filters.colorName + "%"}`);
+    }
+    const [row] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(threadStocks)
+      .where(conditions.length ? and(...conditions) : undefined);
+    return Number(row?.count ?? 0);
+  }
+
+  /** Creates a thread ledger with its opening balance recorded as the first movement. */
+  async createStockWithHistory(
+    identity: { stockType: StockType; denier: Denier; colorName: string; colorCode: string | null },
+    openingKg: number,
+    actorUserId?: number | null
+  ) {
+    return db.transaction(async (tx) => {
+      const stock = await this.getOrCreateStockTx(tx, identity);
+      if (openingKg > 0) {
+        await this.moveStockTx(tx, stock.id, openingKg, "adjustment", {
+          note: "Opening balance",
+          actorUserId,
+        });
+      }
+      const [fresh] = await tx.select().from(threadStocks).where(eq(threadStocks.id, stock.id));
+      return fresh;
+    });
+  }
+
+  /**
+   * Edits a thread ledger. Renaming the colour is a plain attribute change; changing the
+   * balance is a movement, so the difference is written as an `adjustment` and the history
+   * still reconciles to the balance.
+   */
+  async updateStockWithHistory(
+    id: number,
+    patch: { colorName?: string; colorCode?: string | null; balanceKg?: number },
+    note?: string,
+    actorUserId?: number | null
+  ) {
+    return db.transaction(async (tx) => {
+      const [locked] = await tx.select().from(threadStocks).where(eq(threadStocks.id, id)).for("update");
+      if (!locked) throw new NotFoundError("Thread stock not found");
+
+      const attrs: Record<string, unknown> = {};
+      if (patch.colorName !== undefined) attrs.colorName = patch.colorName;
+      if (patch.colorCode !== undefined) attrs.colorCode = patch.colorCode;
+      if (Object.keys(attrs).length > 0) {
+        await tx
+          .update(threadStocks)
+          .set({ ...attrs, updatedAt: new Date() })
+          .where(eq(threadStocks.id, id));
+      }
+
+      if (patch.balanceKg !== undefined) {
+        if (patch.balanceKg < 0) throw new BadRequestError("Balance cannot be negative");
+        const delta = patch.balanceKg - Number(locked.balanceKg);
+        if (Math.abs(delta) > 0.0005) {
+          await this.moveStockTx(tx, id, delta, "adjustment", {
+            note: note ?? "Manual stock adjustment",
+            actorUserId,
+          });
+        }
+      }
+
+      const [fresh] = await tx.select().from(threadStocks).where(eq(threadStocks.id, id));
+      return fresh;
+    });
+  }
+
+  async deleteStock(id: number) {
+    await db.delete(threadStocks).where(eq(threadStocks.id, id));
+  }
+
   async findMovements(threadStockId?: number, limit = 200) {
     return db
       .select()

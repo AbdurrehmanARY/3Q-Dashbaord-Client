@@ -10,7 +10,7 @@ import { StatusBadge } from "@/components/feedback/StatusBadge";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useWorkOrderDetail, useDeleteWorkOrder } from "../hooks/use-work-orders";
-import { useProductionOrderOverview } from "@/features/production-orders";
+import { useProductionOrderOverview, useWovenOverview } from "@/features/production-orders";
 import { WORK_ORDER_STATUS_META } from "../types";
 import { formatDate, formatNumber } from "@/lib/format";
 import { WorkOrderDialog } from "../components/WorkOrderDialog";
@@ -30,8 +30,15 @@ export function WorkOrderDetailPage() {
   const [editOpen, setEditOpen] = useState(false);
 
   const productionOrder = wo?.productionOrder ?? null;
+  const isWoven = wo?.productType === "woven";
+
   const { data: overview } = useProductionOrderOverview(
-    productionOrder ? String(productionOrder.id) : ""
+    productionOrder && !isWoven ? String(productionOrder.id) : ""
+  );
+
+  const { data: wovenOverview } = useWovenOverview(
+    productionOrder && isWoven ? String(productionOrder.id) : "",
+    !!productionOrder && isWoven
   );
 
   if (detailLoading) return <p className="text-muted-foreground p-6">Loading...</p>;
@@ -191,7 +198,15 @@ export function WorkOrderDetailPage() {
           </AppCard>
         )}
 
-        {!productionOrder ? (
+        {/* ---------------- Woven vs Printed Production View ---------------- */}
+        {isWoven ? (
+          <WovenProductionDetailView
+            productionOrder={productionOrder}
+            wovenOverview={wovenOverview}
+            totalQty={wo.totalQty}
+            navigate={navigate}
+          />
+        ) : !productionOrder ? (
           <AppCard title="Production">
             <p className="text-sm text-muted-foreground">
               No production order raised yet. Raise one from the{" "}
@@ -383,9 +398,8 @@ export function WorkOrderDetailPage() {
 function Th({ children, align }: { children: React.ReactNode; align?: "right" }) {
   return (
     <TableHead
-      className={`h-10 whitespace-nowrap text-xs font-semibold uppercase tracking-wider text-muted-foreground ${
-        align === "right" ? "text-right" : ""
-      }`}
+      className={`h-10 whitespace-nowrap text-xs font-semibold uppercase tracking-wider text-muted-foreground ${align === "right" ? "text-right" : ""
+        }`}
     >
       {children}
     </TableHead>
@@ -428,6 +442,153 @@ function StageProgress({
         <span className={`text-sm ${emphasis ? "font-semibold" : "font-medium"}`}>{label}</span>
         <span className="text-xs tabular-nums text-muted-foreground">
           {formatNumber(done, 0)} / {formatNumber(total, 0)} rolls · {pct}%
+        </span>
+      </div>
+      <Progress value={pct} />
+    </div>
+  );
+}
+
+function WovenProductionDetailView({
+  productionOrder,
+  wovenOverview,
+  totalQty,
+  navigate,
+}: {
+  productionOrder: any;
+  wovenOverview: any;
+  totalQty: number;
+  navigate: ReturnType<typeof useNavigate>;
+}) {
+  if (!productionOrder) {
+    return (
+      <AppCard title="Production">
+        <p className="text-sm text-muted-foreground">
+          No production order raised yet. Raise one from the{" "}
+          <button
+            className="font-medium text-primary underline-offset-2 hover:underline"
+            onClick={() => navigate("/production-orders")}
+          >
+            Production Orders
+          </button>{" "}
+          page, then plan its loom & thread colors.
+        </p>
+      </AppCard>
+    );
+  }
+
+  const lines = wovenOverview?.lines ?? [];
+  const totals = wovenOverview?.totals;
+  const targetQty = totals?.quantity || totalQty || 1;
+
+  const allThreads = lines.flatMap((line: any) =>
+    (line.planning?.threads ?? []).map((t: any) => ({
+      ...t,
+      lineId: line.id,
+    }))
+  );
+
+  return (
+    <>
+      {/* ---------------- Woven Thread & Planning Information ---------------- */}
+      <AppCard
+        title="Woven Production & Thread Plan"
+        description={`Production order ${productionOrder.productionNumber} · ${lines.length} woven line(s)`}
+      >
+        <div className="mb-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <Figure label="Planned Qty" value={`${formatNumber(totals?.quantity ?? totalQty, 0)} pcs`} accent />
+          <Figure label="Woven Lines" value={formatNumber(totals?.lineCount ?? lines.length, 0)} />
+          <Figure label="Thread Reserved" value={`${formatNumber(totals?.totalThreadWeightKg ?? 0, 3)} kg`} />
+          <Figure label="Packaged Weight" value={`${formatNumber(totals?.packagedWeightKg ?? 0, 2)} kg`} />
+        </div>
+
+        {allThreads.length === 0 ? (
+          <p className="text-sm italic text-muted-foreground">
+            No thread plan assigned yet — plan loom & thread colors on the production dashboard.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/30 hover:bg-muted/30">
+                  <Th>Line #</Th>
+                  <Th>Color Name</Th>
+                  <Th>Color Code</Th>
+                  <Th>Denier</Th>
+                  <Th align="right">Weight (kg)</Th>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {allThreads.map((t: any, index: number) => (
+                  <TableRow key={`${t.lineId}-${t.id}-${index}`}>
+                    <TableCell className="font-mono text-xs">Line #{t.lineId}</TableCell>
+                    <TableCell className="font-medium">{t.colorName}</TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">{t.colorCode}</TableCell>
+                    <TableCell>
+                      <StatusBadge variant="neutral">{t.denier}D</StatusBadge>
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">{formatNumber(t.weightKg, 3)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </AppCard>
+
+      {/* ---------------- Woven Production Progress ---------------- */}
+      <AppCard
+        title="Woven Production Progress"
+        description="Real-time quantity breakdown across Weaving, Cutting, and Packaging stages."
+      >
+        <div className="grid gap-4 sm:grid-cols-3">
+          <StageProgressPcs
+            label="Weaving Stage"
+            done={totals?.wovenQty ?? 0}
+            total={targetQty}
+          />
+          <StageProgressPcs
+            label="Cutting Stage"
+            done={totals?.cutQty ?? 0}
+            total={targetQty}
+          />
+          <StageProgressPcs
+            label="Packaging Stage"
+            done={totals?.packagedQty ?? 0}
+            total={targetQty}
+          />
+        </div>
+        <div className="mt-4 border-t pt-4">
+          <StageProgressPcs
+            label="Overall Completion"
+            done={totals?.packagedQty ?? 0}
+            total={targetQty}
+            emphasis
+          />
+        </div>
+      </AppCard>
+    </>
+  );
+}
+
+function StageProgressPcs({
+  label,
+  done,
+  total,
+  emphasis,
+}: {
+  label: string;
+  done: number;
+  total: number;
+  emphasis?: boolean;
+}) {
+  const pct = total > 0 ? Math.min(100, Math.round((done / total) * 1000) / 10) : 0;
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-baseline justify-between">
+        <span className={`text-sm ${emphasis ? "font-semibold" : "font-medium"}`}>{label}</span>
+        <span className="text-xs tabular-nums text-muted-foreground font-medium">
+          {formatNumber(done, 0)} / {formatNumber(total, 0)} pcs · {pct}%
         </span>
       </div>
       <Progress value={pct} />

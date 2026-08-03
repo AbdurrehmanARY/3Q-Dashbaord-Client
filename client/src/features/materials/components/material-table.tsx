@@ -3,7 +3,7 @@ import { BoxesIcon, PlusIcon } from "lucide-react";
 import { AppButton } from "@/components/forms/AppButton";
 import { EmptyContent } from "@/components/ui/empty";
 import { DataTable, DataTableEmpty, DataTableToolbar } from "@/shared/components/data-table";
-import { Combobox, type ComboboxOption } from "@/shared/components/combobox";
+import { ComboboxSelect as Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { useMaterials } from "../hooks/use-materials";
 import { materialColumns } from "./material-columns";
 import { MATERIAL_TYPES } from "../schemas/material-schemas";

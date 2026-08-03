@@ -43,14 +43,18 @@ class ProductionOrderController {
    * line doesn't blank out the resource it already has.
    */
   getAvailableResources = asyncHandler(async (req: Request, res: Response) => {
-    const { lineId, orderId } = (req.validatedQuery ?? req.query) as {
+    const { lineId, orderId, productType } = (req.validatedQuery ?? req.query) as {
       lineId?: string;
       orderId?: string;
+      productType?: "printed" | "woven";
     };
-    const data = await productionOrderService.getAvailableResources({
-      lineId: lineId ? Number(lineId) : undefined,
-      productionOrderId: orderId ? Number(orderId) : undefined,
-    });
+    const data = await productionOrderService.getAvailableResources(
+      {
+        lineId: lineId ? Number(lineId) : undefined,
+        productionOrderId: orderId ? Number(orderId) : undefined,
+      },
+      productType
+    );
     res.json({ data });
   });
 

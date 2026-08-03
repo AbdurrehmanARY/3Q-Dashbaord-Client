@@ -22,19 +22,23 @@ interface AppCardProps extends Omit<React.HTMLAttributes<HTMLDivElement>, "title
 export const AppCard = React.forwardRef<HTMLDivElement, AppCardProps>(
   ({ className, title, description, footer, headerActions, contentClassName, children, ...props }, ref) => {
     const hasHeader = title || description || headerActions;
+    const isFullBleed = contentClassName?.includes("p-0");
 
     return (
-      <Card ref={ref} className={cn("overflow-hidden", className)} {...props}>
+      <Card ref={ref} className={cn("overflow-hidden border border-border/60 shadow-sm", className)} {...props}>
         {hasHeader && (
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3 border-b border-border/50">
-            <div className="space-y-1">
-              {title && <CardTitle className="text-base font-semibold">{title}</CardTitle>}
-              {description && <CardDescription className="text-xs">{description}</CardDescription>}
+          <CardHeader className={cn(
+            "flex flex-row items-center justify-between space-y-0 px-5 py-4",
+            !isFullBleed && "border-b border-border/50"
+          )}>
+            <div className="space-y-0.5">
+              {title && <CardTitle className="text-base font-semibold tracking-tight">{title}</CardTitle>}
+              {description && <CardDescription className="text-xs text-muted-foreground">{description}</CardDescription>}
             </div>
             {headerActions && <div className="flex items-center gap-2">{headerActions}</div>}
           </CardHeader>
         )}
-        <CardContent className={cn(hasHeader ? "pt-5" : "p-5", contentClassName)}>
+        <CardContent className={cn(hasHeader ? (isFullBleed ? "p-0" : "p-5 pt-4") : "p-5", contentClassName)}>
           {children}
         </CardContent>
         {footer && <CardFooter className="border-t border-border/50 bg-muted/20 px-5 py-3">{footer}</CardFooter>}

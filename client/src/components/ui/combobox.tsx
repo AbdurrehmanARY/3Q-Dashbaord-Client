@@ -277,8 +277,80 @@ function useComboboxAnchor() {
   return React.useRef<HTMLDivElement | null>(null)
 }
 
+export interface ComboboxOption<TValue extends string | number = string | number> {
+  value: TValue;
+  label: string;
+  disabled?: boolean;
+  hint?: string;
+}
+
+export interface ComboboxSelectProps<TValue extends string | number> {
+  options: ComboboxOption<TValue>[];
+  value: TValue | null | undefined;
+  onChange: (value: TValue | null) => void;
+  placeholder?: string;
+  emptyText?: string;
+  disabled?: boolean;
+  maxHeight?: number;
+  className?: string;
+  "aria-label"?: string;
+  id?: string;
+}
+
+function ComboboxSelect<TValue extends string | number>({
+  options,
+  value,
+  onChange,
+  placeholder = "Select…",
+  emptyText = "No results.",
+  disabled,
+  className,
+  "aria-label": ariaLabel,
+  id,
+}: ComboboxSelectProps<TValue>) {
+  const selected = React.useMemo(
+    () => options.find((o) => o.value === value) ?? null,
+    [options, value]
+  );
+
+  return (
+    <Combobox
+      items={options}
+      value={selected}
+      onValueChange={(next: ComboboxOption<TValue> | null) => onChange(next?.value ?? null)}
+      itemToStringLabel={(item: ComboboxOption<TValue>) => item.label}
+      disabled={disabled}
+    >
+      <ComboboxInput
+        id={id}
+        placeholder={placeholder}
+        disabled={disabled}
+        showClear={!!selected}
+        className={cn("w-full", className)}
+        aria-label={ariaLabel}
+      />
+      <ComboboxContent>
+        <ComboboxEmpty>{emptyText}</ComboboxEmpty>
+        <ComboboxList>
+          {(item: ComboboxOption<TValue>) => (
+            <ComboboxItem key={String(item.value)} value={item} disabled={item.disabled}>
+              <div className="flex min-w-0 flex-col">
+                <span className="truncate">{item.label}</span>
+                {item.hint && (
+                  <span className="truncate text-xs text-muted-foreground">{item.hint}</span>
+                )}
+              </div>
+            </ComboboxItem>
+          )}
+        </ComboboxList>
+      </ComboboxContent>
+    </Combobox>
+  );
+}
+
 export {
   Combobox,
+  ComboboxSelect,
   ComboboxInput,
   ComboboxContent,
   ComboboxList,
@@ -295,3 +367,4 @@ export {
   ComboboxValue,
   useComboboxAnchor,
 }
+

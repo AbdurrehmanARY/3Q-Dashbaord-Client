@@ -12,6 +12,11 @@ export const listMachinesQuerySchema = z.object({
 
 export const listOperatorsQuerySchema = z.object({
   designation: z.string().optional(),
+  /** Capability filter used by production: matches the line plus `both`. */
+  productType: z.enum(["printed", "woven"]).optional(),
+  /** Exact match, for the operator master-data list's own filter. */
+  operatorType: z.enum(["printed", "woven", "both"]).optional(),
+  search: z.string().optional(),
   includeInactive: z.coerce.boolean().optional(),
 });
 

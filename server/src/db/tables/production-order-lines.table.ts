@@ -66,6 +66,16 @@ export const productionOrderLines = pgTable(
     cuttingOperatorId: integer("cutting_operator_id").references(() => operators.id),
     packagingOperatorId: integer("packaging_operator_id").references(() => operators.id),
 
+    /**
+     * When each stage finished — stamped the moment its counter first reaches the planned
+     * roll count, and cleared if the count is later corrected back below it. Together with
+     * the operator columns above these give a finished order full traceability: who did
+     * each stage, and when it completed.
+     */
+    printingCompletedAt: timestamp("printing_completed_at"),
+    cuttingCompletedAt: timestamp("cutting_completed_at"),
+    packagingCompletedAt: timestamp("packaging_completed_at"),
+
     status: productionStatusEnum("status").default("pending").notNull(),
     notes: text("notes"),
     createdAt: timestamp("created_at").defaultNow().notNull(),

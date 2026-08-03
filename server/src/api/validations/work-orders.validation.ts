@@ -24,6 +24,8 @@ export const createWorkOrderSchema = z.object({
       totalQty: z.coerce.number().int().positive("Total quantity must be greater than 0"),
       brandId: z.coerce.number().int().positive("Brand ID must be a positive integer").optional(),
       comment: z.string().optional(),
+      /** Artwork / reference image URL, rendered on the detail page. */
+      imageUrl: z.string().trim().url("Image must be a valid URL").max(2048).optional().or(z.literal("")),
       productType: z.enum(["printed", "woven"]).default("printed"),
       /** Required when `productType` is `woven`, rejected otherwise (see refine below). */
       wovenDetail: wovenDetailSchema.optional(),
@@ -41,6 +43,7 @@ export const updateWorkOrderSchema = z.object({
     totalQty: z.coerce.number().int().positive().optional(),
     brandId: z.coerce.number().int().positive().optional(),
     comment: z.string().optional(),
+    imageUrl: z.string().trim().url("Image must be a valid URL").max(2048).optional().or(z.literal("")),
     // `status` and `productType` are deliberately absent: status is derived from the
     // production order, and a sales order cannot change which workflow it runs through.
     dcNumber: z.string().optional(),

@@ -162,6 +162,10 @@ export function WovenStageBoard({ orderId, line }: { orderId: string; line: Wove
     label: `${o.name} · ${o.designation}`,
   }));
 
+  const weavingPct = Math.min(100, Math.round(((line.weaving.wovenQty ?? 0) / (line.quantity || 1)) * 1000) / 10);
+  const cutPct = Math.min(100, Math.round(((line.cutting.cutQty ?? 0) / (line.quantity || 1)) * 1000) / 10);
+  const packagedPct = Math.min(100, Math.round(((line.packaging.packagedQty ?? 0) / (line.quantity || 1)) * 1000) / 10);
+
   return (
     <div className="space-y-4">
       <AppCard title="Thread Plan" contentClassName="p-0">
@@ -197,40 +201,32 @@ export function WovenStageBoard({ orderId, line }: { orderId: string; line: Wove
             <div>Machine: {line.weaving.machineName ?? "Unassigned"}</div>
             <div>Operator: {line.weaving.operatorName ?? "Unassigned"}</div>
           </div>
-          <Progress value={line.weaving.progressPct} />
-          <p className="text-xs tabular-nums text-muted-foreground">
-            {formatNumber(line.weaving.wovenQty, 0)} of {formatNumber(line.quantity, 0)} (
-            {line.weaving.progressPct}%)
+          <Progress value={weavingPct} />
+          <p className="text-xs tabular-nums text-muted-foreground font-medium">
+            {formatNumber(line.weaving.wovenQty, 0)} of {formatNumber(line.quantity, 0)} pcs woven ({weavingPct}%)
           </p>
           <EditableNumber
             label="Woven Qty"
             value={line.weaving.wovenQty}
             max={line.quantity}
             disabled={weaving.isPending}
-            onSave={(wovenQty) => weaving.mutate({ lineId: line.id, body: { wovenQty } })}
+            onSave={(wovenQty) => {
+              const body = !line.weaving.startedAt ? { wovenQty, started: true } : { wovenQty };
+              weaving.mutate({ lineId: line.id, body });
+            }}
           />
-          <div className="flex gap-2">
-            {!line.weaving.startedAt && (
-              <AppButton
-                size="sm"
-                variant="outline"
-                loading={weaving.isPending}
-                onClick={() => weaving.mutate({ lineId: line.id, body: { started: true } })}
-              >
-                Start
-              </AppButton>
-            )}
-            {line.weaving.startedAt && !line.weaving.endedAt && (
+          {line.weaving.startedAt && !line.weaving.endedAt && (
+            <div className="flex gap-2">
               <AppButton
                 size="sm"
                 variant="outline"
                 loading={weaving.isPending}
                 onClick={() => weaving.mutate({ lineId: line.id, body: { ended: true } })}
               >
-                End
+                End Weaving
               </AppButton>
-            )}
-          </div>
+            </div>
+          )}
           {line.weaving.startedAt && (
             <p className="text-[11px] text-muted-foreground">
               Started {formatDate(line.weaving.startedAt)}
@@ -256,6 +252,10 @@ export function WovenStageBoard({ orderId, line }: { orderId: string; line: Wove
             placeholder="Assign operator…"
             emptyText="No operators."
           />
+          <Progress value={cutPct} />
+          <p className="text-xs tabular-nums text-muted-foreground font-medium">
+            {formatNumber(line.cutting.cutQty, 0)} of {formatNumber(line.quantity, 0)} pcs cut out of total ({cutPct}%)
+          </p>
           <EditableNumber
             label="Cut Qty"
             value={line.cutting.cutQty}
@@ -293,6 +293,10 @@ export function WovenStageBoard({ orderId, line }: { orderId: string; line: Wove
             placeholder="Assign operator…"
             emptyText="No operators."
           />
+          <Progress value={packagedPct} />
+          <p className="text-xs tabular-nums text-muted-foreground font-medium">
+            {formatNumber(line.packaging.packagedQty, 0)} of {formatNumber(line.quantity, 0)} pcs packaged out of total ({packagedPct}%)
+          </p>
           <EditableNumber
             label="Packaged Qty"
             value={line.packaging.packagedQty}

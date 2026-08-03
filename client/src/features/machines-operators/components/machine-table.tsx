@@ -4,7 +4,7 @@ import { AppCard } from "@/components/cards/AppCard";
 import { AppButton } from "@/components/forms/AppButton";
 import { EmptyContent } from "@/components/ui/empty";
 import { DataTable, DataTableEmpty, DataTableToolbar } from "@/shared/components/data-table";
-import { Combobox, type ComboboxOption } from "@/shared/components/combobox";
+import { ComboboxSelect as Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { useMachines } from "../hooks/use-entities";
 import { machineColumns } from "./machine-columns";
 import { MachineDialog } from "./MachineDialog";

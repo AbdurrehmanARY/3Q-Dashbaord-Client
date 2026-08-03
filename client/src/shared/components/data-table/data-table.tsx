@@ -36,12 +36,11 @@ function alignClass(align: "left" | "center" | "right" | undefined) {
 function stickyClass(pinned: "first" | "last" | null, header: boolean) {
   if (!pinned) return undefined;
   return cn(
-    "sticky z-10",
+    "sticky",
     pinned === "first"
-      ? "left-0 shadow-[1px_0_0_0_hsl(var(--border))]"
-      : "right-0 shadow-[-1px_0_0_0_hsl(var(--border))]",
-    // Header cells sit above body cells, so they need the header's own fill.
-    header ? "bg-muted z-20" : "bg-card"
+      ? "left-0 z-20 border-r border-border/80 shadow-[2px_0_4px_-1px_rgba(0,0,0,0.06)]"
+      : "right-0 z-20 border-l border-border/80 shadow-[-2px_0_4px_-1px_rgba(0,0,0,0.06)]",
+    header ? "bg-muted/95 backdrop-blur font-semibold" : "bg-card"
   );
 }
 
@@ -67,9 +66,9 @@ export interface DataTableProps<TData extends RowData, TValue> {
   pagination?: boolean;
   initialPageSize?: number;
   className?: string;
-  /** Pin the first column while scrolling horizontally — usually the row's identifier. */
+  /** Pin the first column while scrolling horizontally — usually the row's identifier. Default: true */
   stickyFirstColumn?: boolean;
-  /** Pin the last column while scrolling horizontally — usually an Actions column. */
+  /** Pin the last column while scrolling horizontally — usually an Actions column. Default: true */
   stickyLastColumn?: boolean;
 }
 
@@ -98,8 +97,8 @@ export function DataTable<TData extends RowData, TValue>({
   pagination = true,
   initialPageSize = 20,
   className,
-  stickyFirstColumn = false,
-  stickyLastColumn = false,
+  stickyFirstColumn = true,
+  stickyLastColumn = true,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);

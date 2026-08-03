@@ -2,7 +2,7 @@ import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import { FactoryIcon } from "lucide-react";
 import { DataTable, DataTableEmpty, DataTableToolbar } from "@/shared/components/data-table";
-import { Combobox, type ComboboxOption } from "@/shared/components/combobox";
+import { ComboboxSelect as Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { AppInput } from "@/components/forms/AppInput";
 import { useProductionOrders } from "../hooks/use-production-orders";
 import { productionOrderColumns } from "./production-order-columns";

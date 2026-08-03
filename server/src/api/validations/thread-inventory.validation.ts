@@ -35,6 +35,30 @@ export const createDyeBatchSchema = z.object({
   }),
 });
 
+/** Creating a thread ledger by hand (receiving and dyeing create them implicitly). */
+export const createThreadStockSchema = z.object({
+  body: z.object({
+    stockType: z.enum(["primary", "secondary"]),
+    denier: denierEnum,
+    colorName: z.string().trim().min(1, "Colour name is required"),
+    /** Required for dyed (secondary) stock; ignored for undyed. */
+    colorCode: z.string().trim().optional().nullable(),
+    openingKg: z.coerce.number().min(0, "Opening balance cannot be negative").optional(),
+    actorUserId: z.coerce.number().int().positive().optional(),
+  }),
+});
+
+/** Balance is bounded at zero; changing it writes an adjustment movement. */
+export const updateThreadStockSchema = z.object({
+  body: z.object({
+    colorName: z.string().trim().min(1).optional(),
+    colorCode: z.string().trim().optional().nullable(),
+    balanceKg: z.coerce.number().min(0, "Balance cannot be negative").optional(),
+    note: z.string().max(500).optional(),
+    actorUserId: z.coerce.number().int().positive().optional(),
+  }),
+});
+
 export const listThreadStocksQuerySchema = z.object({
   stockType: z.enum(["primary", "secondary"]).optional(),
   denier: denierEnum.optional(),

@@ -6,6 +6,11 @@ function nameOf<T extends { name: string }>(map: Map<number, T>, id: number | nu
   return id != null ? (map.get(id)?.name ?? null) : null;
 }
 
+/** Operator avatar for the stage, so production screens can show a face beside the name. */
+function avatarOf(map: Map<number, Operator>, id: number | null): string | null {
+  return id != null ? (map.get(id)?.avatarUrl ?? null) : null;
+}
+
 /**
  * Pure assembly of the manager-dashboard payload from already-fetched rows: per-label-type
  * planning/assignment/live-progress detail plus the order rollups. Fetching stays in the
@@ -60,30 +65,38 @@ export function buildProductionOverviewBody(
         assignedWeight: material ? Number(material.weightPerRoll) * n.issuedRolls : null,
       },
 
+      // Each stage carries who did it, their avatar, and when it completed — together these
+      // are the traceability record surfaced on a finished order.
       printing: {
         machineId: line.printingMachineId,
         machineName: nameOf(machineById, line.printingMachineId),
         operatorId: line.printingOperatorId,
         operatorName: nameOf(operatorById, line.printingOperatorId),
+        operatorAvatarUrl: avatarOf(operatorById, line.printingOperatorId),
         printedRolls: n.printedRolls,
         progressPct: completionPct(n.printedRolls, n.totalRolls),
+        completedAt: line.printingCompletedAt,
       },
       cutting: {
         machineId: line.cuttingMachineId,
         machineName: nameOf(machineById, line.cuttingMachineId),
         operatorId: line.cuttingOperatorId,
         operatorName: nameOf(operatorById, line.cuttingOperatorId),
+        operatorAvatarUrl: avatarOf(operatorById, line.cuttingOperatorId),
         sentToCuttingRolls: n.sentToCuttingRolls,
         cutRolls: n.cutRolls,
         progressPct: completionPct(n.cutRolls, n.totalRolls),
+        completedAt: line.cuttingCompletedAt,
       },
       packaging: {
         operatorId: line.packagingOperatorId,
         operatorName: nameOf(operatorById, line.packagingOperatorId),
+        operatorAvatarUrl: avatarOf(operatorById, line.packagingOperatorId),
         sentToPackagingRolls: n.sentToPackagingRolls,
         packagedRolls: n.packagedRolls,
         packagedQty: n.packagedQty,
         progressPct: completionPct(n.packagedRolls, n.totalRolls),
+        completedAt: line.packagingCompletedAt,
       },
 
       liveProgress: {

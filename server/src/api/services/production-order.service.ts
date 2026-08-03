@@ -23,6 +23,7 @@ import {
   hasAnyProgress,
   deriveLineStatus,
   deriveOrderPatch,
+  stageCompletionPatch,
   type ProductionStage,
   type TransferTarget,
   type PlanLineInput,
@@ -105,11 +106,15 @@ export class ProductionOrderService {
    * Machines and operators available to a line or an order — the free ones, plus
    * whatever the caller already holds (so its own current selection stays selectable).
    */
-  async getAvailableResources(exclude?: { lineId?: number; productionOrderId?: number }) {
+  async getAvailableResources(
+    exclude?: { lineId?: number; productionOrderId?: number },
+    /** Narrows operators to those trained for this line (the type itself plus `both`). */
+    productType?: "printed" | "woven"
+  ) {
     const [locks, allMachines, allOperators] = await Promise.all([
       this.getResourceLocks(exclude),
       machineRepository.findAll(),
-      operatorRepository.findAll(),
+      operatorRepository.findAll(productType ? { productType } : undefined),
     ]);
 
     return {
@@ -533,7 +538,10 @@ export class ProductionOrderService {
           patch.packagedQty = String(input.packagedQty);
         }
 
-        patch.status = deriveLineStatus({ ...freshLine, ...patch } as ProductionOrderLine);
+        const mergedLine = { ...freshLine, ...patch } as ProductionOrderLine;
+        patch.status = deriveLineStatus(mergedLine);
+        // Record who/when each stage finished — the traceability record for the order.
+        Object.assign(patch, stageCompletionPatch(mergedLine));
 
         return {
           linePatch: patch,
@@ -604,7 +612,10 @@ export class ProductionOrderService {
           patch.sentToPackagingRolls = String(newValue);
         }
 
-        patch.status = deriveLineStatus({ ...freshLine, ...patch } as ProductionOrderLine);
+        const mergedLine = { ...freshLine, ...patch } as ProductionOrderLine;
+        patch.status = deriveLineStatus(mergedLine);
+        // Record who/when each stage finished — the traceability record for the order.
+        Object.assign(patch, stageCompletionPatch(mergedLine));
 
         return {
           linePatch: patch,
@@ -793,7 +804,10 @@ export class ProductionOrderService {
       Number(lineId),
       (freshLine) => {
         const patch = buildRowPatch(freshLine);
-        patch.status = deriveLineStatus({ ...freshLine, ...patch } as ProductionOrderLine);
+        const mergedLine = { ...freshLine, ...patch } as ProductionOrderLine;
+        patch.status = deriveLineStatus(mergedLine);
+        // Record who/when each stage finished — the traceability record for the order.
+        Object.assign(patch, stageCompletionPatch(mergedLine));
         return {
           linePatch: patch,
           event: {

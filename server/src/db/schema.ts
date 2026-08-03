@@ -12,6 +12,8 @@ export * from "./tables/production-stage-events.table";
 export * from "./tables/production-roll-issuances.table";
 export * from "./tables/purchase-record.table";
 export * from "./tables/inventory-rolls.table";
+export * from "./tables/inventory-roll-movements.table";
+export * from "./tables/operator-type.enum";
 /* ---------- Woven Labels workflow ---------- */
 export * from "./tables/product-type.enum";
 export * from "./tables/woven-work-order-details.table";
@@ -38,6 +40,7 @@ import { productionStageEvents } from "./tables/production-stage-events.table";
 import { productionRollIssuances } from "./tables/production-roll-issuances.table";
 import { purchaseRecords } from "./tables/purchase-record.table";
 import { inventoryRolls } from "./tables/inventory-rolls.table";
+import { inventoryRollMovements } from "./tables/inventory-roll-movements.table";
 import { wovenWorkOrderDetails } from "./tables/woven-work-order-details.table";
 import { wovenProductionLines } from "./tables/woven-production-lines.table";
 import { wovenThreadPlanItems } from "./tables/woven-thread-plan-items.table";
@@ -72,6 +75,8 @@ export type PurchaseRecord = typeof purchaseRecords.$inferSelect;
 export type NewPurchaseRecord = typeof purchaseRecords.$inferInsert;
 export type InventoryRoll = typeof inventoryRolls.$inferSelect;
 export type NewInventoryRoll = typeof inventoryRolls.$inferInsert;
+export type InventoryRollMovement = typeof inventoryRollMovements.$inferSelect;
+export type NewInventoryRollMovement = typeof inventoryRollMovements.$inferInsert;
 
 /* ---------- Woven Labels workflow ---------- */
 export type WovenWorkOrderDetail = typeof wovenWorkOrderDetails.$inferSelect;
