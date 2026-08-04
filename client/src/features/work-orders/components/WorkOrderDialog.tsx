@@ -45,6 +45,7 @@ function defaultsFor(wo: WorkOrder | WorkOrderDetail | null): WorkOrderSchemaInp
     companyId: wo?.companyId ?? null,
     brandId: wo?.brandId ?? null,
     comment: wo?.comment ?? "",
+    imageUrl: wo?.imageUrl ?? "",
     productType: wo?.productType ?? "printed",
     designCode: wo?.designCode ?? "",
     pick: wo?.pick ?? "",
@@ -127,6 +128,7 @@ export function WorkOrderDialog({ open, workOrder, onClose }: WorkOrderDialogPro
       poNumber: data.poNumber || undefined,
       dueDate: data.dueDate || undefined,
       comment: data.comment || undefined,
+      imageUrl: data.imageUrl || undefined,
     };
 
     // Only a woven order carries a loom spec; the server rejects it on a printed one.
@@ -399,6 +401,19 @@ export function WorkOrderDialog({ open, workOrder, onClose }: WorkOrderDialogPro
             </p>
           </>
         )}
+
+        <div className="sm:col-span-2">
+          <AppInput
+            label="Artwork / Image URL"
+            placeholder="https://…"
+            disabled={isLocked}
+            error={errors.imageUrl?.message}
+            {...register("imageUrl")}
+          />
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Optional. Previewed on the work order detail page.
+          </p>
+        </div>
 
         <div className="grid gap-1.5 sm:col-span-2">
           <Label htmlFor="wo-comment" className="text-xs font-semibold">

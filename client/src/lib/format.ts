@@ -19,6 +19,18 @@ export function formatDate(value?: string | null): string {
   return format(d, "dd MMM yyyy");
 }
 
+/**
+ * Date + time, for timestamps where the hour matters (stage completion, audit trails).
+ * Unlike `formatDate` these are true instants, so they're parsed as such and rendered in
+ * the viewer's local timezone.
+ */
+export function formatDateTime(value?: string | Date | null): string {
+  if (!value) return "-";
+  const d = typeof value === "string" ? parseISO(value) : value;
+  if (!isValid(d)) return typeof value === "string" ? value : "-";
+  return format(d, "dd MMM yyyy, HH:mm");
+}
+
 /** Today's date as `yyyy-MM-dd` in the user's LOCAL timezone (not UTC — avoids the near-midnight off-by-one). */
 export function todayISO(): string {
   return format(new Date(), "yyyy-MM-dd");

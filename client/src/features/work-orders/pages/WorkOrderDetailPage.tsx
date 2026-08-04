@@ -14,6 +14,8 @@ import { useProductionOrderOverview, useWovenOverview } from "@/features/product
 import { WORK_ORDER_STATUS_META } from "../types";
 import { formatDate, formatNumber } from "@/lib/format";
 import { WorkOrderDialog } from "../components/WorkOrderDialog";
+import { ImagePreview } from "@/components/feedback/ImagePreview";
+import { ProductionSummary } from "@/features/production-orders";
 
 /**
  * The sales order summary, split into the sections the floor actually reads: what was
@@ -160,6 +162,17 @@ export function WorkOrderDetailPage() {
           </dl>
         </AppCard>
 
+        {/* ---------------- Artwork ---------------- */}
+        <AppCard title="Artwork" description="Reference image for this order.">
+          <div className="max-w-md">
+            <ImagePreview
+              url={wo.imageUrl}
+              alt={`Artwork for ${wo.soNumber}`}
+              emptyLabel="No artwork image — add one by editing this work order"
+            />
+          </div>
+        </AppCard>
+
         {/* ---------------- Woven design specification ---------------- */}
         {wo.productType === "woven" && (
           <AppCard title="Woven Design Specification">
@@ -197,6 +210,15 @@ export function WorkOrderDetailPage() {
             )}
           </AppCard>
         )}
+
+        {/* ---------------- Production traceability ---------------- */}
+        {!isWoven && lines.length > 0 && (
+          <ProductionSummary
+            lines={lines}
+            description="Who completed each production stage for this order, and when."
+          />
+        )}
+
 
         {/* ---------------- Woven vs Printed Production View ---------------- */}
         {isWoven ? (

@@ -130,6 +130,26 @@ export class ThreadInventoryRepository {
     });
   }
 
+  /**
+   * How much of this stock was actually consumed by production or dyeing.
+   *
+   * Deliberately NOT `threadStocks.consumedKg`: that column totals every outflow, including
+   * a downward manual adjustment (a recount). A recount is not a reason to refuse deletion —
+   * only a real production draw or dye run is, because those leave records pointing here.
+   */
+  async findConsumedByProcessKg(id: number) {
+    const [row] = await db
+      .select({ total: sql<string>`coalesce(sum(${threadStockMovements.weightKg}), 0)` })
+      .from(threadStockMovements)
+      .where(
+        and(
+          eq(threadStockMovements.threadStockId, id),
+          inArray(threadStockMovements.movementType, ["production_issue", "dye_consume"])
+        )
+      );
+    return Math.abs(Number(row?.total ?? 0));
+  }
+
   async deleteStock(id: number) {
     await db.delete(threadStocks).where(eq(threadStocks.id, id));
   }

@@ -1,5 +1,6 @@
 import { api } from "@/lib/api";
 import type {
+  ThreadStockInput,
   ThreadStock,
   ThreadStockSummary,
   ThreadMovement,
@@ -16,6 +17,10 @@ export const threadService = {
   stockSummary: () => api.get<{ data: ThreadStockSummary }>("/thread/stocks/summary"),
   listMovements: (query?: Record<string, unknown>) =>
     api.get<{ data: ThreadMovement[] }>("/thread/movements", query),
+  createStock: (body: ThreadStockInput) => api.post<{ data: ThreadStock }>("/thread/stocks", body),
+  updateStock: (id: number, body: ThreadStockInput) =>
+    api.put<{ data: ThreadStock }>(`/thread/stocks/${id}`, body),
+  removeStock: (id: number) => api.delete(`/thread/stocks/${id}`),
 
   listPurchases: (query?: Record<string, unknown>) =>
     api.get<{ data: ThreadPurchase[] }>("/thread/purchases", query),

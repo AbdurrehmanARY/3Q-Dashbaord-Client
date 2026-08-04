@@ -28,6 +28,8 @@ export const workOrderSchema = z.object({
     .nullable()
     .refine((v): v is number => v != null, { message: "Please select a brand" }),
   comment: z.string().optional().or(z.literal("")),
+  // Validated as a URL only when non-empty, so clearing it is allowed.
+  imageUrl: z.string().trim().url("Enter a valid image URL").or(z.literal("")).optional(),
   productType: z.enum(["printed", "woven"]).default("printed"),
   /* ---- Woven loom spec. Only required when productType is "woven" (see superRefine). ---- */
   designCode: z.string().optional().or(z.literal("")),

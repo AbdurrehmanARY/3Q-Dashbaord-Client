@@ -118,3 +118,14 @@ export interface DyeBatchInput {
   outputWeightKg: number;
   notes?: string;
 }
+
+/** Creating or editing a thread ledger by hand. Balance changes record an adjustment. */
+export interface ThreadStockInput {
+  stockType?: ThreadStockType;
+  denier?: ThreadDenier;
+  colorName?: string;
+  colorCode?: string | null;
+  openingKg?: number;
+  balanceKg?: number;
+  note?: string;
+}

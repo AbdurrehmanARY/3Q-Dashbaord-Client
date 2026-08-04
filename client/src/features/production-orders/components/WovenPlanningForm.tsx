@@ -54,7 +54,8 @@ export function WovenPlanningForm({
   onCancel,
 }: WovenPlanningFormProps) {
   const { data: machines } = useMachines();
-  const { data: operators } = useOperators();
+  // Woven job → woven + both operators only; printed-only operators are excluded server-side.
+  const { data: operators } = useOperators({ productType: "woven" });
   const { data: stocks } = useThreadStocks();
 
   const [quantity, setQuantity] = React.useState(String(editing?.quantity ?? defaultQuantity ?? ""));

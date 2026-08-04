@@ -31,7 +31,7 @@ export const productionOrderService = {
     api.get<{ data: EligibleSalesOrder[] }>("/production-orders/eligible-sales-orders"),
 
   /** Free machines/operators. Pass the caller's own line/order so its current picks stay listed. */
-  getAvailableResources: (scope?: { lineId?: number; orderId?: number }) =>
+  getAvailableResources: (scope?: { lineId?: number; orderId?: number; productType?: "printed" | "woven" }) =>
     api.get<{ data: AvailableResources }>("/production-orders/available-resources", scope as any),
 
   create: (body: CreateProductionOrderInput) =>

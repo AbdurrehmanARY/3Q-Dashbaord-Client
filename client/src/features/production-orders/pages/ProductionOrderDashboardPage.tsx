@@ -12,6 +12,7 @@ import { ProductionOrderStatusBadge } from "../components/ProductionStatusBadge"
 import { EditableLabelTypeTable } from "../components/EditableLabelTypeTable";
 import { RollTrackingTable } from "../components/RollTrackingTable";
 import { WovenProductionPanel } from "../components/WovenProductionPanel";
+import { ProductionSummary } from "../components/ProductionSummary";
 import { StatusBadge } from "@/components/feedback/StatusBadge";
 import type { ProductionOrderOverview } from "../types";
 import { useProductionOrderOverview, useDeleteProductionOrder } from "../hooks/use-production-orders";
@@ -196,6 +197,9 @@ function PrintedProductionBody({
           >
             <RollTrackingTable lines={lines} />
           </AppCard>
+
+          {/* Traceability: who ran each stage and when it finished. */}
+          <ProductionSummary lines={lines} />
         </div>
       )}
     </>

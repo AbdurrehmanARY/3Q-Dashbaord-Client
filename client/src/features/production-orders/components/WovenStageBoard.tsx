@@ -152,7 +152,8 @@ function EditableNumber({
  * offers an action the API would reject.
  */
 export function WovenStageBoard({ orderId, line }: { orderId: string; line: WovenLineOverview }) {
-  const { data: operators } = useOperators();
+  // Woven job → woven + both operators only (filtered server-side).
+  const { data: operators } = useOperators({ productType: "woven" });
   const weaving = useUpdateWeaving(orderId);
   const cutting = useUpdateWovenCutting(orderId);
   const packaging = useUpdateWovenPackaging(orderId);

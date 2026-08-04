@@ -148,9 +148,12 @@ export class ThreadInventoryService {
     const existing = await threadInventoryRepository.findStockById(id);
     if (!existing) throw new NotFoundError("Thread stock not found");
 
-    if (Number(existing.consumedKg) > 0) {
+    // Only real process consumption blocks deletion — a manual recount does not, even
+    // though it also shows up in `consumedKg`.
+    const consumedByProcess = await threadInventoryRepository.findConsumedByProcessKg(id);
+    if (consumedByProcess > 0) {
       throw new ApiError(
-        `Cannot delete ${existing.colorName} ${existing.denier}D: ${Number(existing.consumedKg)} kg has already been consumed. Adjust the balance instead.`,
+        `Cannot delete ${existing.colorName} ${existing.denier}D: ${consumedByProcess} kg has already been issued to production or dyeing. Adjust the balance instead.`,
         400
       );
     }

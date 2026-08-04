@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { inventoryService } from "../services/inventory-service";
+import { inventoryService, type RollStockInput } from "../services/inventory-service";
 import type { StockLevel } from "../types";
 
 export const INVENTORY_KEYS = {
@@ -23,6 +23,52 @@ export function useInventoryStock(query?: Record<string, unknown>) {
  * Patches every cached stock list regardless of its active filter, and rolls them all back
  * together on failure.
  */
+/** Append-only movement history for a material (or the whole ledger). */
+export function useRollMovements(materialCode?: string) {
+  return useQuery({
+    queryKey: ["inventory", "movements", materialCode ?? "all"],
+    queryFn: () => inventoryService.listMovements(materialCode ? { materialCode } : undefined),
+    select: (res) => res.data,
+  });
+}
+
+export function useCreateRollStock() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: RollStockInput) => inventoryService.createStock(body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["inventory"] });
+      toast.success("Stock ledger created");
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+}
+
+export function useUpdateRollStock() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ materialCode, body }: { materialCode: string; body: RollStockInput }) =>
+      inventoryService.updateStock(materialCode, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["inventory"] });
+      toast.success("Stock updated — adjustment recorded in history");
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+}
+
+export function useDeleteRollStock() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (materialCode: string) => inventoryService.removeStock(materialCode),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["inventory"] });
+      toast.success("Stock ledger deleted");
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+}
+
 export function useUpdateInventoryRoll() {
   const qc = useQueryClient();
   return useMutation({

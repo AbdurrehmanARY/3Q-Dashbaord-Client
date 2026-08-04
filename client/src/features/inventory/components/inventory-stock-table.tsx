@@ -5,6 +5,9 @@ import { ComboboxSelect as Combobox, type ComboboxOption } from "@/components/ui
 import { useInventoryStock, useUpdateInventoryRoll } from "../hooks/use-inventory";
 import { useMaterials, MATERIAL_TYPES } from "@/features/materials";
 import { inventoryColumns } from "./inventory-columns";
+import { RollStockDialog } from "./RollStockDialog";
+import { AppButton } from "@/components/forms/AppButton";
+import { PlusIcon } from "lucide-react";
 import type { StockLevel } from "../types";
 
 const TYPE_OPTIONS: ComboboxOption<string>[] = MATERIAL_TYPES.map((t) => ({ value: t, label: t }));
@@ -16,6 +19,7 @@ const TYPE_OPTIONS: ComboboxOption<string>[] = MATERIAL_TYPES.map((t) => ({ valu
  */
 export function InventoryStockTable() {
   const [type, setType] = React.useState<string | null>(null);
+  const [createOpen, setCreateOpen] = React.useState(false);
 
   const query = type ? { type } : undefined;
   const stock = useInventoryStock(query);
@@ -82,6 +86,13 @@ export function InventoryStockTable() {
         }
         toolbar={(table) => (
           <DataTableToolbar table={table} searchPlaceholder="Search by code or name…">
+            <AppButton
+              size="sm"
+              leftIcon={<PlusIcon className="h-4 w-4" />}
+              onClick={() => setCreateOpen(true)}
+            >
+              New Ledger
+            </AppButton>
             <div className="sm:w-56">
               <Combobox
                 options={TYPE_OPTIONS}
@@ -95,6 +106,8 @@ export function InventoryStockTable() {
           </DataTableToolbar>
         )}
       />
+
+      {createOpen && <RollStockDialog open stock={null} onClose={() => setCreateOpen(false)} />}
     </div>
   );
 }

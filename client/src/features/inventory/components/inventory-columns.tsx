@@ -2,6 +2,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { StatusBadge } from "@/components/feedback/StatusBadge";
 import { DataTableColumnHeader, EditableCellNumber } from "@/shared/components/data-table";
 import { formatNumber } from "@/lib/format";
+import { RollStockRowActions } from "./roll-stock-row-actions";
 import type { StockLevel } from "../types";
 
 /**
@@ -74,5 +75,13 @@ export const inventoryColumns: ColumnDef<StockLevel>[] = [
       );
     },
     filterFn: (row, id, value) => !value || row.getValue(id) === value,
+  },
+  {
+    id: "actions",
+    header: "",
+    enableSorting: false,
+    enableHiding: false,
+    size: 56,
+    cell: ({ row }) => <RollStockRowActions stock={row.original} />,
   },
 ];

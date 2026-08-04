@@ -24,6 +24,11 @@ export const operatorSchema = z.object({
   name: z.string().min(1, "Name is required"),
   employeeCode: z.string().optional().or(z.literal("")),
   designation: z.string().min(1, "Designation is required"),
+  /** Which product line they can work. Defaults to `both` — the widest, safest default. */
+  operatorType: z.enum(["printed", "woven", "both"]).default("both"),
+  // Validated as a URL only when non-empty, so leaving it blank clears the avatar rather
+  // than failing validation.
+  avatarUrl: z.string().trim().url("Enter a valid image URL").or(z.literal("")).optional(),
   shift: z.string().optional().or(z.literal("")),
   status: z.string().default("Active"),
 });

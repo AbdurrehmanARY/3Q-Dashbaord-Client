@@ -9,13 +9,24 @@ import { useOperators } from "../hooks/use-entities";
 import { operatorColumns } from "./operator-columns";
 import { OperatorDialog } from "./OperatorDialog";
 import { DESIGNATIONS } from "../schemas/entity-schemas";
+import { OPERATOR_TYPES, OPERATOR_TYPE_META, type OperatorType } from "../types";
 
 const DESIGNATION_OPTIONS: ComboboxOption<string>[] = DESIGNATIONS.map((d) => ({ value: d, label: d }));
+const OPERATOR_TYPE_OPTIONS: ComboboxOption<OperatorType>[] = OPERATOR_TYPES.map((t) => ({
+  value: t,
+  label: OPERATOR_TYPE_META[t].label,
+  hint: OPERATOR_TYPE_META[t].description,
+}));
 
 export function OperatorTable() {
   const [designation, setDesignation] = React.useState<string | null>(null);
+  const [operatorType, setOperatorType] = React.useState<OperatorType | null>(null);
   const [createOpen, setCreateOpen] = React.useState(false);
-  const { data, isLoading } = useOperators(designation ? { designation } : undefined);
+  // Both filters are server-side, so the list stays correct however large it grows.
+  const { data, isLoading } = useOperators({
+    ...(designation ? { designation } : {}),
+    ...(operatorType ? { operatorType } : {}),
+  });
 
   return (
     <AppCard
@@ -34,7 +45,7 @@ export function OperatorTable() {
         getRowId={(row) => row.id}
         pagination={false}
         empty={
-          (data ?? []).length === 0 && !designation ? (
+          (data ?? []).length === 0 && !designation && !operatorType ? (
             <DataTableEmpty icon={<UsersIcon />} title="No operators yet" description="Add the first floor operator.">
               <EmptyContent>
                 <AppButton size="sm" onClick={() => setCreateOpen(true)}>
@@ -46,8 +57,15 @@ export function OperatorTable() {
           ) : (
             <DataTableEmpty icon={<UsersIcon />} title="No matching operators" description="Nothing matches the current filter.">
               <EmptyContent>
-                <AppButton variant="outline" size="sm" onClick={() => setDesignation(null)}>
-                  Clear Filter
+                <AppButton
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setDesignation(null);
+                    setOperatorType(null);
+                  }}
+                >
+                  Clear Filters
                 </AppButton>
               </EmptyContent>
             </DataTableEmpty>
@@ -63,6 +81,16 @@ export function OperatorTable() {
                 placeholder="All designations"
                 emptyText="No designations."
                 aria-label="Filter by designation"
+              />
+            </div>
+            <div className="sm:w-40">
+              <Combobox
+                options={OPERATOR_TYPE_OPTIONS}
+                value={operatorType}
+                onChange={setOperatorType}
+                placeholder="All types"
+                emptyText="No types."
+                aria-label="Filter by operator type"
               />
             </div>
           </DataTableToolbar>

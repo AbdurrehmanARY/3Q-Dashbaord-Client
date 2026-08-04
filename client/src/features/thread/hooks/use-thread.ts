@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { threadService } from "../services/thread-service";
-import type { ThreadPurchaseInput, DyeBatchInput } from "../types";
+import type { ThreadPurchaseInput, DyeBatchInput, ThreadStockInput } from "../types";
 
 export const THREAD_KEYS = {
   all: ["thread"] as const,
@@ -64,6 +64,43 @@ export function useDeleteThreadPurchase() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: THREAD_KEYS.all });
       toast.success("Thread receipt deleted — stock reversed");
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+}
+
+export function useCreateThreadStock() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: ThreadStockInput) => threadService.createStock(body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: THREAD_KEYS.all });
+      toast.success("Thread ledger created");
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+}
+
+export function useUpdateThreadStock() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: number; body: ThreadStockInput }) =>
+      threadService.updateStock(id, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: THREAD_KEYS.all });
+      toast.success("Thread stock updated — adjustment recorded");
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+}
+
+export function useDeleteThreadStock() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => threadService.removeStock(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: THREAD_KEYS.all });
+      toast.success("Thread ledger deleted");
     },
     onError: (err: any) => toast.error(err.message),
   });

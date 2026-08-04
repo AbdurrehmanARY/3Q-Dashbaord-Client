@@ -25,11 +25,31 @@ export interface Machine {
   heldBy: string | null;
 }
 
+/**
+ * Which product line an operator is trained for — distinct from `designation`, which is
+ * the stage they work. Production pickers offer the line's own type plus `both`.
+ */
+export type OperatorType = "printed" | "woven" | "both";
+
+export const OPERATOR_TYPES: OperatorType[] = ["printed", "woven", "both"];
+
+export const OPERATOR_TYPE_META: Record<
+  OperatorType,
+  { label: string; description: string; variant: "pending" | "active" | "info" }
+> = {
+  printed: { label: "Printed", description: "Printed labels only", variant: "pending" },
+  woven: { label: "Woven", description: "Woven labels only", variant: "active" },
+  both: { label: "Both", description: "Works either product line", variant: "info" },
+};
+
 export interface Operator {
   id: string;
   name: string;
   employeeCode: string | null;
   designation: string;
+  operatorType: OperatorType;
+  /** Plain image URL; the UI falls back to initials when absent or broken. */
+  avatarUrl: string | null;
   shift: string | null;
   status: string;
   isActive: boolean;

@@ -126,8 +126,12 @@ export interface LinePrinting {
   machineName: string | null;
   operatorId: number | null;
   operatorName: string | null;
+  /** Avatar of the operator who ran this stage. */
+  operatorAvatarUrl: string | null;
   printedRolls: number;
   progressPct: number;
+  /** Stamped when printing first reached the planned roll count; null while in progress. */
+  completedAt: string | null;
 }
 
 export interface LineCutting {
@@ -135,18 +139,22 @@ export interface LineCutting {
   machineName: string | null;
   operatorId: number | null;
   operatorName: string | null;
+  operatorAvatarUrl: string | null;
   sentToCuttingRolls: number;
   cutRolls: number;
   progressPct: number;
+  completedAt: string | null;
 }
 
 export interface LinePackaging {
   operatorId: number | null;
   operatorName: string | null;
+  operatorAvatarUrl: string | null;
   sentToPackagingRolls: number;
   packagedRolls: number;
   packagedQty: number;
   progressPct: number;
+  completedAt: string | null;
 }
 
 export interface LineLiveProgress {

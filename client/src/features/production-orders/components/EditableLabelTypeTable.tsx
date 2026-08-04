@@ -33,8 +33,10 @@ export function EditableLabelTypeTable({ orderId, lines, loading }: EditableLabe
   // Only resources free of other active jobs are offered, scoped to the row being edited
   // so its own current machine/operator stays selectable. Each stage then shows just its
   // own kind — machines by type, operators by designation.
+  // `productType: "printed"` keeps woven-only operators out of this picker — the server
+  // returns printed + both, which is exactly who can work a printed job.
   const { data: resources } = useAvailableResources(
-    editingLine ? { lineId: editingLine.id } : undefined
+    editingLine ? { lineId: editingLine.id, productType: "printed" } : undefined
   );
   const machinesOfType = (type: string) =>
     (resources?.machines ?? [])

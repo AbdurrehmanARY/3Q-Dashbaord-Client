@@ -31,7 +31,12 @@ export const PRODUCTION_ORDER_KEYS = {
  * Machines and operators free to be assigned. Scoped to the caller's own line or order so
  * whatever it already holds stays selectable rather than vanishing from its own dropdown.
  */
-export function useAvailableResources(scope?: { lineId?: number; orderId?: number }) {
+export function useAvailableResources(scope?: {
+  lineId?: number;
+  orderId?: number;
+  /** Narrows operators to those trained for this line (the type itself plus `both`). */
+  productType?: "printed" | "woven";
+}) {
   return useQuery({
     queryKey: PRODUCTION_ORDER_KEYS.availableResources(scope ?? {}),
     queryFn: () => productionOrderService.getAvailableResources(scope),

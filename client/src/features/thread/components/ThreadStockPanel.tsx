@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Palette, Boxes, Droplet } from "lucide-react";
+import { Palette, Boxes, Droplet, Plus, Pencil, Trash2 } from "lucide-react";
 import { AppCard } from "@/components/cards/AppCard";
 import { StatCard } from "@/components/cards/StatCard";
 import { AppButton } from "@/components/forms/AppButton";
@@ -11,12 +11,26 @@ import { cn } from "@/lib/utils";
 import { formatNumber } from "@/lib/format";
 import { useThreadStockSummary } from "../hooks/use-thread";
 import { DyeThreadDialog } from "./DyeThreadDialog";
+import { ThreadStockDialog } from "./ThreadStockDialog";
+import { useDeleteThreadStock } from "../hooks/use-thread";
 import type { ThreadStock } from "../types";
 
 /** Thread stock is low when under this many kg — mirrors the roll table's low-stock cue. */
 const LOW_STOCK_KG = 10;
 
-function StockTable({ rows, showCode }: { rows: ThreadStock[]; showCode: boolean }) {
+function StockTable({
+  rows,
+  showCode,
+  onEdit,
+  onDelete,
+  deleting,
+}: {
+  rows: ThreadStock[];
+  showCode: boolean;
+  onEdit: (row: ThreadStock) => void;
+  onDelete: (row: ThreadStock) => void;
+  deleting: boolean;
+}) {
   if (rows.length === 0) {
     return (
       <p className="px-4 py-8 text-center text-sm text-muted-foreground">
@@ -53,13 +67,16 @@ function StockTable({ rows, showCode }: { rows: ThreadStock[]; showCode: boolean
           <TableHead className="h-10 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Consumed
           </TableHead>
+          <TableHead className="h-10 whitespace-nowrap text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Status
+          </TableHead>
           <TableHead
             className={cn(
-              "h-10 whitespace-nowrap text-xs font-semibold uppercase tracking-wider text-muted-foreground",
+              "h-10 whitespace-nowrap text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground",
               stickyCellClass("last", { header: true, tint: "muted" })
             )}
           >
-            Status
+            Actions
           </TableHead>
         </TableRow>
       </TableHeader>
@@ -82,7 +99,7 @@ function StockTable({ rows, showCode }: { rows: ThreadStock[]; showCode: boolean
             <TableCell className="text-right tabular-nums text-muted-foreground">
               {formatNumber(row.consumedKg, 3)}
             </TableCell>
-            <TableCell className={stickyCellClass("last")}>
+            <TableCell>
               <StatusBadge
                 variant={
                   row.balanceKg <= 0
@@ -94,6 +111,31 @@ function StockTable({ rows, showCode }: { rows: ThreadStock[]; showCode: boolean
               >
                 {row.balanceKg <= 0 ? "Out of stock" : row.balanceKg < LOW_STOCK_KG ? "Low" : "In stock"}
               </StatusBadge>
+            </TableCell>
+            <TableCell className={cn("text-right", stickyCellClass("last"))}>
+              <div className="flex justify-end gap-1">
+                <AppButton
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 px-2"
+                  aria-label={`Edit ${row.colorName}`}
+                  onClick={() => onEdit(row)}
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </AppButton>
+                <AppButton
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 px-2 text-destructive"
+                  aria-label={`Delete ${row.colorName}`}
+                  // The server refuses once any of it has been consumed — don't offer a dead action.
+                  disabled={row.consumedKg > 0}
+                  loading={deleting}
+                  onClick={() => onDelete(row)}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </AppButton>
+              </div>
             </TableCell>
           </TableRow>
         ))}
@@ -109,7 +151,16 @@ function StockTable({ rows, showCode }: { rows: ThreadStock[]; showCode: boolean
  */
 export function ThreadStockPanel() {
   const { data, isLoading } = useThreadStockSummary();
+  const deleteStock = useDeleteThreadStock();
   const [dyeOpen, setDyeOpen] = React.useState(false);
+  const [createOpen, setCreateOpen] = React.useState(false);
+  const [editing, setEditing] = React.useState<ThreadStock | null>(null);
+
+  const tableProps = {
+    onEdit: (row: ThreadStock) => setEditing(row),
+    onDelete: (row: ThreadStock) => deleteStock.mutate(row.id),
+    deleting: deleteStock.isPending,
+  };
 
   if (isLoading) {
     return (
@@ -156,12 +207,22 @@ export function ThreadStockPanel() {
         description="Thread as purchased. Dyeing draws from here."
         contentClassName="p-0"
         headerActions={
-          <AppButton size="sm" leftIcon={<Palette className="h-4 w-4" />} onClick={() => setDyeOpen(true)}>
-            Dye Thread
-          </AppButton>
+          <div className="flex gap-2">
+            <AppButton
+              size="sm"
+              variant="outline"
+              leftIcon={<Plus className="h-4 w-4" />}
+              onClick={() => setCreateOpen(true)}
+            >
+              New Ledger
+            </AppButton>
+            <AppButton size="sm" leftIcon={<Palette className="h-4 w-4" />} onClick={() => setDyeOpen(true)}>
+              Dye Thread
+            </AppButton>
+          </div>
         }
       >
-        <StockTable rows={data?.primary ?? []} showCode={false} />
+        <StockTable rows={data?.primary ?? []} showCode={false} {...tableProps} />
       </AppCard>
 
       <AppCard
@@ -169,10 +230,12 @@ export function ThreadStockPanel() {
         description="Produced by dyeing. Woven planning consumes this first, falling back to primary."
         contentClassName="p-0"
       >
-        <StockTable rows={data?.secondary ?? []} showCode />
+        <StockTable rows={data?.secondary ?? []} showCode {...tableProps} />
       </AppCard>
 
       {dyeOpen && <DyeThreadDialog open onClose={() => setDyeOpen(false)} />}
+      {createOpen && <ThreadStockDialog open stock={null} onClose={() => setCreateOpen(false)} />}
+      {editing && <ThreadStockDialog open stock={editing} onClose={() => setEditing(null)} />}
     </div>
   );
 }

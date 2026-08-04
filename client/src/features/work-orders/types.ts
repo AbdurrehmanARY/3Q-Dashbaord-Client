@@ -47,6 +47,8 @@ export interface WorkOrder {
   companyId: number | null;
   companyName: string | null;
   comment: string | null;
+  /** Artwork / reference image URL, previewed on the detail page. */
+  imageUrl: string | null;
   status: WorkOrderStatus;
   productType: ProductType;
   /** Dispatch paperwork — recorded once production has completed the order. */
@@ -95,6 +97,7 @@ export interface WorkOrderInput {
   totalQty: number;
   brandId?: number;
   comment?: string;
+  imageUrl?: string;
   productType?: ProductType;
   /** Required when `productType` is "woven". */
   wovenDetail?: WovenDetailInput;

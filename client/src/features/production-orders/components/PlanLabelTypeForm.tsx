@@ -63,7 +63,10 @@ export function PlanLabelTypeForm({
   // Editing scopes to the line so its own reservation stays selectable. Adding scopes to
   // nothing: sibling label types on this order hold their resources too, so they must be
   // excluded from the picker exactly like any other order's would be.
-  const { data: resources } = useAvailableResources(editing ? { lineId: editing.id } : undefined);
+  // Printed job → printed + both operators only.
+  const { data: resources } = useAvailableResources(
+    editing ? { lineId: editing.id, productType: "printed" } : { productType: "printed" }
+  );
 
   useEffect(() => {
     reset(
