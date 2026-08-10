@@ -172,12 +172,20 @@ export function WorkOrderDetailPage() {
         {/* ---------------- Woven design specification ---------------- */}
         {wo.productType === "woven" && (
           <AppCard title="Woven Design Specification">
-            <dl className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3 lg:grid-cols-6">
+            <dl className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3 lg:grid-cols-7">
               <Field label="Design Code" value={wo.designCode ?? "—"} mono />
               <Field label="Pick" value={formatNumber(wo.pick, 0)} />
               <Field label="Repeat" value={formatNumber(wo.repeat, 2)} />
               <Field label="Density" value={formatNumber(wo.density, 0)} />
               <Field label="Speed (RPM)" value={wo.speed != null && Number(wo.speed) > 0 ? `${formatNumber(wo.speed, 0)} RPM` : "—"} />
+              <Field
+                label="Est. Weaving Time"
+                value={
+                  wo.repeat && wo.speed && wo.pick && Number(wo.repeat) > 0 && Number(wo.speed) > 0 && Number(wo.pick) > 0
+                    ? `${formatNumber(((wo.totalQty / Number(wo.repeat)) * Number(wo.pick)) / (Number(wo.speed) * 60), 2)} hrs`
+                    : "—"
+                }
+              />
               <Field label="Extra" value={formatNumber(wo.extra, 2)} />
               <div>
                 <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">Size Labels</dt>

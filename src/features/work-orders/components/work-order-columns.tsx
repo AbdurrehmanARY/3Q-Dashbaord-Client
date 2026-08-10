@@ -107,6 +107,30 @@ export const workOrderColumns: ColumnDef<WorkOrder>[] = [
     meta: { align: "right" },
   },
   {
+    id: "estimatedWeavingTime",
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Est. Weaving Time" />,
+    accessorFn: (wo) => {
+      const isWoven = wo.productType === "woven";
+      const repeatVal = wo.repeat ? Number(wo.repeat) : 0;
+      const pickVal = wo.pick ? Number(wo.pick) : 0;
+      const speedVal = wo.speed ? Number(wo.speed) : 0;
+      if (!isWoven || !(repeatVal > 0 && speedVal > 0 && pickVal > 0)) return 0;
+      return Math.round(((wo.totalQty / repeatVal) * pickVal / (speedVal * 60)) * 100) / 100;
+    },
+    cell: ({ row }) => {
+      const wo = row.original;
+      const isWoven = wo.productType === "woven";
+      const repeatVal = wo.repeat ? Number(wo.repeat) : 0;
+      const pickVal = wo.pick ? Number(wo.pick) : 0;
+      const speedVal = wo.speed ? Number(wo.speed) : 0;
+      if (!isWoven) return <span className="text-muted-foreground">—</span>;
+      if (!(repeatVal > 0 && speedVal > 0 && pickVal > 0)) return <span className="text-muted-foreground">—</span>;
+      const estHours = Math.round(((wo.totalQty / repeatVal) * pickVal / (speedVal * 60)) * 100) / 100;
+      return <span className="font-semibold tabular-nums text-foreground">{formatNumber(estHours, 2)} hrs</span>;
+    },
+    meta: { align: "right" },
+  },
+  {
     accessorKey: "status",
     enableSorting: false,
     header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
