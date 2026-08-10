@@ -27,6 +27,7 @@ export function WovenSpecification({
           label="Design Code *"
           placeholder="e.g. Guess 13R"
           disabled={isLocked}
+          maxLength={50}
           error={errors.designCode?.message}
           {...register("designCode")}
         />

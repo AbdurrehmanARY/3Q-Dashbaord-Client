@@ -208,7 +208,7 @@ export function WorkOrderDialog({ open, workOrder, childOrderType, onClose }: Wo
       onOpenChange={(o) => { if (!o) handleClose(); }}
       title={dialogTitle}
       description={dialogDescription}
-      className="sm:max-w-2xl"
+      className="sm:max-w-2xl max-h-[90vh] flex flex-col"
       footer={
         <>
           <AppButton variant="outline" onClick={handleClose}>
@@ -221,7 +221,7 @@ export function WorkOrderDialog({ open, workOrder, childOrderType, onClose }: Wo
       }
     >
       <FormProvider {...methods}>
-        <form className="grid gap-4 sm:grid-cols-2" onSubmit={methods.handleSubmit(onSubmit)}>
+        <form className="grid gap-4 sm:grid-cols-2 max-h-[65vh] overflow-y-auto pr-1" onSubmit={methods.handleSubmit(onSubmit)}>
           <SubmitOnEnter disabled={isSaving} />
 
           <WorkOrderBasicInfo isEdit={isEdit} isLocked={isLocked} />

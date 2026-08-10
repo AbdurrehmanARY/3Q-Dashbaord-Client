@@ -14,6 +14,7 @@ export function ArtworkAndComment({ isLocked }: { isLocked: boolean }) {
       <Textarea
         id="wo-comment"
         disabled={isLocked}
+        maxLength={500}
         placeholder="Optional comments about this order..."
         rows={3}
         {...register("comment")}
