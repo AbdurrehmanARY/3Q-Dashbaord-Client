@@ -177,13 +177,20 @@ export function WorkOrderDetailPage() {
               <Field label="Pick" value={formatNumber(wo.pick, 0)} />
               <Field label="Repeat" value={formatNumber(wo.repeat, 2)} />
               <Field label="Density" value={formatNumber(wo.density, 0)} />
-              <Field label="Speed (RPM)" value={wo.speed != null && Number(wo.speed) > 0 ? `${formatNumber(wo.speed, 0)} RPM` : "—"} />
+              <Field label="Speed (RPM)" value={`${formatNumber(wo.speed && Number(wo.speed) > 0 ? Number(wo.speed) : 600, 0)} RPM`} />
               <Field
                 label="Est. Weaving Time"
                 value={
-                  wo.repeat && wo.speed && wo.pick && Number(wo.repeat) > 0 && Number(wo.speed) > 0 && Number(wo.pick) > 0
-                    ? `${formatNumber(((wo.totalQty / Number(wo.repeat)) * Number(wo.pick)) / (Number(wo.speed) * 60), 2)} hrs`
-                    : "—"
+                  (() => {
+                    const speed = wo.speed && Number(wo.speed) > 0 ? Number(wo.speed) : 600;
+                    const repeat = wo.repeat ? Number(wo.repeat) : 0;
+                    const pick = wo.pick ? Number(wo.pick) : 0;
+                    if (repeat > 0 && pick > 0 && speed > 0) {
+                      const estHours = ((wo.totalQty / repeat) * pick) / (speed * 60);
+                      return `${formatNumber(estHours, 2)} hrs`;
+                    }
+                    return "—";
+                  })()
                 }
               />
               <Field label="Extra" value={formatNumber(wo.extra, 2)} />
