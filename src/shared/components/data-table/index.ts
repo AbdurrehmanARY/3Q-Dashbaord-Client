@@ -4,6 +4,8 @@ export { DataTablePagination } from "./data-table-pagination";
 export { DataTableToolbar } from "./data-table-toolbar";
 export { DataTableEmpty } from "./data-table-empty";
 export { DataTableSkeleton } from "./data-table-skeleton";
+export { DataTableViewOptions } from "./data-table-view-options";
+export { exportRowsToExcel, PrintTable, type DataTableExportColumn } from "./data-table-export";
 export { EditableCell, EditableCellInput, useEditableCell } from "./editable-cell";
 export { EditableCellNumber } from "./editable-cell-number";
 export { stickyCellClass } from "./sticky-columns";

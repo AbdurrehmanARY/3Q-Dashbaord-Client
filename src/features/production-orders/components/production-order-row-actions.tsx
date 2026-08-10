@@ -30,7 +30,16 @@ export function ProductionOrderRowActions({ order }: { order: ProductionOrder })
   const [confirmOpen, setConfirmOpen] = React.useState(false);
 
   return (
-    <div className="flex justify-end" onClick={(e) => e.stopPropagation()}>
+    <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+      <AppButton
+        variant="ghost"
+        size="icon-sm"
+        title={`View ${order.productionNumber}`}
+        onClick={() => navigate(`/production-orders/${order.id}`)}
+      >
+        <EyeIcon className="size-4 text-muted-foreground hover:text-foreground" />
+      </AppButton>
+
       <DropdownMenu>
         <DropdownMenuTrigger
           className={cn(buttonVariants({ variant: "ghost", size: "icon-sm" }))}
@@ -42,7 +51,7 @@ export function ProductionOrderRowActions({ order }: { order: ProductionOrder })
         <DropdownMenuContent align="end">
           <DropdownMenuItem onClick={() => navigate(`/production-orders/${order.id}`)}>
             <EyeIcon className="text-muted-foreground" />
-            View
+            View Order
           </DropdownMenuItem>
 
           <DropdownMenuSeparator />

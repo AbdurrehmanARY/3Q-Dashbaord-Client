@@ -35,7 +35,7 @@ export function MachineTable() {
         data={data ?? []}
         loading={isLoading}
         getRowId={(row) => row.id}
-        pagination={false}
+        pagination={true}
         empty={
           (data ?? []).length === 0 && !type ? (
             <DataTableEmpty icon={<CogIcon />} title="No machines yet" description="Add the first production machine.">

@@ -14,6 +14,8 @@ export const purchaseSchema = z.object({
   rollsPerCarton: z.coerce.number().positive("Must be positive"),
   rollLength: z.coerce.number().positive("Must be positive"),
   netWeight: z.coerce.number().positive("Must be positive"),
+  /** Enterable weight per roll (kg). Total Weight = Total Rolls × Weight Per Roll. */
+  weightPerRoll: z.coerce.number().positive("Must be positive"),
   efs: z.string().optional(),
 });
 

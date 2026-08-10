@@ -43,7 +43,7 @@ export function OperatorTable() {
         data={data ?? []}
         loading={isLoading}
         getRowId={(row) => row.id}
-        pagination={false}
+        pagination={true}
         empty={
           (data ?? []).length === 0 && !designation && !operatorType ? (
             <DataTableEmpty icon={<UsersIcon />} title="No operators yet" description="Add the first floor operator.">

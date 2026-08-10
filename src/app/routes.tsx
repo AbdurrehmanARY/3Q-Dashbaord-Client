@@ -32,14 +32,21 @@ export const routes: AppRoute[] = [
 
   { path: "/companies", component: page(() => import("@/features/companies/pages/CompanyBrandPage"), "CompanyBrandPage") },
   { path: "/materials", component: page(() => import("@/features/materials/pages/MaterialMasterPage"), "MaterialMasterPage") },
+  { path: "/materials/stickers", component: page(() => import("@/features/materials/pages/StickerMaterialsPage"), "StickerMaterialsPage") },
+  { path: "/materials/local-sheets", component: page(() => import("@/features/materials/pages/LocalSheetsPage"), "LocalSheetsPage") },
+  { path: "/materials/label-sheets", component: page(() => import("@/features/materials/pages/LabelSheetsPage"), "LabelSheetsPage") },
 
   { path: "/purchases/rolls", component: page(() => import("@/features/purchases/pages/RollPurchasesPage"), "RollPurchasesPage") },
   { path: "/purchases/threads", component: page(() => import("@/features/purchases/pages/ThreadPurchasesPage"), "ThreadPurchasesPage") },
+  { path: "/purchases/ink", component: page(() => import("@/features/ink/pages/InkPurchasesPage"), "InkPurchasesPage") },
   { path: "/purchases", component: page(() => import("@/features/purchases/pages/PurchaseRecordPage"), "PurchaseRecordPage") },
+
+  { path: "/thread-dyeing", component: page(() => import("@/features/thread-dyeing/pages/ThreadDyeingPage"), "ThreadDyeingPage") },
 
   { path: "/inventory/rolls", component: page(() => import("@/features/inventory/pages/RollStockPage"), "RollStockPage") },
   { path: "/inventory/threads/undyed", component: page(() => import("@/features/inventory/pages/UndyedThreadStockPage"), "UndyedThreadStockPage") },
   { path: "/inventory/threads/dyed", component: page(() => import("@/features/inventory/pages/DyedThreadStockPage"), "DyedThreadStockPage") },
+  { path: "/inventory/ink-consumption", component: page(() => import("@/features/ink/pages/InkConsumptionPage"), "InkConsumptionPage") },
   { path: "/inventory", component: page(() => import("@/features/inventory/pages/InventoryStockPage"), "InventoryStockPage") },
 
   { path: "/machines", component: page(() => import("@/features/machines-operators/pages/MachinesPage"), "MachinesPage") },

@@ -12,6 +12,7 @@ import type {
   StageProgressInput,
   TransferRollsInput,
   UpdateLineFullInput,
+  ReconcileInput,
 } from "../types";
 
 export const PRODUCTION_ORDER_KEYS = {
@@ -103,10 +104,11 @@ export function useCreateProductionOrder() {
 export function useUpdateProductionOrder() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, body }: { id: string; body: { notes?: string } }) =>
+    mutationFn: ({ id, body }: { id: string; body: { notes?: string; status?: "planned" | "production" | "complete" } }) =>
       productionOrderService.update(id, body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: PRODUCTION_ORDER_KEYS.all });
+      qc.invalidateQueries({ queryKey: ["work-orders"] });
       toast.success("Production order updated");
     },
     onError: (err: any) => toast.error(err.message),
@@ -287,6 +289,22 @@ export function useIssueRolls(orderId: string) {
       qc.invalidateQueries({ queryKey: PRODUCTION_ORDER_KEYS.lineIssuances(vars.lineId) });
       qc.invalidateQueries({ queryKey: ["inventory"] });
       toast.success("Rolls issued from inventory");
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+}
+
+export function useReconcileLine(orderId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ lineId, body }: { lineId: string; body: ReconcileInput }) =>
+      productionOrderService.reconcileLine(lineId, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: PRODUCTION_ORDER_KEYS.all });
+      qc.invalidateQueries({ queryKey: PRODUCTION_ORDER_KEYS.overview(orderId) });
+      qc.invalidateQueries({ queryKey: ["inventory"] });
+      qc.invalidateQueries({ queryKey: ["inventory-rolls"] });
+      toast.success("Stock reconciled — extra rolls & weight returned to main inventory");
     },
     onError: (err: any) => toast.error(err.message),
   });

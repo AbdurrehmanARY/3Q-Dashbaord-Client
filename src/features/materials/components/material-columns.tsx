@@ -31,12 +31,6 @@ export const materialColumns: ColumnDef<Material>[] = [
     meta: { align: "right" },
   },
   {
-    accessorKey: "minStockLevel",
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Min Stock" />,
-    cell: ({ row }) => <span className="tabular-nums">{row.original.minStockLevel}</span>,
-    meta: { align: "right" },
-  },
-  {
     id: "actions",
     header: "",
     enableSorting: false,

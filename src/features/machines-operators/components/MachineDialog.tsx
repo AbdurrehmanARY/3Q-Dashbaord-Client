@@ -52,7 +52,6 @@ export function MachineDialog({ open, machine, onClose }: MachineDialogProps) {
       machineName: machine?.machineName ?? "",
       machineType: machine?.machineType ?? "Printing",
       productType: machine?.productType ?? "both",
-      capacityPerHour: machine?.capacityPerHour ?? undefined,
       status: machine?.status ?? "Active",
     },
   });
@@ -66,8 +65,9 @@ export function MachineDialog({ open, machine, onClose }: MachineDialogProps) {
 
   const onSubmit = async (data: MachineSchemaInput) => {
     try {
-      if (machine) await updateMachine.mutateAsync({ id: machine.id, body: data });
-      else await createMachine.mutateAsync(data);
+      const payload = { ...data, name: data.name || data.machineName };
+      if (machine) await updateMachine.mutateAsync({ id: machine.id, body: payload });
+      else await createMachine.mutateAsync(payload);
       handleClose();
     } catch {
       // Hook onError already toasts; keep the dialog open for retry, no unhandled rejection.
@@ -94,7 +94,6 @@ export function MachineDialog({ open, machine, onClose }: MachineDialogProps) {
     >
       <form className="grid gap-4" onSubmit={handleSubmit(onSubmit)}>
         <SubmitOnEnter disabled={isLoading} />
-        <AppInput label="Name *" error={errors.name?.message} {...register("name")} />
         <AppInput label="Machine Code *" placeholder="e.g. PRT-01" error={errors.machineCode?.message} {...register("machineCode")} />
         <AppInput label="Machine Name *" error={errors.machineName?.message} {...register("machineName")} />
         <AppSelect label="Machine Type *" error={errors.machineType?.message} options={TYPE_OPTIONS} {...register("machineType")} />
@@ -104,7 +103,6 @@ export function MachineDialog({ open, machine, onClose }: MachineDialogProps) {
           options={PRODUCT_TYPE_OPTIONS}
           {...register("productType")}
         />
-        <AppInput label="Capacity / Hour" type="number" placeholder="Optional" error={errors.capacityPerHour?.message} {...register("capacityPerHour", { valueAsNumber: true })} />
         <AppSelect label="Status" options={STATUS_OPTIONS} {...register("status")} />
       </form>
     </AppDialog>

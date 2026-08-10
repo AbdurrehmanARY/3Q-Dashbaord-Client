@@ -1,22 +1,32 @@
 import * as React from "react";
-import { PackageIcon } from "lucide-react";
-import { DataTable, DataTableEmpty, DataTableToolbar } from "@/shared/components/data-table";
+import { PackageIcon, PlusIcon } from "lucide-react";
+import {
+  DataTable,
+  DataTableEmpty,
+  DataTableToolbar,
+  type DataTableExportColumn,
+} from "@/shared/components/data-table";
 import { ComboboxSelect as Combobox, type ComboboxOption } from "@/components/ui/combobox";
-import { useInventoryStock, useUpdateInventoryRoll } from "../hooks/use-inventory";
+import { useInventoryStock } from "../hooks/use-inventory";
 import { useMaterials, MATERIAL_TYPES } from "@/features/materials";
 import { inventoryColumns } from "./inventory-columns";
 import { RollStockDialog } from "./RollStockDialog";
 import { AppButton } from "@/components/forms/AppButton";
-import { PlusIcon } from "lucide-react";
 import type { StockLevel } from "../types";
 
 const TYPE_OPTIONS: ComboboxOption<string>[] = MATERIAL_TYPES.map((t) => ({ value: t, label: t }));
 
-/**
- * Composes the generic DataTable with the inventory columns. Roll Per KG is the one
- * editable cell in an otherwise read-only table; committing it is optimistic (the cell
- * updates instantly) with a cache rollback if the request fails.
- */
+const exportColumns: DataTableExportColumn<StockLevel>[] = [
+  { header: "Material Code", columnId: "materialCode", value: (s) => s.materialCode },
+  { header: "Details", columnId: "details", value: (s) => s.itemName ?? "" },
+  { header: "Type", value: (s) => s.materialType ?? "" },
+  { header: "Total Received", columnId: "receivedRolls", value: (s) => Number(s.receivedRolls) },
+  { header: "Total Issued", columnId: "issuedRolls", value: (s) => Number(s.issuedRolls) },
+  { header: "Remaining Rolls", columnId: "balanceRolls", value: (s) => Number(s.balanceRolls) },
+  { header: "Status", columnId: "status", value: (s) => s.status ?? "" },
+];
+
+/** Composes the generic DataTable with the roll-stock columns. */
 export function InventoryStockTable() {
   const [type, setType] = React.useState<string | null>(null);
   const [createOpen, setCreateOpen] = React.useState(false);
@@ -24,7 +34,6 @@ export function InventoryStockTable() {
   const query = type ? { type } : undefined;
   const stock = useInventoryStock(query);
   const materials = useMaterials();
-  const updateRoll = useUpdateInventoryRoll();
 
   const rows = React.useMemo<StockLevel[]>(() => {
     const materialByCode = new Map((materials.data ?? []).map((m) => [m.code, m]));
@@ -42,41 +51,18 @@ export function InventoryStockTable() {
     });
   }, [stock.data, materials.data]);
 
-  // `row.index` is the stable original-data index, so this resolves the edited row even
-  // when the table is sorted/filtered.
-  const rowsRef = React.useRef(rows);
-  rowsRef.current = rows;
-
-  const meta = React.useMemo(
-    () => ({
-      validateCell: (_rowIndex: number, columnId: string, value: unknown) => {
-        if (columnId !== "rollPerKg") return null;
-        if (Number(value) < 0) return "Cannot be negative";
-        return null;
-      },
-      // Optimistic update + rollback live in the mutation hook, so committing a cell is a
-      // single serialized mutation rather than a hand-rolled cache patch in the component.
-      updateData: (rowIndex: number, columnId: string, value: unknown) => {
-        if (columnId !== "rollPerKg") return;
-        const row = rowsRef.current[rowIndex];
-        if (!row) return;
-        updateRoll.mutate({ materialCode: row.materialCode, rollPerKg: Number(value) });
-      },
-    }),
-    [updateRoll]
-  );
-
   return (
     <div className="overflow-hidden rounded-xl border bg-card shadow-card">
       <DataTable
         columns={inventoryColumns}
         data={rows}
         loading={stock.isLoading || materials.isLoading}
-        meta={meta}
         getRowId={(row) => row.id}
-        // Wide table — keep the material code and Actions columns fixed while scrolling.
-        stickyFirstColumn
-        stickyLastColumn
+        enableColumnPinning
+        enableRowSelection
+        showColumnToggle
+        exportColumns={exportColumns}
+        exportFilename="roll-stock"
         empty={
           <DataTableEmpty
             icon={<PackageIcon />}

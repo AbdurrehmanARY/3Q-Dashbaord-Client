@@ -6,16 +6,12 @@ export const SHIFTS = ["Morning", "Evening", "Night"] as const;
 export const ENTITY_STATUSES = ["Active", "Inactive"] as const;
 
 export const machineSchema = z.object({
-  name: z.string().min(1, "Name is required"),
+  name: z.string().optional(),
   machineCode: z.string().min(1, "Machine code is required"),
   machineName: z.string().min(1, "Machine name is required"),
   machineType: z.string().min(1, "Machine type is required"),
   /** Which product line the machine is built for: printed / woven / both. Defaults to `both`. */
   productType: z.enum(["printed", "woven", "both"]).default("both"),
-  capacityPerHour: z.preprocess(
-    (v) => (typeof v === "number" && Number.isNaN(v) ? undefined : v),
-    z.coerce.number().int().min(0).optional()
-  ),
   status: z.string().default("Active"),
 });
 

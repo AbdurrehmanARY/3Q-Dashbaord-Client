@@ -52,6 +52,21 @@ export const navigation: NavItem[] = [
         icon: Boxes,
       },
       {
+        title: "Sticker Materials",
+        url: "/materials/stickers",
+        icon: Boxes,
+      },
+      {
+        title: "Local Sheets",
+        url: "/materials/local-sheets",
+        icon: Boxes,
+      },
+      {
+        title: "Label Sheets",
+        url: "/materials/label-sheets",
+        icon: Boxes,
+      },
+      {
         title: "Machines",
         url: "/machines",
         icon: Cpu,
@@ -77,6 +92,16 @@ export const navigation: NavItem[] = [
         url: "/purchases/threads",
         icon: Boxes,
       },
+      {
+        title: "Ink Purchases",
+        url: "/purchases/ink",
+        icon: Droplet,
+      },
+      {
+        title: "Thread Dyeing Workflow",
+        url: "/thread-dyeing",
+        icon: Droplet,
+      },
     ],
   },
   {
@@ -96,6 +121,11 @@ export const navigation: NavItem[] = [
       {
         title: "Dyed Thread Stock",
         url: "/inventory/threads/dyed",
+        icon: Droplet,
+      },
+      {
+        title: "Ink Consumption",
+        url: "/inventory/ink-consumption",
         icon: Droplet,
       },
     ],

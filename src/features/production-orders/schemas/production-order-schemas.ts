@@ -21,6 +21,7 @@ export const planLineSchema = z.object({
   labelType: z.string().trim().min(1, "Required"),
   quantity: z.coerce.number().positive("Must be > 0"),
   labelSize: z.coerce.number().positive("Must be > 0"),
+  rollLength: z.coerce.number().positive("Must be > 0"),
   extraRolls: z.coerce.number().min(0, "Cannot be negative"),
   materialCode: z.string().min(1, "Material is required"),
   assignedRolls: z.coerce.number().min(0, "Cannot be negative"),

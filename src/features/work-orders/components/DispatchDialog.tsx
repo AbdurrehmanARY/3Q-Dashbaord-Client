@@ -1,9 +1,10 @@
-import { useForm } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Truck } from "lucide-react";
 import { AppDialog } from "@/components/dialogs/AppDialog";
 import { AppInput } from "@/components/forms/AppInput";
 import { AppButton } from "@/components/forms/AppButton";
+import { ImageUploadField } from "@/components/forms/ImageUploadField";
 import { SubmitOnEnter } from "@/components/forms/SubmitOnEnter";
 import { todayISO, formatNumber } from "@/lib/format";
 import { dispatchSchema, type DispatchSchemaInput } from "../schemas/work-order-schemas";
@@ -29,6 +30,7 @@ export function DispatchDialog({ open, workOrder, onClose }: DispatchDialogProps
 
   const {
     register,
+    control,
     handleSubmit,
     reset,
     formState: { errors },
@@ -40,6 +42,7 @@ export function DispatchDialog({ open, workOrder, onClose }: DispatchDialogProps
       fbrInvoiceNumber: workOrder.fbrInvoiceNumber ?? "",
       dispatchedDate: workOrder.dispatchedDate ?? todayISO(),
       dispatchedQty: workOrder.dispatchedQty ?? workOrder.totalQty,
+      imageUrl: workOrder.imageUrl ?? "",
     },
   });
 
@@ -58,6 +61,7 @@ export function DispatchDialog({ open, workOrder, onClose }: DispatchDialogProps
           fbrInvoiceNumber: String(data.fbrInvoiceNumber),
           dispatchedDate: String(data.dispatchedDate),
           dispatchedQty: Number(data.dispatchedQty),
+          imageUrl: data.imageUrl || undefined,
         },
       });
       handleClose();
@@ -74,6 +78,7 @@ export function DispatchDialog({ open, workOrder, onClose }: DispatchDialogProps
       }}
       title="Dispatch Order"
       description={`${workOrder.soNumber} · ${formatNumber(workOrder.totalQty, 0)} ordered`}
+      className="sm:max-w-xl"
       footer={
         <>
           <AppButton variant="outline" onClick={handleClose}>
@@ -112,6 +117,22 @@ export function DispatchDialog({ open, workOrder, onClose }: DispatchDialogProps
           error={errors.dispatchedQty?.message}
           {...register("dispatchedQty")}
         />
+        <div className="sm:col-span-2">
+          <Controller
+            control={control}
+            name="imageUrl"
+            render={({ field }) => (
+              <ImageUploadField
+                label="Artwork"
+                value={field.value}
+                onChange={field.onChange}
+                error={errors.imageUrl?.message}
+                alt="Order artwork"
+                hint="Optional. Upload final label artwork for dispatch."
+              />
+            )}
+          />
+        </div>
         <p className="text-[11px] text-muted-foreground sm:col-span-2">
           The DC, LC and FBR invoice numbers are all required — recording them moves this order to{" "}
           <strong>Dispatched</strong>. Dispatch quantity cannot exceed the ordered quantity of{" "}

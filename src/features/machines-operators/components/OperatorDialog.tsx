@@ -27,7 +27,6 @@ interface OperatorDialogProps {
 
 const STATUS_OPTIONS = ENTITY_STATUSES.map((s) => ({ label: s, value: s }));
 const DESIGNATION_OPTIONS = DESIGNATIONS.map((d) => ({ label: `${d} Operator`, value: d }));
-const SHIFT_OPTIONS = [{ label: "—", value: "" }, ...SHIFTS.map((s) => ({ label: s, value: s }))];
 const OPERATOR_TYPE_OPTIONS = OPERATOR_TYPES.map((t) => ({
   label: `${OPERATOR_TYPE_META[t].label} — ${OPERATOR_TYPE_META[t].description}`,
   value: t,
@@ -59,7 +58,6 @@ export function OperatorDialog({ open, operator, onClose }: OperatorDialogProps)
       designation: operator?.designation ?? "Printing",
       operatorType: operator?.operatorType ?? "both",
       avatarUrl: operator?.avatarUrl ?? "",
-      shift: operator?.shift ?? "",
       status: operator?.status ?? "Active",
     },
   });
@@ -213,7 +211,6 @@ export function OperatorDialog({ open, operator, onClose }: OperatorDialogProps)
           options={OPERATOR_TYPE_OPTIONS}
           {...register("operatorType")}
         />
-        <AppSelect label="Shift" options={SHIFT_OPTIONS} {...register("shift")} />
         <AppSelect label="Status" options={STATUS_OPTIONS} {...register("status")} />
       </form>
     </AppDialog>

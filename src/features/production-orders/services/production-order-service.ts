@@ -16,6 +16,7 @@ import type {
   StageProgressInput,
   TransferRollsInput,
   UpdateLineFullInput,
+  ReconcileInput,
 } from "../types";
 
 export const productionOrderService = {
@@ -37,7 +38,7 @@ export const productionOrderService = {
   create: (body: CreateProductionOrderInput) =>
     api.post<{ data: ProductionOrder }>("/production-orders", body),
 
-  update: (id: string, body: { notes?: string }) =>
+  update: (id: string, body: { notes?: string; status?: "planned" | "production" | "complete" }) =>
     api.patch<{ data: ProductionOrder }>(`/production-orders/${id}`, body),
 
   remove: (id: string) => api.delete(`/production-orders/${id}`),
@@ -75,4 +76,7 @@ export const productionOrderService = {
 
   listLineEvents: (lineId: string) =>
     api.get<{ data: ProductionStageEvent[] }>(`/production-orders/lines/${lineId}/events`),
+
+  reconcileLine: (lineId: string, body: ReconcileInput) =>
+    api.put<{ data: ProductionOrderLine }>(`/production-orders/lines/${lineId}/reconcile`, body),
 };

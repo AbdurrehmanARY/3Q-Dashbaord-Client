@@ -41,7 +41,7 @@ export function BrandTable({ company }: BrandTableProps) {
           data={data ?? []}
           loading={isLoading}
           getRowId={(row) => row.id}
-          pagination={false}
+          pagination={true}
           empty={
             <DataTableEmpty icon={<TagIcon />} title="No brands yet" description={`Create the first brand for ${company.name}.`}>
               <EmptyContent>

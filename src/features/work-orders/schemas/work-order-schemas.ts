@@ -28,8 +28,18 @@ export const workOrderSchema = z.object({
     .nullable()
     .refine((v): v is number => v != null, { message: "Please select a brand" }),
   comment: z.string().optional().or(z.literal("")),
-  // Validated as a URL only when non-empty, so clearing it is allowed.
-  imageUrl: z.string().trim().url("Enter a valid image URL").or(z.literal("")).optional(),
+  priority: z.enum(["normal", "urgent", "emergency"]).default("normal"),
+  orderType: z.enum(["normal order", "shortfall", "additional order", "recut order"]).default("normal order"),
+  // Accepts an uploaded image (base64 data URI) or an external URL; empty clears it.
+  imageUrl: z
+    .string()
+    .trim()
+    .max(4_000_000, "Image is too large — keep it under about 3 MB")
+    .refine(
+      (v) => v === "" || v.startsWith("data:image/") || /^https?:\/\/.+/i.test(v),
+      "Upload an image or enter a valid image URL"
+    )
+    .optional(),
   productType: z.enum(["printed", "woven"]).default("printed"),
   /* ---- Woven loom spec. Only required when productType is "woven" (see superRefine). ---- */
   designCode: z.string().optional().or(z.literal("")),
@@ -69,13 +79,22 @@ export const workOrderFormSchema = workOrderSchema.superRefine((v, ctx) => {
 // shape, which is still `number | null` until submit. Mirrors `PlanLineSchemaInput`.
 export type WorkOrderSchemaInput = z.input<typeof workOrderSchema>;
 
-/** Dispatch completion — both paperwork numbers are mandatory. */
+/** Dispatch completion — both paperwork numbers and optional artwork image. */
 export const dispatchSchema = z.object({
   dcNumber: z.string().min(1, "DC Number is required"),
   lcNumber: z.string().min(1, "LC Number is required"),
   fbrInvoiceNumber: z.string().min(1, "FBR Invoice Number is required"),
   dispatchedDate: z.string().min(1, "Dispatch date is required"),
   dispatchedQty: z.coerce.number().positive("Dispatch quantity must be greater than 0"),
+  imageUrl: z
+    .string()
+    .trim()
+    .max(4_000_000, "Image is too large — keep it under about 3 MB")
+    .refine(
+      (v) => v === "" || v.startsWith("data:image/") || /^https?:\/\/.+/i.test(v),
+      "Upload an image or enter a valid image URL"
+    )
+    .optional(),
 });
 
 export type DispatchSchemaInput = z.input<typeof dispatchSchema>;

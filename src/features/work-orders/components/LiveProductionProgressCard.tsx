@@ -65,10 +65,13 @@ export function LiveProductionProgressCard({
     const totals = overview.totals;
     const lines = overview.lines ?? [];
     const totalRolls = totals?.totalRolls || 1;
+    const assignedRolls = totals?.assignedRolls || totalRolls;
     plannedQty = totalRolls;
     producedQty = totals?.printedRolls ?? 0;
     cutQty = totals?.cutRolls ?? 0;
     packagedQty = totals?.packagedRolls ?? 0;
+    const sentToCuttingRolls = totals?.sentToCuttingRolls ?? 0;
+    const sentToPackagingRolls = totals?.sentToPackagingRolls ?? 0;
 
     const firstLine = lines[0];
     if (firstLine) {
@@ -92,6 +95,10 @@ export function LiveProductionProgressCard({
   const remainingQty = Math.max(0, plannedQty - producedQty);
   const overallPct = plannedQty > 0 ? Math.min(100, Math.round((packagedQty / plannedQty) * 1000) / 10) : 0;
   const unit = isWoven ? "pcs" : "rolls";
+  const totals = overview?.totals;
+  const assignedRollsTotal = totals?.assignedRolls || plannedQty;
+  const sentToCuttingTotal = totals?.sentToCuttingRolls ?? 0;
+  const sentToPackagingTotal = totals?.sentToPackagingRolls ?? 0;
 
   if (stage3Status === "active") currentStageName = "Packaging";
   else if (stage2Status === "active") currentStageName = "Cutting";
@@ -187,6 +194,10 @@ export function LiveProductionProgressCard({
                   <User className="h-3.5 w-3.5 text-foreground/70" />
                   <span>Operator: <strong className="font-medium text-foreground">{stage1Operator}</strong></span>
                 </div>
+                <div className="tabular-nums pt-1">
+                  {isWoven ? "Woven Pcs: " : "Printed Rolls: "}
+                  <strong className="font-medium text-foreground">{formatNumber(producedQty, 0)}</strong> / {formatNumber(isWoven ? plannedQty : assignedRollsTotal, 0)} {unit}
+                </div>
               </div>
             </div>
 
@@ -207,8 +218,8 @@ export function LiveProductionProgressCard({
                   <User className="h-3.5 w-3.5 text-foreground/70" />
                   <span>Operator: <strong className="font-medium text-foreground">{stage2Operator}</strong></span>
                 </div>
-                <div className="tabular-nums">
-                  Cut Qty: <strong className="font-medium text-foreground">{formatNumber(cutQty, 0)}</strong> / {formatNumber(plannedQty, 0)} {unit}
+                <div className="tabular-nums pt-1">
+                  Cut Rolls: <strong className="font-medium text-foreground">{formatNumber(cutQty, 0)}</strong> / {formatNumber(isWoven ? producedQty : sentToCuttingTotal, 0)} {unit}
                 </div>
               </div>
             </div>
@@ -230,8 +241,8 @@ export function LiveProductionProgressCard({
                   <User className="h-3.5 w-3.5 text-foreground/70" />
                   <span>Operator: <strong className="font-medium text-foreground">{stage3Operator}</strong></span>
                 </div>
-                <div className="tabular-nums">
-                  Packaged Qty: <strong className="font-medium text-foreground">{formatNumber(packagedQty, 0)}</strong> / {formatNumber(plannedQty, 0)} {unit}
+                <div className="tabular-nums pt-1">
+                  Packaged Rolls: <strong className="font-medium text-foreground">{formatNumber(packagedQty, 0)}</strong> / {formatNumber(isWoven ? cutQty : sentToPackagingTotal, 0)} {unit}
                 </div>
               </div>
             </div>

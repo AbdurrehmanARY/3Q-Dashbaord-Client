@@ -1,5 +1,13 @@
 import type { Column } from "@tanstack/react-table";
-import { ArrowDownIcon, ArrowUpIcon, ChevronsUpDownIcon, EyeOffIcon } from "lucide-react";
+import {
+  ArrowDownIcon,
+  ArrowUpIcon,
+  ChevronsUpDownIcon,
+  EyeOffIcon,
+  PinOffIcon,
+  ArrowLeftToLineIcon,
+  ArrowRightToLineIcon,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui/button";
 import {
@@ -25,8 +33,9 @@ export function DataTableColumnHeader<TData, TValue>({
   className,
 }: DataTableColumnHeaderProps<TData, TValue>) {
   const align = column.columnDef.meta?.align;
+  const canPin = column.getCanPin();
 
-  if (!column.getCanSort() && !column.getCanHide()) {
+  if (!column.getCanSort() && !column.getCanHide() && !canPin) {
     return (
       <div className={cn("text-xs font-semibold uppercase tracking-wider", align === "right" && "text-right", className)}>
         {title}
@@ -35,6 +44,7 @@ export function DataTableColumnHeader<TData, TValue>({
   }
 
   const sorted = column.getIsSorted();
+  const pinned = column.getIsPinned();
 
   return (
     <div className={cn("flex items-center", align === "right" && "justify-end", className)}>
@@ -72,7 +82,30 @@ export function DataTableColumnHeader<TData, TValue>({
               </DropdownMenuItem>
             </>
           )}
-          {column.getCanSort() && column.getCanHide() && <DropdownMenuSeparator />}
+          {canPin && (
+            <>
+              {column.getCanSort() && <DropdownMenuSeparator />}
+              {pinned !== "left" && (
+                <DropdownMenuItem onClick={() => column.pin("left")}>
+                  <ArrowLeftToLineIcon className="text-muted-foreground" />
+                  Pin left
+                </DropdownMenuItem>
+              )}
+              {pinned !== "right" && (
+                <DropdownMenuItem onClick={() => column.pin("right")}>
+                  <ArrowRightToLineIcon className="text-muted-foreground" />
+                  Pin right
+                </DropdownMenuItem>
+              )}
+              {pinned && (
+                <DropdownMenuItem onClick={() => column.pin(false)}>
+                  <PinOffIcon className="text-muted-foreground" />
+                  Unpin
+                </DropdownMenuItem>
+              )}
+            </>
+          )}
+          {column.getCanHide() && (column.getCanSort() || canPin) && <DropdownMenuSeparator />}
           {column.getCanHide() && (
             <DropdownMenuItem onClick={() => column.toggleVisibility(false)}>
               <EyeOffIcon className="text-muted-foreground" />

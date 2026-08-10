@@ -1,5 +1,5 @@
 import React from "react";
-import { AlertTriangle, Check, Pencil, X } from "lucide-react";
+import { AlertTriangle, Check, Pencil, Sliders, X } from "lucide-react";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { AppButton } from "@/components/forms/AppButton";
 import { Progress } from "@/components/ui/progress";
@@ -31,7 +31,9 @@ interface LabelTypeRowProps {
   printingOperators: OperatorOption[];
   cuttingOperators: OperatorOption[];
   packagingOperators: OperatorOption[];
+  visibleColumns?: Record<string, boolean>;
   onEdit: (line: ProductionLineOverview) => void;
+  onEditPlan?: (line: ProductionLineOverview) => void;
   onCancel: () => void;
   onSave: (line: ProductionLineOverview) => void;
   onDraftChange: (field: keyof LineDraft, value: number | null) => void;
@@ -85,27 +87,37 @@ function SelectCell({
   onChange,
   placeholder = "Unassigned",
   ariaLabel,
+  error,
 }: {
   value: number | null;
   options: { id: number; label: string }[];
   onChange: (value: number | null) => void;
   placeholder?: string;
   ariaLabel?: string;
+  error?: string;
 }) {
   return (
-    <select
-      value={value ?? ""}
-      aria-label={ariaLabel}
-      onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}
-      className="h-8 w-full min-w-[130px] rounded-lg border border-input bg-background px-2 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
-    >
-      <option value="">{placeholder}</option>
-      {options.map((o) => (
-        <option key={o.id} value={o.id}>
-          {o.label}
-        </option>
-      ))}
-    </select>
+    <div>
+      <select
+        value={value ?? ""}
+        aria-label={ariaLabel}
+        onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}
+        className={cn(
+          "h-8 w-full min-w-[130px] rounded-lg border bg-background px-2 py-1 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+          error
+            ? "border-destructive focus-visible:border-destructive text-destructive"
+            : "border-input focus-visible:border-ring"
+        )}
+      >
+        <option value="">{placeholder}</option>
+        {options.map((o) => (
+          <option key={o.id} value={o.id}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+      {error && <p className="mt-0.5 text-[10px] font-medium text-destructive">{error}</p>}
+    </div>
   );
 }
 
@@ -125,7 +137,9 @@ export const LabelTypeRow = React.memo(function LabelTypeRow({
   printingOperators,
   cuttingOperators,
   packagingOperators,
+  visibleColumns,
   onEdit,
+  onEditPlan,
   onCancel,
   onSave,
   onDraftChange,
@@ -148,6 +162,20 @@ export const LabelTypeRow = React.memo(function LabelTypeRow({
     disabledHint: "Assign a printing machine and operator first",
   };
 
+  // Real-time stage deduction & buffer calculations
+  const printedVal = isEditing && draft ? draft.printedRolls : line.printing.printedRolls;
+  const sentCutVal = isEditing && draft ? draft.sentToCuttingRolls : line.cutting.sentToCuttingRolls;
+  const cutVal = isEditing && draft ? draft.cutRolls : line.cutting.cutRolls;
+  const sentPkgVal = isEditing && draft ? draft.sentToPackagingRolls : line.packaging.sentToPackagingRolls;
+  const pkgVal = isEditing && draft ? draft.packagedRolls : line.packaging.packagedRolls;
+
+  const unprintedBal = Math.max(line.planning.totalRolls - printedVal, 0);
+  const waitingForCut = Math.max(printedVal - sentCutVal, 0);
+  const inCutting = Math.max(sentCutVal - cutVal, 0);
+  const waitingForPkg = Math.max(cutVal - sentPkgVal, 0);
+  const inPkg = Math.max(sentPkgVal - pkgVal, 0);
+  const isVisible = (id: string) => visibleColumns?.[id] !== false;
+
   return (
     <TableRow className={cn("bg-card", isEditing && "bg-primary/5")}>
       {/* Frozen identity column — stays visible while the stage columns scroll. */}
@@ -167,173 +195,260 @@ export const LabelTypeRow = React.memo(function LabelTypeRow({
       </TableCell>
 
       {/* Planned rolls = totalRolls, the ceiling set during planning — read-only here. */}
-      <TableCell className="whitespace-nowrap text-right tabular-nums text-muted-foreground">
-        {formatNumber(line.planning.totalRolls, 2)}
-      </TableCell>
+      {isVisible("plannedRolls") && (
+        <TableCell className="whitespace-nowrap text-right tabular-nums text-muted-foreground align-top pt-3">
+          {formatNumber(line.planning.totalRolls, 2)}
+        </TableCell>
+      )}
 
-      <TableCell className="text-right">
-        {isEditing && draft ? (
-          <NumberCell
-            value={draft.printedRolls}
-            ariaLabel={`Printed rolls for ${line.labelType}`}
-            error={errors.printedRolls}
-            onChange={(v) => onDraftChange("printedRolls", v)}
-            {...quantityLock}
-            max={line.planning.totalRolls}
-          />
-        ) : (
-          <span className="tabular-nums">{formatNumber(line.printing.printedRolls, 2)}</span>
-        )}
-      </TableCell>
+      {/* Printing (Unprinted) = totalRolls - printedRolls. Starts at totalRolls (e.g. 38) when planned/assigned! */}
+      {isVisible("unprinted") && (
+        <TableCell className="whitespace-nowrap text-right tabular-nums align-top pt-3 font-semibold text-blue-600 dark:text-blue-400 bg-blue-50/30 dark:bg-blue-950/20">
+          {formatNumber(unprintedBal, 2)}
+        </TableCell>
+      )}
 
-      <TableCell>
-        {isEditing && draft ? (
-          <SelectCell
-            value={draft.printingMachineId}
-            ariaLabel={`Printing machine for ${line.labelType}`}
-            options={machineOptions(printingMachines)}
-            onChange={(v) => onDraftChange("printingMachineId", v)}
-          />
-        ) : (
-          <span className="text-muted-foreground">{line.printing.machineName ?? "Unassigned"}</span>
-        )}
-      </TableCell>
+      {/* Printed: displays Net Printed Balance (printedRolls - sentToCuttingRolls). Deducts to 0 when sent to cutting! */}
+      {isVisible("printed") && (
+        <TableCell className="text-right align-top pt-3">
+          {isEditing && draft ? (
+            <div>
+              <NumberCell
+                value={draft.printedRolls}
+                ariaLabel={`Printed rolls for ${line.labelType}`}
+                error={errors.printedRolls}
+                onChange={(v) => onDraftChange("printedRolls", v)}
+                {...quantityLock}
+                max={line.planning.totalRolls}
+              />
+              <div className="mt-1 text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
+                Net Printed: {formatNumber(waitingForCut, 2)}
+              </div>
+            </div>
+          ) : (
+            <div>
+              <span className="tabular-nums font-semibold text-emerald-600 dark:text-emerald-400">
+                {formatNumber(waitingForCut, 2)}
+              </span>
+              <div className="text-[10px] text-muted-foreground">
+                Total Printed: {formatNumber(line.printing.printedRolls, 2)}
+              </div>
+            </div>
+          )}
+        </TableCell>
+      )}
 
-      <TableCell>
-        {isEditing && draft ? (
-          <SelectCell
-            value={draft.printingOperatorId}
-            ariaLabel={`Printing operator for ${line.labelType}`}
-            options={operatorOptions(printingOperators)}
-            onChange={(v) => onDraftChange("printingOperatorId", v)}
-          />
-        ) : (
-          <span className="text-muted-foreground">{line.printing.operatorName ?? "Unassigned"}</span>
-        )}
-      </TableCell>
+      {isVisible("printingMachine") && (
+        <TableCell className="align-top pt-3">
+          {isEditing && draft ? (
+            <SelectCell
+              value={draft.printingMachineId}
+              ariaLabel={`Printing machine for ${line.labelType}`}
+              options={machineOptions(printingMachines)}
+              onChange={(v) => onDraftChange("printingMachineId", v)}
+            />
+          ) : (
+            <span className="text-muted-foreground">{line.printing.machineName ?? "Unassigned"}</span>
+          )}
+        </TableCell>
+      )}
 
-      <TableCell className="text-right">
-        {isEditing && draft ? (
-          <NumberCell
-            value={draft.sentToCuttingRolls}
-            ariaLabel={`Rolls sent to cutting for ${line.labelType}`}
-            error={errors.sentToCuttingRolls}
-            onChange={(v) => onDraftChange("sentToCuttingRolls", v)}
-            {...quantityLock}
-            max={draft.printedRolls}
-          />
-        ) : (
-          <span className="tabular-nums">{formatNumber(line.cutting.sentToCuttingRolls, 2)}</span>
-        )}
-      </TableCell>
+      {isVisible("printingOperator") && (
+        <TableCell className="align-top pt-3">
+          {isEditing && draft ? (
+            <SelectCell
+              value={draft.printingOperatorId}
+              ariaLabel={`Printing operator for ${line.labelType}`}
+              options={operatorOptions(printingOperators)}
+              onChange={(v) => onDraftChange("printingOperatorId", v)}
+            />
+          ) : (
+            <span className="text-muted-foreground">{line.printing.operatorName ?? "Unassigned"}</span>
+          )}
+        </TableCell>
+      )}
 
-      <TableCell className="text-right">
-        {isEditing && draft ? (
-          <NumberCell
-            value={draft.cutRolls}
-            ariaLabel={`Cut rolls for ${line.labelType}`}
-            error={errors.cutRolls}
-            onChange={(v) => onDraftChange("cutRolls", v)}
-            {...quantityLock}
-            max={draft.sentToCuttingRolls}
-          />
-        ) : (
-          <span className="tabular-nums">{formatNumber(line.cutting.cutRolls, 2)}</span>
-        )}
-      </TableCell>
+      {/* Sent to Cutting: displays Net Cutting balance (sentToCuttingRolls - cutRolls). Deducts to 0 when cut! */}
+      {isVisible("sentToCutting") && (
+        <TableCell className="text-right align-top pt-3">
+          {isEditing && draft ? (
+            <div>
+              <NumberCell
+                value={draft.sentToCuttingRolls}
+                ariaLabel={`Rolls sent to cutting for ${line.labelType}`}
+                error={errors.sentToCuttingRolls}
+                onChange={(v) => onDraftChange("sentToCuttingRolls", v)}
+                {...quantityLock}
+                max={draft.printedRolls}
+              />
+              <div className="mt-1 text-[10px] text-amber-600 dark:text-amber-400 font-medium">
+                Net Cutting: {formatNumber(inCutting, 2)}
+              </div>
+            </div>
+          ) : (
+            <div>
+              <span className="tabular-nums font-semibold text-amber-600 dark:text-amber-400">
+                {formatNumber(inCutting, 2)}
+              </span>
+              <div className="text-[10px] text-muted-foreground">
+                Total Sent: {formatNumber(line.cutting.sentToCuttingRolls, 2)}
+              </div>
+            </div>
+          )}
+        </TableCell>
+      )}
 
-      <TableCell>
-        {isEditing && draft ? (
-          <SelectCell
-            value={draft.cuttingMachineId}
-            ariaLabel={`Cutting machine for ${line.labelType}`}
-            options={machineOptions(cuttingMachines)}
-            onChange={(v) => onDraftChange("cuttingMachineId", v)}
-          />
-        ) : (
-          <span className="text-muted-foreground">{line.cutting.machineName ?? "Unassigned"}</span>
-        )}
-      </TableCell>
+      {/* Cut: displays Net Cutted Balance (cutRolls - sentToPackagingRolls). Deducts to 0 when sent to packaging! */}
+      {isVisible("cut") && (
+        <TableCell className="text-right align-top pt-3">
+          {isEditing && draft ? (
+            <div>
+              <NumberCell
+                value={draft.cutRolls}
+                ariaLabel={`Cut rolls for ${line.labelType}`}
+                error={errors.cutRolls}
+                onChange={(v) => onDraftChange("cutRolls", v)}
+                {...quantityLock}
+                max={draft.sentToCuttingRolls}
+              />
+              <div className="mt-1 text-[10px] text-indigo-600 dark:text-indigo-400 font-medium">
+                Net Cutted: {formatNumber(waitingForPkg, 2)}
+              </div>
+            </div>
+          ) : (
+            <div>
+              <span className="tabular-nums font-semibold text-indigo-600 dark:text-indigo-400">
+                {formatNumber(waitingForPkg, 2)}
+              </span>
+              <div className="text-[10px] text-muted-foreground">
+                Total Cut: {formatNumber(line.cutting.cutRolls, 2)}
+              </div>
+            </div>
+          )}
+        </TableCell>
+      )}
 
-      <TableCell>
-        {isEditing && draft ? (
-          <SelectCell
-            value={draft.cuttingOperatorId}
-            ariaLabel={`Cutting operator for ${line.labelType}`}
-            options={operatorOptions(cuttingOperators)}
-            onChange={(v) => onDraftChange("cuttingOperatorId", v)}
-          />
-        ) : (
-          <span className="text-muted-foreground">{line.cutting.operatorName ?? "Unassigned"}</span>
-        )}
-      </TableCell>
+      {isVisible("cuttingMachine") && (
+        <TableCell className="align-top pt-3">
+          {isEditing && draft ? (
+            <SelectCell
+              value={draft.cuttingMachineId}
+              ariaLabel={`Cutting machine for ${line.labelType}`}
+              options={machineOptions(cuttingMachines)}
+              onChange={(v) => onDraftChange("cuttingMachineId", v)}
+              error={errors.cuttingMachineId}
+            />
+          ) : (
+            <span className="text-muted-foreground">{line.cutting.machineName ?? "Unassigned"}</span>
+          )}
+        </TableCell>
+      )}
 
-      <TableCell className="text-right">
-        {isEditing && draft ? (
-          <NumberCell
-            value={draft.sentToPackagingRolls}
-            ariaLabel={`Rolls sent to packaging for ${line.labelType}`}
-            error={errors.sentToPackagingRolls}
-            onChange={(v) => onDraftChange("sentToPackagingRolls", v)}
-            {...quantityLock}
-            max={draft.cutRolls}
-          />
-        ) : (
-          <span className="tabular-nums">{formatNumber(line.packaging.sentToPackagingRolls, 2)}</span>
-        )}
-      </TableCell>
+      {isVisible("cuttingOperator") && (
+        <TableCell className="align-top pt-3">
+          {isEditing && draft ? (
+            <SelectCell
+              value={draft.cuttingOperatorId}
+              ariaLabel={`Cutting operator for ${line.labelType}`}
+              options={operatorOptions(cuttingOperators)}
+              onChange={(v) => onDraftChange("cuttingOperatorId", v)}
+              error={errors.cuttingOperatorId}
+            />
+          ) : (
+            <span className="text-muted-foreground">{line.cutting.operatorName ?? "Unassigned"}</span>
+          )}
+        </TableCell>
+      )}
 
-      <TableCell className="text-right">
-        {isEditing && draft ? (
-          <NumberCell
-            value={draft.packagedRolls}
-            ariaLabel={`Packaged rolls for ${line.labelType}`}
-            error={errors.packagedRolls}
-            onChange={(v) => onDraftChange("packagedRolls", v)}
-            {...quantityLock}
-            max={draft.sentToPackagingRolls}
-          />
-        ) : (
-          <span className="tabular-nums">{formatNumber(line.packaging.packagedRolls, 2)}</span>
-        )}
-      </TableCell>
+      {/* Sent to Packaging: displays Net Packaging balance (sentToPackagingRolls - packagedRolls). Deducts to 0 when packaged! */}
+      {isVisible("sentToPackaging") && (
+        <TableCell className="text-right align-top pt-3">
+          {isEditing && draft ? (
+            <div>
+              <NumberCell
+                value={draft.sentToPackagingRolls}
+                ariaLabel={`Rolls sent to packaging for ${line.labelType}`}
+                error={errors.sentToPackagingRolls}
+                onChange={(v) => onDraftChange("sentToPackagingRolls", v)}
+                {...quantityLock}
+                max={draft.cutRolls}
+              />
+              <div className="mt-1 text-[10px] text-purple-600 dark:text-purple-400 font-medium">
+                Net Packaging: {formatNumber(inPkg, 2)}
+              </div>
+            </div>
+          ) : (
+            <div>
+              <span className="tabular-nums font-semibold text-purple-600 dark:text-purple-400">
+                {formatNumber(inPkg, 2)}
+              </span>
+              <div className="text-[10px] text-muted-foreground">
+                Total Sent: {formatNumber(line.packaging.sentToPackagingRolls, 2)}
+              </div>
+            </div>
+          )}
+        </TableCell>
+      )}
 
-      <TableCell className="text-right">
-        {isEditing && draft ? (
-          <NumberCell
-            value={draft.packagedQty}
-            ariaLabel={`Packaged quantity for ${line.labelType}`}
-            error={errors.packagedQty}
-            onChange={(v) => onDraftChange("packagedQty", v)}
-            {...quantityLock}
-            max={line.planning.quantity}
-          />
-        ) : (
-          <span className="tabular-nums">{formatNumber(line.packaging.packagedQty, 0)}</span>
-        )}
-      </TableCell>
+      {isVisible("packaged") && (
+        <TableCell className="text-right align-top pt-3">
+          {isEditing && draft ? (
+            <NumberCell
+              value={draft.packagedRolls}
+              ariaLabel={`Packaged rolls for ${line.labelType}`}
+              error={errors.packagedRolls}
+              onChange={(v) => onDraftChange("packagedRolls", v)}
+              {...quantityLock}
+              max={draft.sentToPackagingRolls}
+            />
+          ) : (
+            <span className="tabular-nums">{formatNumber(line.packaging.packagedRolls, 2)}</span>
+          )}
+        </TableCell>
+      )}
 
-      <TableCell>
-        {isEditing && draft ? (
-          <SelectCell
-            value={draft.packagingOperatorId}
-            ariaLabel={`Packaging operator for ${line.labelType}`}
-            options={operatorOptions(packagingOperators)}
-            onChange={(v) => onDraftChange("packagingOperatorId", v)}
-          />
-        ) : (
-          <span className="text-muted-foreground">{line.packaging.operatorName ?? "Unassigned"}</span>
-        )}
-      </TableCell>
+      {isVisible("packagedQty") && (
+        <TableCell className="text-right align-top pt-3">
+          {isEditing && draft ? (
+            <NumberCell
+              value={draft.packagedQty}
+              ariaLabel={`Packaged quantity for ${line.labelType}`}
+              error={errors.packagedQty}
+              onChange={(v) => onDraftChange("packagedQty", v)}
+              {...quantityLock}
+              max={line.planning.quantity}
+            />
+          ) : (
+            <span className="tabular-nums">{formatNumber(line.packaging.packagedQty, 0)}</span>
+          )}
+        </TableCell>
+      )}
 
-      <TableCell className="min-w-[110px]">
-        <div className="space-y-1">
-          <Progress value={line.liveProgress.completionPct} />
-          <span className="text-xs tabular-nums text-muted-foreground">
-            {line.liveProgress.completionPct}%
-          </span>
-        </div>
-      </TableCell>
+      {isVisible("packagingOperator") && (
+        <TableCell className="align-top pt-3">
+          {isEditing && draft ? (
+            <SelectCell
+              value={draft.packagingOperatorId}
+              ariaLabel={`Packaging operator for ${line.labelType}`}
+              options={operatorOptions(packagingOperators)}
+              onChange={(v) => onDraftChange("packagingOperatorId", v)}
+            />
+          ) : (
+            <span className="text-muted-foreground">{line.packaging.operatorName ?? "Unassigned"}</span>
+          )}
+        </TableCell>
+      )}
+
+      {isVisible("completion") && (
+        <TableCell className="align-top pt-3">
+          <div className="space-y-1">
+            <Progress value={line.liveProgress.completionPct} />
+            <span className="text-xs tabular-nums text-muted-foreground">
+              {line.liveProgress.completionPct}%
+            </span>
+          </div>
+        </TableCell>
+      )}
 
       {/* Frozen actions column — Save/Cancel stay reachable without scrolling back. */}
       <TableCell className={cn("min-w-[104px]", stickyCellClass("last", { editing: isEditing }))}>
@@ -361,16 +476,29 @@ export const LabelTypeRow = React.memo(function LabelTypeRow({
             </AppButton>
           </div>
         ) : (
-          <div className="flex justify-end">
+          <div className="flex items-center justify-end gap-1">
             <AppButton
               size="sm"
               variant="ghost"
-              className="h-7 px-2"
+              className="h-7 w-7 p-0"
               onClick={() => onEdit(line)}
-              aria-label={`Edit ${line.labelType}`}
+              aria-label={`Edit progress for ${line.labelType}`}
+              title="Edit Progress (Printed, Cut, Packaged, Machines, Operators)"
             >
-              <Pencil className="h-3.5 w-3.5" />
+              <Pencil className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
             </AppButton>
+            {onEditPlan && (
+              <AppButton
+                size="sm"
+                variant="ghost"
+                className="h-7 w-7 p-0"
+                onClick={() => onEditPlan(line)}
+                aria-label={`Edit plan & assigned rolls for ${line.labelType}`}
+                title="Edit Plan & Assigned Rolls"
+              >
+                <Sliders className="h-3.5 w-3.5 text-primary hover:text-primary/80" />
+              </AppButton>
+            )}
           </div>
         )}
       </TableCell>

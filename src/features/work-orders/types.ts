@@ -23,6 +23,28 @@ export const PRODUCT_TYPE_META: Record<ProductType, { label: string; description
   woven: { label: "Woven Labels", description: "Planning → Weaving → Cutting → Packaging" },
 };
 
+/** Scheduling priority — set on any order, defaults to `normal`. */
+export type WorkOrderPriority = "normal" | "urgent" | "emergency";
+export const WORK_ORDER_PRIORITIES: WorkOrderPriority[] = ["normal", "urgent", "emergency"];
+export const WORK_ORDER_PRIORITY_META: Record<
+  WorkOrderPriority,
+  { label: string; variant: "neutral" | "warning" | "error" }
+> = {
+  normal: { label: "Normal", variant: "neutral" },
+  urgent: { label: "Urgent", variant: "warning" },
+  emergency: { label: "Emergency", variant: "error" },
+};
+
+/** Why the order exists — defaults to `normal order`. */
+export type WorkOrderType = "normal order" | "shortfall" | "additional order" | "recut order";
+export const WORK_ORDER_TYPES: WorkOrderType[] = ["normal order", "shortfall", "additional order", "recut order"];
+export const WORK_ORDER_TYPE_META: Record<WorkOrderType, { label: string }> = {
+  "normal order": { label: "Normal Order" },
+  shortfall: { label: "Shortfall" },
+  "additional order": { label: "Additional Order" },
+  "recut order": { label: "Recut Order" },
+};
+
 /** Display label + StatusBadge variant per work-order status. */
 export const WORK_ORDER_STATUS_META: Record<
   WorkOrderStatus,
@@ -47,6 +69,8 @@ export interface WorkOrder {
   companyId: number | null;
   companyName: string | null;
   comment: string | null;
+  priority: WorkOrderPriority;
+  orderType: WorkOrderType;
   /** Artwork / reference image URL, previewed on the detail page. */
   imageUrl: string | null;
   status: WorkOrderStatus;
@@ -64,6 +88,7 @@ export interface WorkOrder {
   repeat: string | null;
   density: number | null;
   extra: string | null;
+  sizeLabels?: string[] | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -87,6 +112,7 @@ export interface WovenDetailInput {
   repeat: number;
   density: number;
   extra?: number;
+  sizeLabels?: string[];
 }
 
 export interface WorkOrderInput {
@@ -97,6 +123,8 @@ export interface WorkOrderInput {
   totalQty: number;
   brandId?: number;
   comment?: string;
+  priority?: WorkOrderPriority;
+  orderType?: WorkOrderType;
   imageUrl?: string;
   productType?: ProductType;
   /** Required when `productType` is "woven". */
@@ -119,4 +147,5 @@ export interface DispatchInput {
   fbrInvoiceNumber: string;
   dispatchedDate: string;
   dispatchedQty: number;
+  imageUrl?: string;
 }

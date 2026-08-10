@@ -14,7 +14,6 @@ import { useProductionOrderOverview, useWovenOverview } from "@/features/product
 import { WORK_ORDER_STATUS_META } from "../types";
 import { formatDate, formatNumber } from "@/lib/format";
 import { WorkOrderDialog } from "../components/WorkOrderDialog";
-import { ImagePreview } from "@/components/feedback/ImagePreview";
 import { ProductionSummary } from "@/features/production-orders";
 import { LiveProductionProgressCard } from "../components/LiveProductionProgressCard";
 import { ProductionCompletionSummaryCard } from "../components/ProductionCompletionSummaryCard";
@@ -161,29 +160,38 @@ export function WorkOrderDetailPage() {
                 </StatusBadge>
               </dd>
             </div>
+            {productionOrder && !isWoven && (
+              <>
+                <Field label="Total Rolls Assigned" value={formatNumber(totals?.assignedRolls ?? 0, 0)} />
+                <Field label="Total Weight Assigned (kg)" value={formatNumber(totals?.assignedWeight ?? 0, 2)} />
+              </>
+            )}
           </dl>
-        </AppCard>
-
-        {/* ---------------- Artwork ---------------- */}
-        <AppCard title="Artwork" description="Reference image for this order.">
-          <div className="max-w-md">
-            <ImagePreview
-              url={wo.imageUrl}
-              alt={`Artwork for ${wo.soNumber}`}
-              emptyLabel="No artwork image — add one by editing this work order"
-            />
-          </div>
         </AppCard>
 
         {/* ---------------- Woven design specification ---------------- */}
         {wo.productType === "woven" && (
           <AppCard title="Woven Design Specification">
-            <dl className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3 lg:grid-cols-5">
+            <dl className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3 lg:grid-cols-6">
               <Field label="Design Code" value={wo.designCode ?? "—"} mono />
               <Field label="Pick" value={formatNumber(wo.pick, 0)} />
               <Field label="Repeat" value={formatNumber(wo.repeat, 2)} />
               <Field label="Density" value={formatNumber(wo.density, 0)} />
               <Field label="Extra" value={formatNumber(wo.extra, 2)} />
+              <div>
+                <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">Size Labels</dt>
+                <dd className="mt-1 flex flex-wrap gap-1">
+                  {wo.sizeLabels && wo.sizeLabels.length > 0 ? (
+                    wo.sizeLabels.map((lbl) => (
+                      <span key={lbl} className="rounded border bg-muted px-1.5 py-0.5 text-xs font-semibold">
+                        {lbl}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-sm font-medium text-muted-foreground">—</span>
+                  )}
+                </dd>
+              </div>
             </dl>
           </AppCard>
         )}
@@ -300,55 +308,6 @@ export function WorkOrderDetailPage() {
               )}
             </AppCard>
 
-            {/* ---------------- Production Planning ---------------- */}
-            <AppCard
-              title="Production Planning"
-              description={`Production order ${productionOrder.productionNumber}`}
-            >
-              <div className="mb-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
-                <Figure label="Required Rolls" value={formatNumber(totals?.requiredRolls ?? 0, 2)} />
-                <Figure label="Total Rolls Issued" value={formatNumber(totals?.totalRolls ?? 0, 0)} accent />
-                <Figure label="Assigned Rolls" value={formatNumber(totals?.assignedRolls ?? 0, 0)} />
-                <Figure label="Assigned Weight (kg)" value={formatNumber(totals?.assignedWeight ?? 0, 2)} />
-              </div>
-
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-muted/30 hover:bg-muted/30">
-                      <Th>Label Type</Th>
-                      <Th>Printing Machine</Th>
-                      <Th>Printing Operator</Th>
-                      <Th align="right">Assigned Rolls</Th>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {lines.map((line) => (
-                      <TableRow key={line.id}>
-                        <TableCell className="font-medium">{line.labelType}</TableCell>
-                        <TableCell className={line.printing.machineName ? "" : "text-muted-foreground"}>
-                          {line.printing.machineName ?? "Unassigned"}
-                        </TableCell>
-                        <TableCell className={line.printing.operatorName ? "" : "text-muted-foreground"}>
-                          {line.printing.operatorName ?? "Unassigned"}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {formatNumber(line.material.assignedRolls, 0)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    {lines.length === 0 && (
-                      <TableRow>
-                        <TableCell colSpan={4} className="h-20 text-center text-sm text-muted-foreground">
-                          Not planned yet.
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </AppCard>
-
             {/* ---------------- Label Details ---------------- */}
             <AppCard title="Label Details">
               <div className="overflow-x-auto">
@@ -357,7 +316,8 @@ export function WorkOrderDetailPage() {
                     <TableRow className="bg-muted/30 hover:bg-muted/30">
                       <Th>Label Type</Th>
                       <Th align="right">Quantity</Th>
-                      <Th align="right">Rolls Required</Th>
+                      <Th align="right">Assigned Rolls</Th>
+                      <Th align="right">Assigned Weight (kg)</Th>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -368,13 +328,18 @@ export function WorkOrderDetailPage() {
                           {formatNumber(line.planning.quantity, 0)}
                         </TableCell>
                         <TableCell className="text-right tabular-nums">
-                          {formatNumber(line.planning.requiredRolls, 4)}
+                          {formatNumber(line.material.assignedRolls, 0)}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {line.material.assignedWeight != null
+                            ? formatNumber(line.material.assignedWeight, 2)
+                            : "—"}
                         </TableCell>
                       </TableRow>
                     ))}
                     {lines.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={3} className="h-20 text-center text-sm text-muted-foreground">
+                        <TableCell colSpan={4} className="h-20 text-center text-sm text-muted-foreground">
                           No label types planned yet.
                         </TableCell>
                       </TableRow>
@@ -504,11 +469,12 @@ function WovenProductionDetailView({
         title="Woven Production & Thread Plan"
         description={`Production order ${productionOrder.productionNumber} · ${lines.length} woven line(s)`}
       >
-        <div className="mb-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <div className="mb-4 grid grid-cols-2 gap-4 sm:grid-cols-5">
           <Figure label="Planned Qty" value={`${formatNumber(totals?.quantity ?? totalQty, 0)} pcs`} accent />
           <Figure label="Woven Lines" value={formatNumber(totals?.lineCount ?? lines.length, 0)} />
-          <Figure label="Thread Reserved" value={`${formatNumber(totals?.totalThreadWeightKg ?? 0, 3)} kg`} />
+          <Figure label="Thread Issued" value={`${formatNumber(totals?.totalThreadWeightKg ?? 0, 3)} kg`} />
           <Figure label="Packaged Weight" value={`${formatNumber(totals?.packagedWeightKg ?? 0, 2)} kg`} />
+          <Figure label="Beam Total (Auto)" value={`${formatNumber(totals?.beamTotal ?? 0, 3)} kg`} accent />
         </div>
 
         {allThreads.length === 0 ? (
