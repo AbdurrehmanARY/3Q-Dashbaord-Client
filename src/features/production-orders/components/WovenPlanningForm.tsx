@@ -130,11 +130,24 @@ export function WovenPlanningForm({
     return { dyed, undyed, total: dyed + undyed };
   };
 
-  const machineOptions = (machines ?? []).map((m) => ({ value: String(m.id), label: m.machineName }));
-  const operatorOptions = (operators ?? []).map((o) => ({
-    value: String(o.id),
-    label: `${o.name} · ${o.designation} Operator`,
-  }));
+  const machineOptions = React.useMemo(() => {
+    const list = (machines ?? []).filter((m) => {
+      const typeStr = (m.machineType ?? "").toLowerCase();
+      const nameStr = (m.machineName ?? m.name ?? "").toLowerCase();
+      return typeStr.includes("woven") || typeStr.includes("weaving") || nameStr.includes("woven") || nameStr.includes("weaving") || m.productType === "woven" || m.productType === "both";
+    });
+    return list.map((m) => ({ value: String(m.id), label: `${m.machineName || m.name} (${m.machineType || "Woven"})` }));
+  }, [machines]);
+
+  const operatorOptions = React.useMemo(() => {
+    const list = (operators ?? []).filter((o) => {
+      return o.operatorType === "woven" || o.operatorType === "both" || (o.designation ?? "").toLowerCase().includes("woven") || (o.designation ?? "").toLowerCase().includes("weaving");
+    });
+    return list.map((o) => ({
+      value: String(o.id),
+      label: `${o.name} · ${o.designation} Operator`,
+    }));
+  }, [operators]);
 
   // Planning cannot proceed until every required field on every colour is present.
   const rowErrors = rows.map((r) => {

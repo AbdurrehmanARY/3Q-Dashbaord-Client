@@ -158,10 +158,15 @@ export function WovenStageBoard({ orderId, line }: { orderId: string; line: Wove
   const cutting = useUpdateWovenCutting(orderId);
   const packaging = useUpdateWovenPackaging(orderId);
 
-  const operatorOptions = (operators ?? []).map((o) => ({
-    value: String(o.id),
-    label: `${o.name} · ${o.designation} Operator`,
-  }));
+  const operatorOptions = React.useMemo(() => {
+    const list = (operators ?? []).filter((o) => {
+      return o.operatorType === "woven" || o.operatorType === "both" || (o.designation ?? "").toLowerCase().includes("woven") || (o.designation ?? "").toLowerCase().includes("weaving");
+    });
+    return list.map((o) => ({
+      value: String(o.id),
+      label: `${o.name} · ${o.designation} Operator`,
+    }));
+  }, [operators]);
 
   const weavingPct = Math.min(100, Math.round(((line.weaving.wovenQty ?? 0) / (line.quantity || 1)) * 1000) / 10);
   const cutPct = Math.min(100, Math.round(((line.cutting.cutQty ?? 0) / (line.quantity || 1)) * 1000) / 10);
