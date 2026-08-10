@@ -58,6 +58,15 @@ export function WovenSpecification({
         {...register("density")}
       />
       <AppInput
+        label="Speed (RPM)"
+        type="number"
+        step="any"
+        placeholder="e.g. 500"
+        disabled={isLocked}
+        error={errors.speed?.message}
+        {...register("speed")}
+      />
+      <AppInput
         label="Extra"
         type="number"
         step="any"

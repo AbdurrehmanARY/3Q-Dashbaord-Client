@@ -207,6 +207,41 @@ export function WovenStageBoard({ orderId, line }: { orderId: string; line: Wove
             <div>Machine: {line.weaving.machineName ?? "Unassigned"}</div>
             <div>Operator: {line.weaving.operatorName ?? "Unassigned"}</div>
           </div>
+
+          {/* Weaving Time Breakdown & Variance */}
+          <div className="rounded-lg border bg-muted/30 p-2.5 space-y-1.5 text-xs">
+            <div className="flex items-center justify-between text-muted-foreground font-medium">
+              <span>Est. Weaving Time:</span>
+              <span className="tabular-nums font-semibold text-foreground">
+                {line.weaving.estimatedWeavingHours != null ? `${formatNumber(line.weaving.estimatedWeavingHours, 2)} hrs` : "N/A"}
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-muted-foreground font-medium">
+              <span>Actual Weaving Time:</span>
+              <span className="tabular-nums font-semibold text-foreground">
+                {line.weaving.actualWeavingHours != null ? `${formatNumber(line.weaving.actualWeavingHours, 2)} hrs` : "0.00 hrs"}
+              </span>
+            </div>
+            {line.weaving.weavingTimeDiffHours !== undefined && (
+              <div className="flex items-center justify-between border-t pt-1 font-medium">
+                <span className="text-muted-foreground">Time Difference:</span>
+                <span className={cn(
+                  "tabular-nums font-bold px-1.5 py-0.5 rounded text-[11px]",
+                  line.weaving.weavingTimeDiffHours > 0
+                    ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                    : line.weaving.weavingTimeDiffHours < 0
+                    ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                    : "bg-muted text-muted-foreground"
+                )}>
+                  {line.weaving.weavingTimeDiffHours > 0 ? `+${formatNumber(line.weaving.weavingTimeDiffHours, 2)} hrs` : `${formatNumber(line.weaving.weavingTimeDiffHours, 2)} hrs`}
+                </span>
+              </div>
+            )}
+            <p className="text-[10px] text-muted-foreground/80 italic">
+              Formula: (Qty / Repeat) × Pick / Speed (RPM) / 60
+            </p>
+          </div>
+
           <Progress value={weavingPct} />
           <p className="text-xs tabular-nums text-muted-foreground font-medium">
             {formatNumber(line.weaving.wovenQty, 0)} of {formatNumber(line.quantity, 0)} pcs woven ({weavingPct}%)

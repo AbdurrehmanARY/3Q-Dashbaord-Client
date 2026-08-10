@@ -64,6 +64,7 @@ function defaultsFor(
       pick: wo.pick ?? "",
       repeat: wo.repeat != null ? Number(wo.repeat) : "",
       density: wo.density ?? "",
+      speed: wo.speed != null ? Number(wo.speed) : "",
       extra: wo.extra != null ? Number(wo.extra) : "",
       dcNumber: "",
       lcNumber: "",
@@ -90,6 +91,7 @@ function defaultsFor(
     pick: wo?.pick ?? "",
     repeat: wo?.repeat != null ? Number(wo.repeat) : "",
     density: wo?.density ?? "",
+    speed: wo?.speed != null ? Number(wo.speed) : "",
     extra: wo?.extra != null ? Number(wo.extra) : "",
     dcNumber: wo?.dcNumber ?? "",
     lcNumber: wo?.lcNumber ?? "",
@@ -160,6 +162,7 @@ export function WorkOrderDialog({ open, workOrder, childOrderType, onClose }: Wo
         pick: Number(data.pick),
         repeat: Number(data.repeat),
         density: Number(data.density),
+        speed: data.speed === "" || data.speed == null ? 0 : Number(data.speed),
         extra: data.extra === "" || data.extra == null ? 0 : Number(data.extra),
         sizeLabels,
       }

@@ -35,6 +35,10 @@ export interface WovenLineOverview {
     endedAt: string | null;
     progressPct: number;
     isComplete: boolean;
+    speedRpm?: number;
+    estimatedWeavingHours?: number;
+    actualWeavingHours?: number;
+    weavingTimeDiffHours?: number;
   };
   cutting: {
     operatorId: number | null;

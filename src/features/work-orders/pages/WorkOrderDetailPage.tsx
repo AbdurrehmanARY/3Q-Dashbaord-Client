@@ -177,6 +177,7 @@ export function WorkOrderDetailPage() {
               <Field label="Pick" value={formatNumber(wo.pick, 0)} />
               <Field label="Repeat" value={formatNumber(wo.repeat, 2)} />
               <Field label="Density" value={formatNumber(wo.density, 0)} />
+              <Field label="Speed (RPM)" value={wo.speed != null && Number(wo.speed) > 0 ? `${formatNumber(wo.speed, 0)} RPM` : "—"} />
               <Field label="Extra" value={formatNumber(wo.extra, 2)} />
               <div>
                 <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">Size Labels</dt>
