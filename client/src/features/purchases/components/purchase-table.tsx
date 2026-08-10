@@ -3,10 +3,33 @@ import { ShoppingCartIcon, PlusIcon, XIcon } from "lucide-react";
 import { AppButton } from "@/components/forms/AppButton";
 import { AppInput } from "@/components/forms/AppInput";
 import { EmptyContent } from "@/components/ui/empty";
-import { DataTable, DataTableEmpty, DataTableToolbar } from "@/shared/components/data-table";
+import {
+  DataTable,
+  DataTableEmpty,
+  DataTableToolbar,
+  type DataTableExportColumn,
+} from "@/shared/components/data-table";
 import { DatePicker } from "@/shared/components/date-picker";
+import { formatDate } from "@/lib/format";
 import { usePurchases } from "../hooks/use-purchases";
 import { purchaseColumns } from "./purchase-columns";
+import type { PurchaseRecord } from "../types";
+
+// columnId links each export column to its table column so hiding a column drops it from export.
+const exportColumns: DataTableExportColumn<PurchaseRecord>[] = [
+  { header: "Date", columnId: "reportDate", value: (p) => formatDate(p.reportDate) },
+  { header: "Material Code", columnId: "materialCode", value: (p) => p.materialCode },
+  { header: "Material", columnId: "material", value: (p) => p.itemName ?? p.materialType ?? "" },
+  { header: "Vendor", columnId: "vendor", value: (p) => p.vendor },
+  { header: "Cartons", columnId: "cartonQty", value: (p) => Number(p.cartonQty) },
+  { header: "Rolls/Ctn", columnId: "rollsPerCarton", value: (p) => Number(p.rollsPerCarton) },
+  { header: "Total Rolls", columnId: "totalRolls", value: (p) => p.cartonQty * p.rollsPerCarton },
+  { header: "Roll Length", columnId: "rollLength", value: (p) => Number(p.rollLength) },
+  { header: "Net Weight", columnId: "netWeight", value: (p) => Number(p.netWeight) },
+  { header: "Weight/Roll", columnId: "localWeight", value: (p) => Number(p.localWeight ?? 0) },
+  { header: "Total Weight", columnId: "totalWeight", value: (p) => Number((p.cartonQty * p.rollsPerCarton * Number(p.localWeight ?? 0)).toFixed(2)) },
+  { header: "GD #", columnId: "gdNumber", value: (p) => p.gdNumber ?? "" },
+];
 
 interface PurchaseTableProps {
   /** The create dialog is opened from two places (page header + empty state). */
@@ -52,9 +75,12 @@ export function PurchaseTable({ onCreateNew }: PurchaseTableProps) {
         data={data ?? []}
         loading={isLoading}
         getRowId={(row) => row.id}
-        // Wide table — keep the identity and Actions columns reachable while scrolling.
-        stickyFirstColumn
-        stickyLastColumn
+        // Column pinning replaces the old fixed first/last freeze; users pin as needed.
+        enableColumnPinning
+        enableRowSelection
+        showColumnToggle
+        exportColumns={exportColumns}
+        exportFilename="roll-purchases"
         empty={
           (data ?? []).length === 0 && !hasFilters ? (
             <DataTableEmpty icon={<ShoppingCartIcon />} title="No purchase records yet" description="Record the first incoming material purchase.">

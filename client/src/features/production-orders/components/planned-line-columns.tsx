@@ -61,7 +61,7 @@ export function createPlannedLineColumns({
       accessorFn: (l) => l.material.assignedRolls,
       header: ({ column }) => <DataTableColumnHeader column={column} title="Assigned Rolls" />,
       cell: ({ row }) => (
-        <span className="font-semibold tabular-nums">{formatNumber(row.original.material.assignedRolls, 0)}</span>
+        <span className="font-semibold tabular-nums">{formatNumber(row.original.material.assignedRolls, 2)}</span>
       ),
       meta: { align: "right" },
     },
@@ -69,7 +69,7 @@ export function createPlannedLineColumns({
       id: "totalRolls",
       accessorFn: (l) => l.planning.totalRolls,
       header: ({ column }) => <DataTableColumnHeader column={column} title="Total Rolls" />,
-      cell: ({ row }) => formatNumber(row.original.planning.totalRolls, 0),
+      cell: ({ row }) => formatNumber(row.original.planning.totalRolls, 2),
       meta: { align: "right" },
     },
     {

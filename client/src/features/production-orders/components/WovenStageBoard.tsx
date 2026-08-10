@@ -160,7 +160,7 @@ export function WovenStageBoard({ orderId, line }: { orderId: string; line: Wove
 
   const operatorOptions = (operators ?? []).map((o) => ({
     value: String(o.id),
-    label: `${o.name} · ${o.designation}`,
+    label: `${o.name} · ${o.designation} Operator`,
   }));
 
   const weavingPct = Math.min(100, Math.round(((line.weaving.wovenQty ?? 0) / (line.quantity || 1)) * 1000) / 10);

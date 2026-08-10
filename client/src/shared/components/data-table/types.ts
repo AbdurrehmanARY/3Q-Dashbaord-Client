@@ -30,6 +30,8 @@ declare module "@tanstack/react-table" {
   interface ColumnMeta<TData extends RowData, TValue> {
     /** Header + cell text alignment. Left (the HTML default) needs no entry. */
     align?: "left" | "center" | "right";
+    /** Human label for the column-visibility toggle (falls back to the column id). */
+    label?: string;
   }
 }
 

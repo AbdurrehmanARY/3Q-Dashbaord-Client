@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { AppDialog } from "@/components/dialogs/AppDialog";
 import { AppInput } from "@/components/forms/AppInput";
 import { AppButton } from "@/components/forms/AppButton";
+import { AppSelect } from "@/components/forms/AppSelect";
 import { AppCombobox } from "@/components/forms/AppCombobox";
 import { purchaseSchema, type PurchaseSchemaInput } from "../schemas/purchase-schemas";
 import { useCreatePurchase, useUpdatePurchase } from "../hooks/use-purchases";
@@ -27,7 +28,6 @@ export function PurchaseForm({ open, materials, purchase, onClose }: PurchaseFor
     register,
     handleSubmit,
     control,
-    setValue,
     formState: { errors },
     reset,
   } = useForm<PurchaseSchemaInput>({
@@ -39,26 +39,26 @@ export function PurchaseForm({ open, materials, purchase, onClose }: PurchaseFor
       vendor: purchase?.vendor ?? "",
       cartonQty: purchase?.cartonQty ?? 0,
       rollsPerCarton: purchase?.rollsPerCarton ?? 0,
-      rollLength: purchase ? Number(purchase.rollLength) : 0,
+      rollLength: purchase ? Number(purchase.rollLength) : 100,
       netWeight: purchase ? Number(purchase.netWeight) : 0,
+      // Weight per roll is now enterable — seeded from the record (edit) or the first
+      // material's weight (create), but the user can override it.
+      weightPerRoll: purchase?.localWeight != null ? Number(purchase.localWeight) : Number(materials[0]?.weightPerRoll ?? 0),
       gdNumber: purchase?.gdNumber ?? "",
       efs: purchase?.efs ?? "",
     },
   });
 
-  const materialCode = useWatch({ control, name: "materialCode" });
   const cartonQty = useWatch({ control, name: "cartonQty" }) || 0;
   const rollsPerCarton = useWatch({ control, name: "rollsPerCarton" }) || 0;
-  const rollLength = useWatch({ control, name: "rollLength" }) || 0;
+  const rollLength = useWatch({ control, name: "rollLength" }) || 100;
   const netWeight = useWatch({ control, name: "netWeight" }) || 0;
+  const weightPerRoll = useWatch({ control, name: "weightPerRoll" }) || 0;
 
-  // These three are always calculated — never entered — so they live outside react-hook-form
-  // state and are recomputed live as their inputs change, mirroring the server's formulas.
   const totalRoll = cartonQty * rollsPerCarton;
   const totalRollPer200m = totalRollEquivalent200m(totalRoll, rollLength);
   const invoiceWeight = calculateInvoiceWeight(netWeight, totalRoll, rollLength);
-  const selectedMaterial = materials.find((m) => m.code === materialCode);
-  const localWeight = selectedMaterial ? Number(selectedMaterial.weightPerRoll) : null;
+  const totalWeightAuto = totalRoll * weightPerRoll;
 
   const isLoading = createPurchase.isPending || updatePurchase.isPending;
 
@@ -115,19 +115,23 @@ export function PurchaseForm({ open, materials, purchase, onClose }: PurchaseFor
 
         <AppInput label="Carton Quantity *" type="number" error={errors.cartonQty?.message} {...register("cartonQty", { valueAsNumber: true })} />
         <AppInput label="Rolls Per Carton *" type="number" error={errors.rollsPerCarton?.message} {...register("rollsPerCarton", { valueAsNumber: true })} />
-        <AppInput label="Roll Length (m) *" type="number" step="any" error={errors.rollLength?.message} {...register("rollLength", { valueAsNumber: true })} />
+        <AppSelect
+          label="Roll Length *"
+          options={[
+            { value: "100", label: "100 mm" },
+            { value: "200", label: "200 mm" },
+            { value: "400", label: "400 mm" },
+          ]}
+          error={errors.rollLength?.message}
+          {...register("rollLength", { valueAsNumber: true })}
+        />
         <AppInput label="Net Weight (kg) *" type="number" step="any" error={errors.netWeight?.message} {...register("netWeight", { valueAsNumber: true })} />
+        <AppInput label="Weight Per Roll (kg) *" type="number" step="any" error={errors.weightPerRoll?.message} {...register("weightPerRoll", { valueAsNumber: true })} />
 
         <AppInput label="Total Rolls" type="number" value={totalRoll} readOnly disabled />
         <AppInput label="Total Roll / 200m" type="text" value={formatNumber(totalRollPer200m, 2)} readOnly disabled />
+        <AppInput label="Total Weight (kg, auto)" type="text" value={formatNumber(totalWeightAuto, 2)} readOnly disabled />
         <AppInput label="Invoice Weight (kg)" type="text" value={formatNumber(invoiceWeight, 2)} readOnly disabled />
-        <AppInput
-          label="Local Weight (kg)"
-          type="text"
-          value={localWeight != null ? formatNumber(localWeight, 2) : "—"}
-          readOnly
-          disabled
-        />
 
         <div className="col-span-2">
           <AppInput label="EFS Reference" placeholder="Optional EFS reference" error={errors.efs?.message} {...register("efs")} />

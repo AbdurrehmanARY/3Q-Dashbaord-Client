@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { AppCard } from "@/components/cards/AppCard";
@@ -8,40 +8,30 @@ import { AppButton } from "@/components/forms/AppButton";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DataTable, DataTableEmpty } from "@/shared/components/data-table";
 import { formatDate, formatNumber } from "@/lib/format";
-import { PlanLabelTypeForm } from "../components/PlanLabelTypeForm";
+import { PlanLabelTypeDialog } from "../components/PlanLabelTypeDialog";
 import { ProductionOrderStatusBadge } from "../components/ProductionStatusBadge";
 import { createPlannedLineColumns } from "../components/planned-line-columns";
-import {
-  useProductionOrderOverview,
-  usePlanLine,
-  useUpdateLinePlan,
-} from "../hooks/use-production-orders";
-import type { PlanLineInput, ProductionLineOverview } from "../types";
+import { useProductionOrderOverview } from "../hooks/use-production-orders";
+import type { ProductionLineOverview } from "../types";
 
-/**
- * Phase 2 — planning, **one label type at a time**. Each submitted record immediately
- * reserves its material, printing machine and printing operator, so the reservations
- * accumulate as the planner works down the order rather than all landing at the end.
- */
 export function ProductionOrderPlanningPage() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
 
   const { data: overview, isLoading, isError, error } = useProductionOrderOverview(id);
-  const planLine = usePlanLine(id);
-  const updateLinePlan = useUpdateLinePlan();
 
+  const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<ProductionLineOverview | null>(null);
 
-  // Every hook must run on every render — including while `overview` is still loading —
-  // so this sits above the early returns below. `isLocked` defaults to false until the
-  // real status is known, which only matters for a single frame before data arrives.
   const isLocked = overview?.productionOrder.status === "complete";
   const columns = useMemo(
     () =>
       createPlannedLineColumns({
         isLocked,
-        onEdit: (line) => setEditing(line),
+        onEdit: (line) => {
+          setEditing(line);
+          setDialogOpen(true);
+        },
       }),
     [isLocked]
   );
@@ -67,13 +57,9 @@ export function ProductionOrderPlanningPage() {
   const { productionOrder: order, lines, totals } = overview;
   const remainingQty = order.totalQty - totals.plannedQty;
 
-  const handleSubmit = async (body: PlanLineInput) => {
-    if (editing) {
-      await updateLinePlan.mutateAsync({ lineId: String(editing.id), body });
-      setEditing(null);
-    } else {
-      await planLine.mutateAsync(body);
-    }
+  const handleOpenAdd = () => {
+    setEditing(null);
+    setDialogOpen(true);
   };
 
   return (
@@ -88,6 +74,11 @@ export function ProductionOrderPlanningPage() {
         actions={
           <div className="flex items-center gap-2">
             <ProductionOrderStatusBadge status={order.status} />
+            {!isLocked && (
+              <AppButton leftIcon={<Plus className="h-4 w-4" />} onClick={handleOpenAdd}>
+                Plan Label Type
+              </AppButton>
+            )}
             <AppButton variant="outline" onClick={() => navigate(`/production-orders/${id}`)}>
               Open Dashboard
             </AppButton>
@@ -114,27 +105,6 @@ export function ProductionOrderPlanningPage() {
         </AppCard>
       </div>
 
-      {isLocked ? (
-        <div className="mb-4 rounded-lg border border-warning/20 bg-warning/5 px-4 py-3 text-sm text-warning">
-          This production order is complete and can no longer be planned.
-        </div>
-      ) : remainingQty <= 0 && !editing ? (
-        <div className="mb-4 rounded-lg border border-success/20 bg-success/5 px-4 py-3 text-sm text-success">
-          The full order quantity of {formatNumber(order.totalQty, 0)} is planned. Cancel a label type
-          to free up quantity.
-        </div>
-      ) : (
-        <div className="mb-4">
-          <PlanLabelTypeForm
-            remainingQty={remainingQty}
-            editing={editing}
-            saving={planLine.isPending || updateLinePlan.isPending}
-            onSubmit={handleSubmit}
-            onCancel={() => setEditing(null)}
-          />
-        </div>
-      )}
-
       <AppCard
         title="Planned Label Types"
         description={`${lines.length} planned · ${formatNumber(totals.assignedRolls, 0)} rolls reserved from inventory`}
@@ -144,12 +114,26 @@ export function ProductionOrderPlanningPage() {
           columns={columns}
           data={lines}
           getRowId={(line) => String(line.id)}
-          pagination={false}
+          pagination={true}
           stickyFirstColumn
           stickyLastColumn
           empty={<DataTableEmpty title="Nothing planned yet" description="Add the first label type above." />}
         />
       </AppCard>
+
+      {dialogOpen && (
+        <PlanLabelTypeDialog
+          open={dialogOpen}
+          orderId={id}
+          soNumber={order.soNumber}
+          remainingQty={remainingQty}
+          editing={editing}
+          onClose={() => {
+            setDialogOpen(false);
+            setEditing(null);
+          }}
+        />
+      )}
     </div>
   );
 }

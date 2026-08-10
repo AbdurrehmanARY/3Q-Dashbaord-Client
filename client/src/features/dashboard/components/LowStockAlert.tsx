@@ -42,7 +42,7 @@ export function LowStockAlert() {
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => navigate("/inventory")}
+          onClick={() => navigate("/inventory/rolls")}
           className="h-7 gap-1 text-xs text-warning-foreground/75 hover:bg-warning/10 hover:text-warning-foreground"
         >
           View Stock <ArrowRight className="h-3 w-3" />

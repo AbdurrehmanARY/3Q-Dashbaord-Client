@@ -18,7 +18,7 @@ export function WovenTrackingTable({ lines, loading }: WovenTrackingTableProps) 
         columns={wovenColumns}
         data={lines}
         loading={loading}
-        pagination={false}
+        pagination={true}
         getRowId={(row) => String(row.id)}
         empty={
           <DataTableEmpty

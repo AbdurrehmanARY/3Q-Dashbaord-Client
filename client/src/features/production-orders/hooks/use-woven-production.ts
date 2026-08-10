@@ -98,3 +98,16 @@ export function useUpdateWovenPackaging(orderId: string) {
     onError: (err: any) => toast.error(err.message),
   });
 }
+
+export function useReconcileWovenThreadStock(orderId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ lineId, threads }: { lineId: number; threads: { id: number; remainingWeightKg: number }[] }) =>
+      wovenProductionService.reconcileRemainingThreads(lineId, threads),
+    onSuccess: () => {
+      invalidateWoven(qc, orderId);
+      toast.success("Remaining thread weight returned to inventory");
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+}

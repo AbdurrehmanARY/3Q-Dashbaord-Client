@@ -33,6 +33,10 @@ export const wovenThreadPlanItems = pgTable(
     threadStockId: integer("thread_stock_id").references(() => threadStocks.id, {
       onDelete: "set null",
     }),
+    /** Unused thread weight returned after completion. */
+    remainingWeightKg: numeric("remaining_weight_kg", { precision: 14, scale: 3 }).default("0").notNull(),
+    /** Net weight consumed = weightKg - remainingWeightKg. */
+    actualConsumedWeightKg: numeric("actual_consumed_weight_kg", { precision: 14, scale: 3 }),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },

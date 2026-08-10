@@ -92,9 +92,20 @@ export const purchaseColumns: ColumnDef<PurchaseRecord>[] = [
   },
   {
     accessorKey: "localWeight",
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Local Wt (kg)" />,
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Wt/Roll (kg)" />,
     cell: ({ row }) => (
       <span className="text-sm tabular-nums">{formatNumber(row.original.localWeight)} kg</span>
+    ),
+    meta: { align: "right", label: "Weight Per Roll" },
+  },
+  {
+    id: "totalWeight",
+    accessorFn: (p) => p.cartonQty * p.rollsPerCarton * Number(p.localWeight ?? 0),
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Total Wt (kg)" />,
+    cell: ({ row }) => (
+      <span className="font-medium tabular-nums">
+        {formatNumber(row.original.cartonQty * row.original.rollsPerCarton * Number(row.original.localWeight ?? 0), 2)} kg
+      </span>
     ),
     meta: { align: "right" },
   },

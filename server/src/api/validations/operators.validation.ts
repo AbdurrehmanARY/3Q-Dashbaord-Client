@@ -14,8 +14,7 @@ const operatorTypeEnum = z.enum(["printed", "woven", "both"]);
 const avatarUrlSchema = z
   .string()
   .trim()
-  .url("Avatar must be a valid URL")
-  .max(2048)
+  .max(1000000)
   .optional()
   .or(z.literal(""));
 
@@ -23,7 +22,7 @@ export const createOperatorSchema = z.object({
   body: z.object({
     name: z.string().min(1, "Name is required"),
     employeeCode: z.string().optional(),
-    designation: z.enum(["Printing", "Cutting", "Packaging"]).default("Printing"),
+    designation: z.enum(["Printing", "Weaving", "Cutting", "Packaging"]).default("Printing"),
     operatorType: operatorTypeEnum.default("both"),
     avatarUrl: avatarUrlSchema,
     shift: z.string().optional(),
@@ -35,7 +34,7 @@ export const updateOperatorSchema = z.object({
   body: z.object({
     name: z.string().min(1, "Name is required").optional(),
     employeeCode: z.string().optional(),
-    designation: z.enum(["Printing", "Cutting", "Packaging"]).optional(),
+    designation: z.enum(["Printing", "Weaving", "Cutting", "Packaging"]).optional(),
     operatorType: operatorTypeEnum.optional(),
     avatarUrl: avatarUrlSchema,
     shift: z.string().optional(),

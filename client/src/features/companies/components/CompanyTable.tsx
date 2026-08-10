@@ -34,7 +34,7 @@ export function CompanyTable({ selected, onSelect }: CompanyTableProps) {
         data={data ?? []}
         loading={isLoading}
         getRowId={(row) => row.id}
-        pagination={false}
+        pagination={true}
         onRowClick={onSelect}
         isRowActive={(row) => row.id === selected?.id}
         empty={

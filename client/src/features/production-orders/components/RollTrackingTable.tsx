@@ -22,7 +22,7 @@ export function RollTrackingTable({ lines, loading }: RollTrackingTableProps) {
         columns={rollColumns}
         data={lines}
         loading={loading}
-        pagination={false}
+        pagination={true}
         getRowId={(row) => String(row.id)}
         empty={
           <DataTableEmpty

@@ -36,17 +36,26 @@ export function todayISO(): string {
   return format(new Date(), "yyyy-MM-dd");
 }
 
+export const DEFAULT_ROLL_LENGTH_M = 200;
+
 /**
  * Rolls required to produce `quantity` labels (fractional).
  *
- *   requiredRolls = quantity / (7800 / (labelSizeMm / 25))
+ *   labelsPerRoll = (rollLength × 39) / (labelSizeMm / 25)
+ *   requiredRolls = quantity / labelsPerRoll
  *
  * Mirrors `server/src/api/utils/production-formula.ts` for live form preview only.
- * The server always recalculates and is the value that gets persisted.
+ * The server always recalculates and is the value that gets persisted. At the default
+ * 200 m roll length this equals the previous `7800 / (labelSizeMm / 25)` form.
  */
-export function calculateRequiredRolls(quantity: number, labelSizeMm: number): number {
+export function calculateRequiredRolls(
+  quantity: number,
+  labelSizeMm: number,
+  rollLength: number = DEFAULT_ROLL_LENGTH_M
+): number {
+  const length = rollLength > 0 ? rollLength : DEFAULT_ROLL_LENGTH_M;
   if (!(quantity > 0) || !(labelSizeMm > 0)) return 0;
-  const labelsPerRoll = 7800 / (labelSizeMm / 25);
+  const labelsPerRoll = (length * 39) / (labelSizeMm / 25);
   if (!(labelsPerRoll > 0)) return 0;
   return quantity / labelsPerRoll;
 }

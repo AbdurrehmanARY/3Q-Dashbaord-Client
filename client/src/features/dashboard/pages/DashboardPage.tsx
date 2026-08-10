@@ -89,7 +89,7 @@ export function DashboardPage() {
           icon={Package}
           iconColor="bg-amber-500/10 text-amber-500"
           loading={loading}
-          onClick={() => navigate("/inventory")}
+          onClick={() => navigate("/inventory/rolls")}
         />
         <StatCard
           title="Issued Rolls"
@@ -128,7 +128,7 @@ export function DashboardPage() {
             <h3 className="font-semibold text-foreground text-sm">Quick Actions</h3>
             <p className="text-xs text-muted-foreground mt-0.5 mb-4">Commonly performed operations</p>
             <div className="flex flex-col gap-2">
-              <Button variant="outline" className="justify-start text-xs h-9" onClick={() => navigate("/purchases")}>
+              <Button variant="outline" className="justify-start text-xs h-9" onClick={() => navigate("/purchases/rolls")}>
                 Record Purchase Invoice
               </Button>
               <Button variant="outline" className="justify-start text-xs h-9" onClick={() => navigate("/production-orders")}>
@@ -137,7 +137,7 @@ export function DashboardPage() {
               <Button variant="outline" className="justify-start text-xs h-9" onClick={() => navigate("/companies")}>
                 Register Company / Brand
               </Button>
-              <Button variant="outline" className="justify-start text-xs h-9" onClick={() => navigate("/inventory")}>
+              <Button variant="outline" className="justify-start text-xs h-9" onClick={() => navigate("/inventory/rolls")}>
                 View Inventory Stock
               </Button>
             </div>

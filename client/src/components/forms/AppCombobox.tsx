@@ -14,6 +14,7 @@ interface AppComboboxProps<TValue extends string | number> {
   placeholder?: string;
   emptyText?: string;
   disabled?: boolean;
+  maxHeight?: number;
   className?: string;
   id?: string;
 }
@@ -33,6 +34,7 @@ export function AppCombobox<TValue extends string | number>({
   placeholder = "Select…",
   emptyText = "No results.",
   disabled,
+  maxHeight,
   className,
   id,
 }: AppComboboxProps<TValue>) {
@@ -53,6 +55,7 @@ export function AppCombobox<TValue extends string | number>({
         placeholder={loading ? "Loading…" : placeholder}
         emptyText={emptyText}
         disabled={disabled || loading}
+        maxHeight={maxHeight}
         className={cn(error && "[&_input]:border-destructive", className)}
         aria-label={label}
       />

@@ -13,6 +13,7 @@ export interface StockLevel {
   itemName?: string;
   materialType?: string;
   rollLength?: number;
+  weightPerRoll?: number | string;
   status?: "in-stock" | "low-stock" | "out-of-stock";
 }
 

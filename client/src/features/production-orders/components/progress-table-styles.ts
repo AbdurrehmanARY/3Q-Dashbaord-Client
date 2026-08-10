@@ -6,29 +6,32 @@ import { stickyCellClass as sharedStickyCellClass } from "@/shared/components/da
  * of alignment — the bug that made the wide table look ragged.
  */
 export interface ProgressColumn {
+  id: string;
   label: string;
   /** Numeric columns are right-aligned so digits line up down the column. */
   align?: "right";
   /** Identity and Actions stay put while the middle scrolls horizontally. */
   sticky?: "first" | "last";
+  toggleable?: boolean;
 }
 
 export const PROGRESS_COLUMNS: ProgressColumn[] = [
-  { label: "Label Type", sticky: "first" },
-  { label: "Planned Rolls", align: "right" },
-  { label: "Printed", align: "right" },
-  { label: "Printing Machine" },
-  { label: "Printed By" },
-  { label: "Sent to Cutting", align: "right" },
-  { label: "Cut", align: "right" },
-  { label: "Cutting Machine" },
-  { label: "Cut By" },
-  { label: "Sent to Packaging", align: "right" },
-  { label: "Packaged", align: "right" },
-  { label: "Packaged Qty", align: "right" },
-  { label: "Packaged By" },
-  { label: "Completion" },
-  { label: "Actions", sticky: "last" },
+  { id: "labelType", label: "Label Type", sticky: "first", toggleable: false },
+  { id: "plannedRolls", label: "Planned Rolls", align: "right", toggleable: true },
+  { id: "unprinted", label: "Printing (Unprinted)", align: "right", toggleable: true },
+  { id: "printed", label: "Printed", align: "right", toggleable: true },
+  { id: "printingMachine", label: "Printing Machine", toggleable: true },
+  { id: "printingOperator", label: "Printed By", toggleable: true },
+  { id: "sentToCutting", label: "Sent to Cutting", align: "right", toggleable: true },
+  { id: "cut", label: "Cut", align: "right", toggleable: true },
+  { id: "cuttingMachine", label: "Cutting Machine", toggleable: true },
+  { id: "cuttingOperator", label: "Cut By", toggleable: true },
+  { id: "sentToPackaging", label: "Sent to Packaging", align: "right", toggleable: true },
+  { id: "packaged", label: "Packaged", align: "right", toggleable: true },
+  { id: "packagedQty", label: "Packaged Qty", align: "right", toggleable: true },
+  { id: "packagingOperator", label: "Packaged By", toggleable: true },
+  { id: "completion", label: "Completion", toggleable: true },
+  { id: "actions", label: "Actions", sticky: "last", toggleable: false },
 ];
 
 export const alignClass = (align?: "right") => (align === "right" ? "text-right" : undefined);

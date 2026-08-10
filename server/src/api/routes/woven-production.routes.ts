@@ -6,6 +6,7 @@ import {
   updateWeavingSchema,
   updateWovenCuttingSchema,
   updateWovenPackagingSchema,
+  reconcileRemainingThreadsSchema,
 } from "@api/validations/woven-production.validation";
 import { idParamsSchema, lineIdParamsSchema } from "@api/validations/common.validation";
 import { z } from "zod";
@@ -54,6 +55,12 @@ router.patch(
   validateParams(lineIdParamsSchema),
   validateRequest(updateWovenPackagingSchema),
   wovenProductionController.updatePackaging
+);
+router.patch(
+  "/lines/:lineId/reconcile-remaining",
+  validateParams(lineIdParamsSchema),
+  validateRequest(reconcileRemainingThreadsSchema),
+  wovenProductionController.reconcileRemaining
 );
 
 export default router;

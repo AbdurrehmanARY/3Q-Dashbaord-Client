@@ -40,8 +40,6 @@ export function MaterialForm({ open, material, onClose }: MaterialFormProps) {
       type: material?.type ?? "",
       description: material?.description ?? "",
       weightPerRoll: material ? Number(material.weightPerRoll) : 0,
-      minStockLevel: material?.minStockLevel ?? 10,
-      reorderQty: material?.reorderQty ?? 50,
     },
   });
 
@@ -120,27 +118,13 @@ export function MaterialForm({ open, material, onClose }: MaterialFormProps) {
           )}
         />
 
-        <div className="grid grid-cols-3 gap-4">
-          <AppInput
-            label="Weight / Roll (kg) *"
-            type="number"
-            step="any"
-            error={errors.weightPerRoll?.message}
-            {...register("weightPerRoll", { valueAsNumber: true })}
-          />
-          <AppInput
-            label="Min Stock (rolls) *"
-            type="number"
-            error={errors.minStockLevel?.message}
-            {...register("minStockLevel", { valueAsNumber: true })}
-          />
-          <AppInput
-            label="Reorder Qty (rolls) *"
-            type="number"
-            error={errors.reorderQty?.message}
-            {...register("reorderQty", { valueAsNumber: true })}
-          />
-        </div>
+        <AppInput
+          label="Weight / Roll (kg) *"
+          type="number"
+          step="any"
+          error={errors.weightPerRoll?.message}
+          {...register("weightPerRoll", { valueAsNumber: true })}
+        />
       </form>
     </AppDialog>
   );

@@ -1,6 +1,18 @@
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
-import { EyeIcon, MoreHorizontalIcon, PencilIcon, Trash2Icon, TruckIcon } from "lucide-react";
+import {
+  EyeIcon,
+  MoreHorizontalIcon,
+  PencilIcon,
+  Trash2Icon,
+  TruckIcon,
+  ArrowUpToLineIcon,
+  ArrowDownToLineIcon,
+  PinOffIcon,
+  ScissorsIcon,
+  CopyIcon,
+  PlusCircleIcon,
+} from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -29,28 +41,37 @@ import type { WorkOrder } from "../types";
 /**
  * Per-row actions. Owns its own delete mutation rather than taking a callback, so the
  * column definitions stay pure data and the generic table stays feature-agnostic.
- *
- * The confirm dialog is a sibling of the menu, driven by local state: a dialog rendered
- * *inside* `DropdownMenuContent` would unmount the moment the menu closes on click.
  */
-export function WorkOrderRowActions({ workOrder }: { workOrder: WorkOrder }) {
+export interface RowPinControls {
+  isPinned: false | "top" | "bottom";
+  pinTop: () => void;
+  pinBottom: () => void;
+  unpin: () => void;
+}
+
+export function WorkOrderRowActions({
+  workOrder,
+  pinControls,
+}: {
+  workOrder: WorkOrder;
+  pinControls?: RowPinControls;
+}) {
   const navigate = useNavigate();
   const deleteWorkOrder = useDeleteWorkOrder();
   const [confirmOpen, setConfirmOpen] = React.useState(false);
   const [editOpen, setEditOpen] = React.useState(false);
   const [dispatchOpen, setDispatchOpen] = React.useState(false);
+  const [childOrderType, setChildOrderType] = React.useState<"shortfall" | "recut order" | "additional order" | null>(null);
 
-  // Only an untouched sales order can be edited or deleted; once production owns it the
-  // server rejects both, so the menu does not offer dead actions.
-  const isEditable = workOrder.status === "initiate_production";
-  // Dispatch is the final step, available once production has completed the order. It stays
-  // available afterwards so a typo'd DC/LC/FBR number can be corrected.
+  // Work orders can now be edited and deleted anytime regardless of status
+  const isEditable = true;
+  const isDeletable = true;
   const canDispatch = workOrder.status === "complete" || workOrder.status === "dispatched";
+  const isDispatched = workOrder.status === "dispatched" || workOrder.status === "complete";
 
   return (
     <div className="flex justify-end">
       <DropdownMenu>
-        {/* className rather than `render={<Button/>}` — see data-table-column-header. */}
         <DropdownMenuTrigger
           className={cn(buttonVariants({ variant: "ghost", size: "icon-sm" }))}
           aria-label={`Actions for ${workOrder.soNumber}`}
@@ -63,26 +84,70 @@ export function WorkOrderRowActions({ workOrder }: { workOrder: WorkOrder }) {
             <EyeIcon className="text-muted-foreground" />
             View
           </DropdownMenuItem>
-          <DropdownMenuItem
-            disabled={!isEditable}
-            onClick={() => setEditOpen(true)}
-          >
+          <DropdownMenuItem onClick={() => setEditOpen(true)}>
             <PencilIcon className="text-muted-foreground" />
             Edit
           </DropdownMenuItem>
 
-          {canDispatch && (
-            <DropdownMenuItem onClick={() => setDispatchOpen(true)}>
-              <TruckIcon className="text-muted-foreground" />
-              {workOrder.status === "dispatched" ? "Edit Dispatch" : "Dispatch"}
+          <DropdownMenuSeparator />
+
+          {isDispatched ? (
+            <>
+              <DropdownMenuItem onClick={() => setChildOrderType("shortfall")}>
+                <ScissorsIcon className="text-muted-foreground" />
+                Shortfall Order
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setChildOrderType("recut order")}>
+                <CopyIcon className="text-muted-foreground" />
+                Recut Order
+              </DropdownMenuItem>
+            </>
+          ) : (
+            <DropdownMenuItem onClick={() => setChildOrderType("additional order")}>
+              <PlusCircleIcon className="text-muted-foreground" />
+              Additional Order
             </DropdownMenuItem>
+          )}
+
+          {canDispatch && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => setDispatchOpen(true)}>
+                <TruckIcon className="text-muted-foreground" />
+                {workOrder.status === "dispatched" ? "Edit Dispatch" : "Dispatch"}
+              </DropdownMenuItem>
+            </>
+          )}
+
+          {pinControls && (
+            <>
+              <DropdownMenuSeparator />
+              {pinControls.isPinned !== "top" && (
+                <DropdownMenuItem onClick={pinControls.pinTop}>
+                  <ArrowUpToLineIcon className="text-muted-foreground" />
+                  Pin to top
+                </DropdownMenuItem>
+              )}
+              {pinControls.isPinned !== "bottom" && (
+                <DropdownMenuItem onClick={pinControls.pinBottom}>
+                  <ArrowDownToLineIcon className="text-muted-foreground" />
+                  Pin to bottom
+                </DropdownMenuItem>
+              )}
+              {pinControls.isPinned && (
+                <DropdownMenuItem onClick={pinControls.unpin}>
+                  <PinOffIcon className="text-muted-foreground" />
+                  Unpin row
+                </DropdownMenuItem>
+              )}
+            </>
           )}
 
           <DropdownMenuSeparator />
 
           <DropdownMenuItem
             variant="destructive"
-            disabled={!isEditable}
+            disabled={!isDeletable}
             onClick={() => setConfirmOpen(true)}
           >
             <Trash2Icon />
@@ -121,6 +186,15 @@ export function WorkOrderRowActions({ workOrder }: { workOrder: WorkOrder }) {
 
       {editOpen && (
         <WorkOrderDialog open workOrder={workOrder} onClose={() => setEditOpen(false)} />
+      )}
+
+      {childOrderType && (
+        <WorkOrderDialog
+          open
+          workOrder={workOrder}
+          childOrderType={childOrderType}
+          onClose={() => setChildOrderType(null)}
+        />
       )}
 
       {dispatchOpen && (

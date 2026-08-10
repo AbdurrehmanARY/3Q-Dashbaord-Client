@@ -276,3 +276,38 @@
   background-size: 200% 100%;
   animation: shimmer 1.8s ease-in-out infinite;
 }
+/* ============================================================
+   Print: only the data-table print-area is shown. The interactive
+   table (checkboxes, dropdowns, pinned columns) never prints cleanly,
+   so tables render a plain #print-area of just the selected rows.
+   ============================================================ */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #print-area,
+  #print-area * {
+    visibility: visible;
+  }
+  #print-area {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+  }
+  #print-area table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  #print-area th,
+  #print-area td {
+    border: 1px solid #999;
+    padding: 4px 8px;
+    text-align: left;
+  }
+  #print-area thead th {
+    background: #eee;
+    font-weight: 600;
+  }
+}

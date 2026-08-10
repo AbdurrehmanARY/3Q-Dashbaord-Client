@@ -198,7 +198,7 @@ export class ThreadInventoryRepository {
    * Finds a ledger row by its identity, or creates it at zero. Locked `FOR UPDATE` on the
    * way out so the caller can safely compute against the balance it just read.
    */
-  private async getOrCreateStockTx(
+  async getOrCreateStockTx(
     tx: Tx,
     identity: { stockType: StockType; denier: Denier; colorName: string; colorCode: string | null }
   ): Promise<ThreadStock> {
@@ -226,7 +226,7 @@ export class ThreadInventoryRepository {
    * it. Negative weights debit. Throws if the result would be negative — physical stock
    * cannot go below zero, and silently allowing it would corrupt every downstream figure.
    */
-  private async moveStockTx(
+  async moveStockTx(
     tx: Tx,
     stockId: number,
     weightKg: number,

@@ -8,6 +8,9 @@ export interface WovenThread {
   denier: ThreadDenier;
   colorCode: string;
   weightKg: number;
+  threadStockId?: number | null;
+  remainingWeightKg?: number;
+  actualConsumedWeightKg?: number;
 }
 
 export interface WovenLineOverview {
@@ -81,6 +84,7 @@ export interface ThreadPlanInput {
   denier: ThreadDenier;
   colorCode: string;
   weightKg: number;
+  threadStockId?: number | null;
 }
 
 export interface PlanWovenInput {

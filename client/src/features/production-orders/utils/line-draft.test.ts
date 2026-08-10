@@ -22,10 +22,13 @@ function makeDraft(overrides: Partial<LineDraft> = {}): LineDraft {
 const planning: LinePlanning = {
   quantity: 1000,
   labelSize: 50,
+  rollLength: 200,
   requiredRolls: 2,
   extraRolls: 0,
   totalRolls: 10,
-  totalWeight: null,
+  totalWeight: 0,
+  printingMachineId: null,
+  printingOperatorId: null,
 };
 
 describe("cascadeDraft", () => {

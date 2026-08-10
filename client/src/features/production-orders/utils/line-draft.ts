@@ -109,6 +109,18 @@ export function validateLineDraft(
     errors.cutRolls = `Cannot exceed cutting (${draft.sentToCuttingRolls})`;
   }
 
+  // Cutting submission requires cutting machine and operator assignment
+  if (draft.sentToCuttingRolls > 0 || draft.cutRolls > 0) {
+    if (draft.cuttingMachineId == null) {
+      errors.cuttingMachineId = "Cutting machine required";
+      if (!errors.sentToCuttingRolls) errors.sentToCuttingRolls = "Assign cutting machine & operator first";
+    }
+    if (draft.cuttingOperatorId == null) {
+      errors.cuttingOperatorId = "Cutting operator required";
+      if (!errors.sentToCuttingRolls) errors.sentToCuttingRolls = "Assign cutting machine & operator first";
+    }
+  }
+
   if (draft.sentToPackagingRolls < 0) errors.sentToPackagingRolls = "Cannot be negative";
   else if (draft.sentToPackagingRolls > draft.cutRolls) {
     errors.sentToPackagingRolls = `Cannot exceed cutted (${draft.cutRolls})`;
@@ -183,12 +195,15 @@ export function patchOverviewLine(
       liveProgress: {
         ...line.liveProgress,
         printedRolls,
+        unprintedRolls: Math.max(totalRolls - printedRolls, 0),
         waitingForCutting: Math.max(printedRolls - sentToCuttingRolls, 0),
         sentToCuttingRolls,
         cutRolls,
+        inCuttingProcess: Math.max(sentToCuttingRolls - cutRolls, 0),
         waitingForPackaging: Math.max(cutRolls - sentToPackagingRolls, 0),
         sentToPackagingRolls,
         packagedRolls,
+        inPackagingProcess: Math.max(sentToPackagingRolls - packagedRolls, 0),
         completionPct: completionPct(packagedRolls, totalRolls),
       },
     };

@@ -1,5 +1,5 @@
 /** Public API of the thread feature (`@/features/thread`). */
-export { ThreadStockPanel } from "./components/ThreadStockPanel";
+export { ThreadStockPanel, UndyedThreadStockPanel, DyedThreadStockPanel } from "./components/ThreadStockPanel";
 export { ThreadPurchasePanel } from "./components/ThreadPurchasePanel";
 export { DyeThreadDialog } from "./components/DyeThreadDialog";
 export {

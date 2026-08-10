@@ -118,14 +118,15 @@ function ComboboxContent({
   )
 }
 
-function ComboboxList({ className, ...props }: ComboboxPrimitive.List.Props) {
+function ComboboxList({ className, style, ...props }: ComboboxPrimitive.List.Props) {
   return (
     <ComboboxPrimitive.List
       data-slot="combobox-list"
       className={cn(
-        "no-scrollbar max-h-[min(calc(--spacing(72)---spacing(9)),calc(var(--available-height)---spacing(9)))] scroll-py-1 overflow-y-auto overscroll-contain p-1 data-empty:p-0",
+        "max-h-60 scroll-py-1 overflow-y-auto overscroll-contain p-1 data-empty:p-0",
         className
       )}
+      style={style}
       {...props}
     />
   )
@@ -304,6 +305,7 @@ function ComboboxSelect<TValue extends string | number>({
   placeholder = "Select…",
   emptyText = "No results.",
   disabled,
+  maxHeight,
   className,
   "aria-label": ariaLabel,
   id,
@@ -331,7 +333,7 @@ function ComboboxSelect<TValue extends string | number>({
       />
       <ComboboxContent>
         <ComboboxEmpty>{emptyText}</ComboboxEmpty>
-        <ComboboxList>
+        <ComboboxList style={maxHeight ? { maxHeight } : undefined}>
           {(item: ComboboxOption<TValue>) => (
             <ComboboxItem key={String(item.value)} value={item} disabled={item.disabled}>
               <div className="flex min-w-0 flex-col">

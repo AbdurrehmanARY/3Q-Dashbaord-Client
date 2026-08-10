@@ -26,6 +26,7 @@ export interface EligibleSalesOrder {
   orderDate: string;
   dueDate: string | null;
   totalQty: number;
+  productType: "printed" | "woven";
   brandId: number | null;
   brandName: string | null;
   companyId: number | null;
@@ -38,6 +39,8 @@ export interface ProductionOrder {
   productionNumber: string;
   workOrderId: number;
   totalQty: number;
+  plannedQty?: number;
+  unplannedQty?: number;
   status: ProductionOrderStatus;
   notes: string | null;
   createdByUserId: number | null;
@@ -50,6 +53,9 @@ export interface ProductionOrder {
   orderDate: string;
   dueDate: string | null;
   salesOrderQty: number;
+  productType?: "printed" | "woven";
+  priority?: string;
+  machineName?: string | null;
   brandId: number | null;
   brandName: string | null;
   companyId: number | null;
@@ -80,6 +86,11 @@ export interface ProductionOrderLine {
   cuttingMachineId: number | null;
   cuttingOperatorId: number | null;
   packagingOperatorId: number | null;
+  usedRolls?: string;
+  usedWeight?: string;
+  extraRollsReturned?: string;
+  extraWeight?: string;
+  reconciledAt?: string | null;
   status: ProductionLineStatus;
   notes: string | null;
   createdAt: string;
@@ -95,10 +106,13 @@ export interface ProductionOrderDetail extends ProductionOrder {
 export interface LinePlanning {
   quantity: number;
   labelSize: number;
+  rollLength: number;
   requiredRolls: number;
   extraRolls: number;
   totalRolls: number;
-  totalWeight: number | null;
+  totalWeight: number;
+  printingMachineId: number | null;
+  printingOperatorId: number | null;
 }
 
 /** Material detail is echoed back with the line so the floor can verify the selection. */
@@ -160,13 +174,31 @@ export interface LinePackaging {
 export interface LineLiveProgress {
   totalRolls: number;
   printedRolls: number;
+  unprintedRolls?: number;
   waitingForCutting: number;
   sentToCuttingRolls: number;
   cutRolls: number;
+  inCuttingProcess?: number;
   waitingForPackaging: number;
   sentToPackagingRolls: number;
   packagedRolls: number;
+  inPackagingProcess?: number;
   completionPct: number;
+}
+
+export interface LineReconciliation {
+  usedRolls: number;
+  usedWeight: number;
+  extraRollsReturned: number;
+  extraWeight: number;
+  reconciledAt: string | null;
+}
+
+export interface ReconcileInput {
+  usedRolls: number;
+  usedWeight: number;
+  extraRollsReturned: number;
+  extraWeight: number;
 }
 
 export interface ProductionLineOverview {
@@ -180,6 +212,7 @@ export interface ProductionLineOverview {
   printing: LinePrinting;
   cutting: LineCutting;
   packaging: LinePackaging;
+  reconciliation?: LineReconciliation;
   liveProgress: LineLiveProgress;
 }
 
@@ -221,10 +254,13 @@ export interface ProductionOrderTotals {
   issuedRolls: number;
   pendingIssue: number;
   printedRolls: number;
+  unprintedRolls?: number;
   sentToCuttingRolls: number;
   cutRolls: number;
+  inCuttingProcess?: number;
   sentToPackagingRolls: number;
   packagedRolls: number;
+  inPackagingProcess?: number;
   waitingForCutting: number;
   waitingForPackaging: number;
   completionPct: number;
@@ -276,6 +312,7 @@ export interface PlanLineInput {
   labelType: string;
   quantity: number;
   labelSize: number;
+  rollLength?: number;
   extraRolls?: number;
   materialCode: string;
   /** Manual figure — drawn from inventory when the record is submitted. */
@@ -360,6 +397,7 @@ export interface UpdateLineFullInput {
   cuttingMachineId?: number | null;
   cuttingOperatorId?: number | null;
   packagingOperatorId?: number | null;
+  status?: ProductionLineStatus;
   note?: string;
   actorUserId?: number;
 }

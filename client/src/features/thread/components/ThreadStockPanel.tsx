@@ -144,10 +144,143 @@ function StockTable({
   );
 }
 
+export function UndyedThreadStockPanel() {
+  const { data, isLoading } = useThreadStockSummary();
+  const deleteStock = useDeleteThreadStock();
+  const [dyeOpen, setDyeOpen] = React.useState(false);
+  const [createOpen, setCreateOpen] = React.useState(false);
+  const [editing, setEditing] = React.useState<ThreadStock | null>(null);
+
+  const tableProps = {
+    onEdit: (row: ThreadStock) => setEditing(row),
+    onDelete: (row: ThreadStock) => deleteStock.mutate(row.id),
+    deleting: deleteStock.isPending,
+  };
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        <div className="grid gap-4 sm:grid-cols-2">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <Skeleton key={i} className="h-28 w-full" />
+          ))}
+        </div>
+        <Skeleton className="h-64 w-full" />
+      </div>
+    );
+  }
+
+  const totals = data?.totals;
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <StatCard
+          title="Primary (Undyed) Stock"
+          value={`${formatNumber(totals?.primaryKg ?? 0, 2)} kg`}
+          description={`${totals?.primaryCount ?? 0} raw thread type(s)`}
+          icon={Boxes}
+          iconColor="bg-blue-500/10 text-blue-500"
+        />
+        <StatCard
+          title="Raw Stock Status"
+          value={`${totals?.primaryCount ?? 0} Items`}
+          description="Available for dyeing & direct production"
+          icon={Palette}
+          iconColor="bg-emerald-500/10 text-emerald-500"
+        />
+      </div>
+
+      <AppCard
+        title="Primary Stock — Undyed Thread"
+        description="Raw thread as received. Dyeing draws weight from this ledger."
+        contentClassName="p-0"
+        headerActions={
+          <div className="flex gap-2">
+            <AppButton
+              size="sm"
+              variant="outline"
+              leftIcon={<Plus className="h-4 w-4" />}
+              onClick={() => setCreateOpen(true)}
+            >
+              New Ledger
+            </AppButton>
+            <AppButton size="sm" leftIcon={<Palette className="h-4 w-4" />} onClick={() => setDyeOpen(true)}>
+              Dye Thread
+            </AppButton>
+          </div>
+        }
+      >
+        <StockTable rows={data?.primary ?? []} showCode={false} {...tableProps} />
+      </AppCard>
+
+      {dyeOpen && <DyeThreadDialog open onClose={() => setDyeOpen(false)} />}
+      {createOpen && <ThreadStockDialog open stock={null} onClose={() => setCreateOpen(false)} />}
+      {editing && <ThreadStockDialog open stock={editing} onClose={() => setEditing(null)} />}
+    </div>
+  );
+}
+
+export function DyedThreadStockPanel() {
+  const { data, isLoading } = useThreadStockSummary();
+  const deleteStock = useDeleteThreadStock();
+  const [editing, setEditing] = React.useState<ThreadStock | null>(null);
+
+  const tableProps = {
+    onEdit: (row: ThreadStock) => setEditing(row),
+    onDelete: (row: ThreadStock) => deleteStock.mutate(row.id),
+    deleting: deleteStock.isPending,
+  };
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        <div className="grid gap-4 sm:grid-cols-2">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <Skeleton key={i} className="h-28 w-full" />
+          ))}
+        </div>
+        <Skeleton className="h-64 w-full" />
+      </div>
+    );
+  }
+
+  const totals = data?.totals;
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <StatCard
+          title="Secondary (Dyed) Stock"
+          value={`${formatNumber(totals?.secondaryKg ?? 0, 2)} kg`}
+          description={`${totals?.secondaryCount ?? 0} color shade(s)`}
+          icon={Droplet}
+          iconColor="bg-primary/10 text-primary"
+        />
+        <StatCard
+          title="Dyed Stock Status"
+          value={`${totals?.secondaryCount ?? 0} Colors`}
+          description="Processed thread ready for woven production"
+          icon={Palette}
+          iconColor="bg-violet-500/10 text-violet-500"
+        />
+      </div>
+
+      <AppCard
+        title="Secondary Stock — Dyed Thread"
+        description="Produced by the dyeing process. Woven label planning consumes this pool first."
+        contentClassName="p-0"
+      >
+        <StockTable rows={data?.secondary ?? []} showCode {...tableProps} />
+      </AppCard>
+
+      {editing && <ThreadStockDialog open stock={editing} onClose={() => setEditing(null)} />}
+    </div>
+  );
+}
+
 /**
- * Thread stock, split into the two pools the floor actually thinks in terms of: undyed
- * thread as purchased (primary) and dyed thread produced by the dyeing process (secondary).
- * Dyeing moves weight from the first to the second.
+ * Combined thread stock panel (retained for legacy combined views).
  */
 export function ThreadStockPanel() {
   const { data, isLoading } = useThreadStockSummary();

@@ -11,9 +11,15 @@ import type { Brand, Company } from "../types";
 export function createBrandColumns(company: Company): ColumnDef<Brand>[] {
   return [
     {
-      accessorKey: "name",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Brand Name" />,
-      cell: ({ row }) => <span className="font-medium">{row.original.name}</span>,
+      id: "companyBrand",
+      accessorFn: (row) => `${company.name} ${row.name}`,
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Company / Brand" />,
+      cell: ({ row }) => (
+        <div className="text-sm leading-tight">
+          <div className="font-medium text-foreground">{company.name}</div>
+          <div className="text-xs text-muted-foreground">{row.original.name}</div>
+        </div>
+      ),
     },
     {
       id: "actions",

@@ -10,7 +10,10 @@ import { machineColumns } from "./machine-columns";
 import { MachineDialog } from "./MachineDialog";
 import { MACHINE_TYPES } from "../schemas/entity-schemas";
 
-const TYPE_OPTIONS: ComboboxOption<string>[] = MACHINE_TYPES.map((t) => ({ value: t, label: t }));
+const TYPE_OPTIONS: ComboboxOption<string>[] = MACHINE_TYPES.map((t) => ({
+  value: t,
+  label: `${t} Machines`,
+}));
 
 export function MachineTable() {
   const [type, setType] = React.useState<string | null>(null);
@@ -32,7 +35,7 @@ export function MachineTable() {
         data={data ?? []}
         loading={isLoading}
         getRowId={(row) => row.id}
-        pagination={false}
+        pagination={true}
         empty={
           (data ?? []).length === 0 && !type ? (
             <DataTableEmpty icon={<CogIcon />} title="No machines yet" description="Add the first production machine.">
@@ -55,13 +58,13 @@ export function MachineTable() {
         }
         toolbar={(table) => (
           <DataTableToolbar table={table} searchPlaceholder="Search machines…">
-            <div className="sm:w-40">
+            <div className="w-full sm:w-52">
               <Combobox
                 options={TYPE_OPTIONS}
                 value={type}
                 onChange={setType}
-                placeholder="All types"
-                emptyText="No types."
+                placeholder="Filter by Type (All)"
+                emptyText="No machine types."
                 aria-label="Filter by machine type"
               />
             </div>

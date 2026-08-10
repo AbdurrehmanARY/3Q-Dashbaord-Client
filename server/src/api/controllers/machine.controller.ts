@@ -5,8 +5,8 @@ import type { CreateMachineDTO, UpdateMachineDTO } from "../validations/machines
 
 class MachineController {
   getMachines = asyncHandler(async (req: Request, res: Response) => {
-    const { type, includeInactive } = (req.validatedQuery ?? req.query) as { type?: string; includeInactive?: boolean };
-    const data = await machineService.getMachines({ type, includeInactive });
+    const { type, productType, includeInactive } = (req.validatedQuery ?? req.query) as { type?: string; productType?: "printed" | "woven"; includeInactive?: boolean };
+    const data = await machineService.getMachines({ type, productType, includeInactive });
     res.json({ data });
   });
 

@@ -8,8 +8,13 @@ export class ApiError extends Error {
   }
 }
 
+// In dev, `/api` is proxied to the local server by Vite (see vite.config.ts). In production
+// the client and API are on separate origins (two Vercel projects), so point at the deployed
+// backend via VITE_API_URL, e.g. "https://your-server.vercel.app/api".
+const baseURL = import.meta.env.VITE_API_URL || "/api";
+
 export const axiosInstance = axios.create({
-  baseURL: "/api",
+  baseURL,
   headers: {
     "Content-Type": "application/json",
   },

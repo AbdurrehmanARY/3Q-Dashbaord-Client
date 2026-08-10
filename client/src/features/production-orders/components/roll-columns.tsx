@@ -38,21 +38,71 @@ export const rollColumns: ColumnDef<ProductionLineOverview>[] = [
   {
     id: "totalRolls",
     accessorFn: (line) => line.planning.totalRolls,
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Planned Rolls" />,
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Total Planned" />,
     cell: ({ row }) => (
-      <span className="tabular-nums text-muted-foreground">
-        {formatNumber(row.original.planning.totalRolls, 0)}
+      <span className="tabular-nums font-medium">
+        {formatNumber(row.original.planning.totalRolls, 2)}
       </span>
     ),
   },
   {
+    id: "unprinted",
+    accessorFn: (line) => Math.max(line.planning.totalRolls - line.printing.printedRolls, 0),
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Unprinted Balance" />,
+    cell: ({ row }) => {
+      const unprinted = Math.max(row.original.planning.totalRolls - row.original.printing.printedRolls, 0);
+      return (
+        <span className="tabular-nums font-semibold text-blue-600 dark:text-blue-400">
+          {formatNumber(unprinted, 2)}
+        </span>
+      );
+    },
+  },
+  {
     id: "printedRolls",
     accessorFn: (line) => line.printing.printedRolls,
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Printed Rolls" />,
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Printed" />,
     cell: ({ row }) => (
-      <span className="tabular-nums">{formatNumber(row.original.printing.printedRolls, 0)}</span>
+      <span className="tabular-nums">{formatNumber(row.original.printing.printedRolls, 2)}</span>
     ),
-    size: 120,
+  },
+  {
+    id: "waitingForCutting",
+    accessorFn: (line) => line.liveProgress.waitingForCutting,
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Avail for Cutting" />,
+    cell: ({ row }) => (
+      <span className="tabular-nums font-semibold text-emerald-600 dark:text-emerald-400">
+        {formatNumber(row.original.liveProgress.waitingForCutting, 2)}
+      </span>
+    ),
+  },
+  {
+    id: "cutRolls",
+    accessorFn: (line) => line.cutting.cutRolls,
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Cutted" />,
+    cell: ({ row }) => (
+      <span className="tabular-nums">{formatNumber(row.original.cutting.cutRolls, 2)}</span>
+    ),
+  },
+  {
+    id: "waitingForPackaging",
+    accessorFn: (line) => line.liveProgress.waitingForPackaging,
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Avail for Packaging" />,
+    cell: ({ row }) => (
+      <span className="tabular-nums font-semibold text-indigo-600 dark:text-indigo-400">
+        {formatNumber(row.original.liveProgress.waitingForPackaging, 2)}
+      </span>
+    ),
+  },
+  {
+    id: "packaged",
+    accessorFn: (line) => line.packaging.packagedRolls,
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Packaged" />,
+    cell: ({ row }) => (
+      <span className="tabular-nums font-semibold text-success">
+        {formatNumber(row.original.packaging.packagedRolls, 2)}
+      </span>
+    ),
   },
   {
     id: "completion",
@@ -60,19 +110,11 @@ export const rollColumns: ColumnDef<ProductionLineOverview>[] = [
     header: ({ column }) => <DataTableColumnHeader column={column} title="Completion" />,
     cell: ({ row }) => (
       <ProgressBar
-        value={row.original.printing.printedRolls}
+        value={row.original.packaging.packagedRolls}
         max={row.original.planning.totalRolls}
         unit="rolls"
       />
     ),
-    size: 180,
-  },
-  {
-    id: "packaged",
-    accessorFn: (line) => line.packaging.packagedRolls,
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Packaged" />,
-    cell: ({ row }) => (
-      <span className="tabular-nums">{formatNumber(row.original.packaging.packagedRolls, 0)}</span>
-    ),
+    size: 160,
   },
 ];

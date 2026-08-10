@@ -23,6 +23,7 @@ export interface ThreadPlanInput {
   denier: Denier;
   colorCode: string;
   weightKg: number;
+  threadStockId?: number | null;
 }
 
 /** Reference tag used on every thread movement a woven line causes. */
@@ -153,8 +154,8 @@ export class WovenProductionRepository {
           denier: thread.denier,
           colorCode: thread.colorCode,
           weightKg: String(thread.weightKg),
-          // Which ledger row satisfied it — the first slice is the primary source.
-          threadStockId: slices[0]?.threadStockId ?? null,
+          // Which ledger row satisfied it — explicit user selection or the first slice source.
+          threadStockId: thread.threadStockId ?? slices[0]?.threadStockId ?? null,
         });
       }
 
@@ -215,6 +216,79 @@ export class WovenProductionRepository {
 
       await this.resyncOrderTx(tx, line.productionOrderId, derive);
       return line;
+    });
+  }
+
+  /**
+   * Post-completion inventory reconciliation: returns remaining thread weights to stock,
+   * updates remainingWeightKg and actualConsumedWeightKg on each thread item.
+   */
+  async reconcileRemainingThreadsTransaction(
+    lineId: number,
+    threads: { id: number; remainingWeightKg: number }[],
+    actorUserId?: number | null
+  ) {
+    return db.transaction(async (tx) => {
+      const [line] = await tx
+        .select()
+        .from(wovenProductionLines)
+        .where(eq(wovenProductionLines.id, lineId))
+        .for("update");
+      if (!line) throw new NotFoundError("Woven production line not found");
+
+      const existingThreads = await tx
+        .select()
+        .from(wovenThreadPlanItems)
+        .where(eq(wovenThreadPlanItems.wovenProductionLineId, lineId));
+
+      for (const inputThread of threads) {
+        const target = existingThreads.find((t) => t.id === inputThread.id);
+        if (!target) continue;
+
+        const plannedWeight = Number(target.weightKg || 0);
+        const remWeight = Math.max(0, Number(inputThread.remainingWeightKg || 0));
+
+        if (remWeight > plannedWeight) {
+          throw new Error(
+            `Remaining weight (${remWeight} kg) for ${target.colorName} cannot exceed planned weight (${plannedWeight} kg)`
+          );
+        }
+
+        const prevRemaining = Number(target.remainingWeightKg || 0);
+        // Net weight to release back to inventory (delta if re-submitting)
+        const weightDeltaToRelease = remWeight - prevRemaining;
+
+        if (weightDeltaToRelease > 0 && target.threadStockId) {
+          await threadInventoryRepository.moveStockTx(
+            tx,
+            target.threadStockId,
+            weightDeltaToRelease,
+            "production_release",
+            {
+              referenceType: PLAN_REF,
+              referenceId: lineId,
+              note: `Post-completion remaining thread return (${target.colorCode})`,
+              actorUserId: actorUserId ?? null,
+            }
+          );
+        }
+
+        const actualConsumed = Math.max(0, plannedWeight - remWeight);
+        await tx
+          .update(wovenThreadPlanItems)
+          .set({
+            remainingWeightKg: String(remWeight),
+            actualConsumedWeightKg: String(actualConsumed),
+            updatedAt: new Date(),
+          })
+          .where(eq(wovenThreadPlanItems.id, target.id));
+      }
+
+      return tx
+        .select()
+        .from(wovenThreadPlanItems)
+        .where(eq(wovenThreadPlanItems.wovenProductionLineId, lineId))
+        .orderBy(wovenThreadPlanItems.sortOrder);
     });
   }
 

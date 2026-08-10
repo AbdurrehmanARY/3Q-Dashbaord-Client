@@ -25,4 +25,6 @@ export const wovenProductionService = {
     api.patch<{ data: WovenLineOverview }>(`/woven-production/lines/${lineId}/cutting`, body),
   updatePackaging: (lineId: number, body: WovenPackagingInput) =>
     api.patch<{ data: WovenLineOverview }>(`/woven-production/lines/${lineId}/packaging`, body),
+  reconcileRemainingThreads: (lineId: number, threads: { id: number; remainingWeightKg: number }[]) =>
+    api.patch<{ data: any }>(`/woven-production/lines/${lineId}/reconcile-remaining`, { threads }),
 };

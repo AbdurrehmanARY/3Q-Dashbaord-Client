@@ -6,6 +6,7 @@ import type {
   UpdateWeavingDTO,
   UpdateWovenCuttingDTO,
   UpdateWovenPackagingDTO,
+  ReconcileRemainingThreadsDTO,
 } from "../validations/woven-production.validation";
 
 class WovenProductionController {
@@ -55,6 +56,13 @@ class WovenProductionController {
     const { lineId } = (req.validatedParams ?? req.params) as { lineId: string };
     const input = (req.validatedBody ?? req.body) as UpdateWovenPackagingDTO;
     const data = await wovenProductionService.updatePackaging(lineId, input);
+    res.json({ data });
+  });
+
+  reconcileRemaining = asyncHandler(async (req: Request, res: Response) => {
+    const { lineId } = (req.validatedParams ?? req.params) as { lineId: string };
+    const input = (req.validatedBody ?? req.body) as ReconcileRemainingThreadsDTO;
+    const data = await wovenProductionService.reconcileRemainingThreads(lineId, input);
     res.json({ data });
   });
 }

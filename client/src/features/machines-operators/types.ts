@@ -12,6 +12,7 @@ export interface Machine {
   machineCode: string;
   machineName: string;
   machineType: string;
+  productType: OperatorType;
   machineOperatorId?: string | null;
   capacityPerHour: number | null;
   status: string;

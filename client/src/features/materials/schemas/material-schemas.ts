@@ -5,8 +5,6 @@ export const materialSchema = z.object({
   type: z.string().min(1, "Type is required"),
   description: z.string().optional().or(z.literal("")),
   weightPerRoll: z.coerce.number().positive("Weight must be positive"),
-  minStockLevel: z.coerce.number().int().min(0, "Must be 0 or more"),
-  reorderQty: z.coerce.number().int().min(0, "Must be 0 or more"),
 });
 
 export type MaterialSchemaInput = z.infer<typeof materialSchema>;

@@ -3,6 +3,7 @@ import { productionOrderRepository } from "../repositories/production-order.repo
 import { machineRepository } from "../repositories/machine.repository";
 import { operatorRepository } from "../repositories/operator.repository";
 import { userService } from "./user.service";
+import { mailService } from "./mail.service";
 import { ApiError, NotFoundError } from "../utils/ApiError";
 import { Messages, Entity } from "../constants/messages";
 import {
@@ -78,6 +79,12 @@ export class WovenProductionService {
               denier: t.denier,
               colorCode: t.colorCode,
               weightKg: Number(t.weightKg),
+              remainingWeightKg: Number(t.remainingWeightKg || 0),
+              actualConsumedWeightKg:
+                t.actualConsumedWeightKg != null
+                  ? Number(t.actualConsumedWeightKg)
+                  : Math.max(0, Number(t.weightKg) - Number(t.remainingWeightKg || 0)),
+              threadStockId: t.threadStockId ?? null,
             })),
           },
           weaving: {
@@ -118,17 +125,29 @@ export class WovenProductionService {
     const sum = (pick: (l: WovenProductionLine) => number) =>
       lines.reduce((acc, l) => acc + pick(l), 0);
 
+    const totalThreadIssued = sum((l) => Number(l.totalThreadWeightKg));
+    const remainingThreadReturned = detailed.reduce(
+      (acc, line) =>
+        acc + line.planning.threads.reduce((tAcc, t) => tAcc + (t.remainingWeightKg || 0), 0),
+      0
+    );
+    const threadUsedInPackagedQuantity = sum((l) => Number(l.packagedWeightKg));
+    const beamTotal = Math.max(0, totalThreadIssued - remainingThreadReturned - threadUsedInPackagedQuantity);
+
     return {
       productionOrder: ctx,
       lines: detailed,
       totals: {
         lineCount: lines.length,
         quantity: sum((l) => Number(l.quantity)),
-        totalThreadWeightKg: sum((l) => Number(l.totalThreadWeightKg)),
+        totalThreadWeightKg: totalThreadIssued,
+        remainingThreadReturned,
+        threadUsedInPackagedQuantity,
+        beamTotal,
         wovenQty: sum((l) => Number(l.wovenQty)),
         cutQty: sum((l) => Number(l.cutQty)),
         packagedQty: sum((l) => Number(l.packagedQty)),
-        packagedWeightKg: sum((l) => Number(l.packagedWeightKg)),
+        packagedWeightKg: threadUsedInPackagedQuantity,
       },
     };
   }
@@ -177,14 +196,7 @@ export class WovenProductionService {
     if (!operator) throw new NotFoundError(Messages.notFound(Entity.OPERATOR));
 
     if (lineId) {
-      const existing = await this.getLineOrThrow(lineId);
-      const n = toNumbers(existing);
-      if (n.wovenQty > 0 || n.cutQty > 0 || n.packagedQty > 0) {
-        throw new ApiError(
-          "Cannot re-plan this line: production progress has already been recorded against it",
-          400
-        );
-      }
+      await this.getLineOrThrow(lineId);
     }
 
     return wovenProductionRepository.savePlanTransaction(
@@ -229,7 +241,7 @@ export class WovenProductionService {
     const order = await this.getOrderOrThrow(line.productionOrderId);
     await userService.assertActor(input.actorUserId);
 
-    return wovenProductionRepository.applyStageChangeTransaction(
+    const res = await wovenProductionRepository.applyStageChangeTransaction(
       Number(lineId),
       (fresh) => {
         const n = toNumbers(fresh);
@@ -257,6 +269,8 @@ export class WovenProductionService {
       },
       (lines) => deriveWovenOrderPatch(lines, order)
     );
+    await this.notifyIfOrderCompleted(line.productionOrderId, order.status);
+    return res;
   }
 
   /** Records cutting. Blocked until weaving is 100% complete. */
@@ -272,7 +286,7 @@ export class WovenProductionService {
       throw new NotFoundError(Messages.notFound(Entity.OPERATOR));
     }
 
-    return wovenProductionRepository.applyStageChangeTransaction(
+    const res = await wovenProductionRepository.applyStageChangeTransaction(
       Number(lineId),
       (fresh) => {
         const n = toNumbers(fresh);
@@ -302,6 +316,8 @@ export class WovenProductionService {
       },
       (lines) => deriveWovenOrderPatch(lines, order)
     );
+    await this.notifyIfOrderCompleted(line.productionOrderId, order.status);
+    return res;
   }
 
   /** Records packaging. Blocked until cut quantity equals woven quantity. */
@@ -323,7 +339,7 @@ export class WovenProductionService {
       throw new NotFoundError(Messages.notFound(Entity.OPERATOR));
     }
 
-    return wovenProductionRepository.applyStageChangeTransaction(
+    const res = await wovenProductionRepository.applyStageChangeTransaction(
       Number(lineId),
       (fresh) => {
         const n = toNumbers(fresh);
@@ -357,6 +373,45 @@ export class WovenProductionService {
       },
       (lines) => deriveWovenOrderPatch(lines, order)
     );
+    await this.notifyIfOrderCompleted(line.productionOrderId, order.status);
+    return res;
+  }
+
+  async reconcileRemainingThreads(
+    lineId: number | string,
+    input: { threads: { id: number; remainingWeightKg: number }[]; actorUserId?: number }
+  ) {
+    const line = await this.getLineOrThrow(lineId);
+    const actorUserId = await userService.assertActor(input.actorUserId);
+    return wovenProductionRepository.reconcileRemainingThreadsTransaction(
+      Number(lineId),
+      input.threads,
+      actorUserId
+    );
+  }
+
+  private async notifyIfOrderCompleted(productionOrderId: number, previousStatus: string) {
+    if (previousStatus === "complete") return;
+    try {
+      const updatedOrder = await productionOrderRepository.findById(productionOrderId);
+      if (updatedOrder && updatedOrder.status === "complete") {
+        mailService
+          .sendProductionCompletedEmail({
+            productionNumber: updatedOrder.productionNumber,
+            soNumber: updatedOrder.soNumber,
+            poNumber: updatedOrder.poNumber,
+            companyName: updatedOrder.companyName,
+            brandName: updatedOrder.brandName,
+            totalQty: updatedOrder.totalQty,
+            completedAt: updatedOrder.completedAt,
+          })
+          .catch((err) => {
+            console.error("[WovenProductionService] Error sending completion email:", err);
+          });
+      }
+    } catch (err) {
+      console.error("[WovenProductionService] Failed to check completion status for email notification:", err);
+    }
   }
 }
 
