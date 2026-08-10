@@ -21,6 +21,21 @@ export const wovenColumns: ColumnDef<WovenLineOverview>[] = [
     size: 120,
   },
   {
+    id: "estimatedWeavingTime",
+    accessorFn: (row) => row.weaving.estimatedWeavingHours ?? 0,
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Est. Weaving Time" />,
+    cell: ({ row }) => {
+      const hrs = row.original.weaving.estimatedWeavingHours;
+      return hrs != null && hrs > 0 ? (
+        <span className="font-semibold tabular-nums text-foreground">{formatNumber(hrs, 2)} hrs</span>
+      ) : (
+        <span className="text-muted-foreground">—</span>
+      );
+    },
+    meta: { align: "right" },
+    size: 140,
+  },
+  {
     id: "weavingProgress",
     header: ({ column }) => <DataTableColumnHeader column={column} title="Weaving Stage" />,
     cell: ({ row }) => (

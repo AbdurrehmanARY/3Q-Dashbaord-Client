@@ -60,6 +60,7 @@ export interface ProductionOrder {
   brandName: string | null;
   companyId: number | null;
   companyName: string | null;
+  estimatedWeavingHours?: number | null;
 }
 
 /** Raw line row. Every decimal arrives from Postgres as a string — convert before arithmetic. */

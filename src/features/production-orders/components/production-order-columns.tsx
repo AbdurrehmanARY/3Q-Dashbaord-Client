@@ -122,6 +122,23 @@ export const productionOrderColumns: ColumnDef<ProductionOrder>[] = [
     enableGlobalFilter: false,
   },
   {
+    id: "estimatedWeavingTime",
+    accessorFn: (row) => row.estimatedWeavingHours ?? 0,
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Est. Weaving Time" />,
+    cell: ({ row }) => {
+      const isWoven = row.original.productType === "woven";
+      const hrs = row.original.estimatedWeavingHours;
+      if (!isWoven) return <span className="text-muted-foreground">—</span>;
+      return hrs != null && hrs > 0 ? (
+        <span className="font-semibold tabular-nums text-foreground">{formatNumber(hrs, 2)} hrs</span>
+      ) : (
+        <span className="text-muted-foreground">—</span>
+      );
+    },
+    meta: { align: "right" },
+    enableGlobalFilter: false,
+  },
+  {
     accessorKey: "createdAt",
     header: ({ column }) => <DataTableColumnHeader column={column} title="Created Date" />,
     cell: ({ row }) => formatDate(row.original.createdAt ?? row.original.orderDate),
