@@ -18,13 +18,13 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
-    "db:seed": "tsx --env-file .env src/db/seed.ts",
-    "db:seed:master": "tsx --env-file .env src/db/seed-master.ts",
-    "db:copy:from-local": "tsx --env-file .env src/db/copy-from-local.ts",
-    "db:migrate:production-runs": "tsx --env-file .env src/db/migrate-production-runs.ts",
+    "db:seed": "tsx --env-file .env src/shared/db/seed.ts",
+    "db:seed:master": "tsx --env-file .env src/shared/db/seed-master.ts",
+    "db:copy:from-local": "tsx --env-file .env src/shared/db/copy-from-local.ts",
+    "db:migrate:production-runs": "tsx --env-file .env src/shared/db/migrate-production-runs.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "db:reset:production": "tsx --env-file .env src/db/reset-production.ts"
+    "db:reset:production": "tsx --env-file .env src/shared/db/reset-production.ts"
   },
   "dependencies": {
     "@types/compression": "^1.8.1",

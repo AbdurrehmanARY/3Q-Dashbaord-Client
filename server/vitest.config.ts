@@ -8,12 +8,13 @@ export default defineConfig({
     environment: "node",
     include: ["src/**/*.test.ts"],
   },
-  // Mirror the tsconfig path aliases so tests can import via @api/@db/@config too.
+  // Mirror the tsconfig path aliases so tests resolve @shared/@modules/@db/@config too.
   resolve: {
     alias: {
-      "@api": resolvePath("./src/api"),
-      "@db": resolvePath("./src/db"),
-      "@config": resolvePath("./src/config"),
+      "@shared": resolvePath("./src/shared"),
+      "@modules": resolvePath("./src/modules"),
+      "@db": resolvePath("./src/shared/db"),
+      "@config": resolvePath("./src/shared/config"),
     },
   },
 });
