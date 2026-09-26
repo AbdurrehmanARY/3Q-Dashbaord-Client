@@ -10,13 +10,18 @@ import { StatusBadge } from "@/components/feedback/StatusBadge";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useWorkOrderDetail, useDeleteWorkOrder } from "../hooks/use-work-orders";
-import { useProductionOrderOverview, useWovenOverview } from "@/features/production-orders";
+import {
+  useProductionOrderOverview,
+  useWovenOverview,
+  useOrderFlow,
+  StageProgressBars,
+  BatchStageBoard,
+  ProductionSummary,
+} from "@/features/production-orders";
+import { Skeleton } from "@/components/ui/skeleton";
 import { WORK_ORDER_STATUS_META } from "../types";
 import { formatDate, formatNumber } from "@/lib/format";
 import { WorkOrderDialog } from "../components/WorkOrderDialog";
-import { ProductionSummary } from "@/features/production-orders";
-import { LiveProductionProgressCard } from "../components/LiveProductionProgressCard";
-import { ProductionCompletionSummaryCard } from "../components/ProductionCompletionSummaryCard";
 
 /**
  * The sales order summary, split into the sections the floor actually reads: what was
@@ -98,7 +103,7 @@ export function WorkOrderDetailPage() {
         description={wo.poNumber ? `PO ${wo.poNumber}` : undefined}
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <StatusBadge variant={statusMeta.variant}>{statusMeta.label}</StatusBadge>
+            {/* <StatusBadge variant={statusMeta.variant}>{statusMeta.label}</StatusBadge> */}
             <AppButton
               variant="outline"
               onClick={() => setEditOpen(true)}
@@ -106,14 +111,14 @@ export function WorkOrderDetailPage() {
             >
               {isComplete ? "Dispatch Details" : "Edit"}
             </AppButton>
-            {productionOrder && (
+            {/* {productionOrder && (
               <AppButton
                 onClick={() => navigate(`/production-orders/${productionOrder.id}`)}
                 leftIcon={<Factory className="h-4 w-4" />}
               >
                 Open {productionOrder.productionNumber}
               </AppButton>
-            )}
+            )} */}
             {canDelete && (
               <ConfirmDialog
                 trigger={
@@ -160,12 +165,12 @@ export function WorkOrderDetailPage() {
                 </StatusBadge>
               </dd>
             </div>
-            {productionOrder && !isWoven && (
+            {/* {productionOrder && !isWoven && (
               <>
                 <Field label="Total Rolls Assigned" value={formatNumber(totals?.assignedRolls ?? 0, 0)} />
                 <Field label="Total Weight Assigned (kg)" value={formatNumber(totals?.assignedWeight ?? 0, 2)} />
               </>
-            )}
+            )} */}
           </dl>
         </AppCard>
 
@@ -177,6 +182,7 @@ export function WorkOrderDetailPage() {
               <Field label="Pick" value={formatNumber(wo.pick, 0)} />
               <Field label="Repeat" value={formatNumber(wo.repeat, 2)} />
               <Field label="Density" value={formatNumber(wo.density, 0)} />
+              <Field label="Speed (RPM)" value={formatNumber(wo.speed, 2)} />
               <Field label="Extra" value={formatNumber(wo.extra, 2)} />
               <div>
                 <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">Size Labels</dt>
@@ -221,24 +227,19 @@ export function WorkOrderDetailPage() {
           </AppCard>
         )}
 
-        {/* ---------------- Dynamic Production UI Switch (In Production vs Completed) ---------------- */}
-        {productionOrder && (
-          isComplete ? (
-            <ProductionCompletionSummaryCard
-              productType={wo.productType}
-              wovenOverview={wovenOverview}
-              overview={overview}
-              workOrder={wo}
-            />
-          ) : (
-            <LiveProductionProgressCard
-              productType={wo.productType}
-              overview={isWoven ? wovenOverview : overview}
-              totalQty={wo.totalQty}
-            />
-          )
+        {/* ---------------- Live Stage Progress (in production) ---------------- */}
+        {productionOrder && !isComplete && (
+          <ProductionFlowSection orderId={String(productionOrder.id)} readOnly />
         )}
 
+        {/* ---------------- Completion Summary (dispatched / complete) ---------------- */}
+        {isComplete && !isWoven && overview && overview.lines.length > 0 && (
+          <ProductionSummary
+            lines={overview.lines}
+            title="Production Completion Summary"
+            description="Who completed each stage, and when."
+          />
+        )}
 
         {/* ---------------- Woven vs Printed Production View ---------------- */}
         {isWoven ? (
@@ -264,7 +265,7 @@ export function WorkOrderDetailPage() {
         ) : (
           <>
             {/* ---------------- Material Information ---------------- */}
-            <AppCard
+            {/* <AppCard
               title="Material Information"
               description="Raw material committed to this order, drawn from inventory during planning."
             >
@@ -306,10 +307,10 @@ export function WorkOrderDetailPage() {
                   </Table>
                 </div>
               )}
-            </AppCard>
+            </AppCard> */}
 
             {/* ---------------- Label Details ---------------- */}
-            <AppCard title="Label Details">
+            {/* <AppCard title="Label Details">
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
@@ -347,7 +348,7 @@ export function WorkOrderDetailPage() {
                   </TableBody>
                 </Table>
               </div>
-            </AppCard>
+            </AppCard> */}
           </>
         )}
 
@@ -365,6 +366,42 @@ export function WorkOrderDetailPage() {
       {editOpen && (
         <WorkOrderDialog open workOrder={wo} onClose={() => setEditOpen(false)} />
       )}
+    </div>
+    );
+}
+
+/**
+ * Live, batch-based production view for a work order that has a production order raised
+ * but is not yet dispatched. Mirrors `BatchFlowSection` in ProductionOrderDashboardPage.
+ * The work-order detail page is read-only — batch management happens on the production
+ * order dashboard (linked from the page header's "Open" button).
+ */
+function ProductionFlowSection({ orderId, readOnly }: { orderId: string; readOnly: boolean }) {
+  const flow = useOrderFlow(orderId);
+
+  if (flow.isLoading) return <Skeleton className="h-64 w-full" />;
+  if (!flow.data || flow.data.lines.length === 0) return null;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+          Production Batches
+        </h3>
+        {flow.data.readyForCompletion && (
+          <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
+            Every label type has packaged its plan — ready to complete
+          </span>
+        )}
+      </div>
+
+      <AppCard title="Stage Progress" description="Whole order, across every label type">
+        <StageProgressBars totals={flow.data.totals} kind={flow.data.kind} unit={flow.data.unit} />
+      </AppCard>
+
+      {/* {flow.data.lines.map((line) => (
+        <BatchStageBoard key={line.lineId} orderId={orderId} flow={line} readOnly={readOnly} />
+      ))} */}
     </div>
   );
 }
@@ -465,7 +502,7 @@ function WovenProductionDetailView({
   return (
     <>
       {/* ---------------- Woven Thread & Planning Information ---------------- */}
-      <AppCard
+      {/* <AppCard
         title="Woven Production & Thread Plan"
         description={`Production order ${productionOrder.productionNumber} · ${lines.length} woven line(s)`}
       >
@@ -509,7 +546,7 @@ function WovenProductionDetailView({
             </Table>
           </div>
         )}
-      </AppCard>
+      </AppCard> */}
     </>
   );
 }

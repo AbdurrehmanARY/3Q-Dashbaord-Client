@@ -61,12 +61,14 @@ export function WorkOrderBasicInfo({ isEdit, isLocked }: { isEdit: boolean; isLo
       <AppInput
         label="SO Number *"
         disabled={isLocked}
+        maxLength={50}
         error={errors.soNumber?.message}
         {...register("soNumber")}
       />
       <AppInput
         label="PO Number"
         disabled={isLocked}
+        maxLength={50}
         error={errors.poNumber?.message}
         {...register("poNumber")}
       />

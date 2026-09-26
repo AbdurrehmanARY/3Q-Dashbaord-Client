@@ -87,7 +87,10 @@ export interface WorkOrder {
   /** Decimal columns arrive from Postgres as strings — convert before arithmetic. */
   repeat: string | null;
   density: number | null;
+  speed: string | number | null;
   extra: string | null;
+  /** Server-calculated: `(totalQty / repeat) * pick / (speed * 60)`, 2dp, speed→600 default. */
+  estimatedWeavingHours?: string | null;
   sizeLabels?: string[] | null;
   createdAt: string;
   updatedAt: string;
@@ -111,6 +114,7 @@ export interface WovenDetailInput {
   pick: number;
   repeat: number;
   density: number;
+  speed?: number;
   extra?: number;
   sizeLabels?: string[];
 }

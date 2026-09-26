@@ -64,6 +64,7 @@ function defaultsFor(
       pick: wo.pick ?? "",
       repeat: wo.repeat != null ? Number(wo.repeat) : "",
       density: wo.density ?? "",
+      speed: wo.speed != null ? Number(wo.speed) : "",
       extra: wo.extra != null ? Number(wo.extra) : "",
       dcNumber: "",
       lcNumber: "",
@@ -90,6 +91,7 @@ function defaultsFor(
     pick: wo?.pick ?? "",
     repeat: wo?.repeat != null ? Number(wo.repeat) : "",
     density: wo?.density ?? "",
+    speed: wo?.speed != null ? Number(wo.speed) : "",
     extra: wo?.extra != null ? Number(wo.extra) : "",
     dcNumber: wo?.dcNumber ?? "",
     lcNumber: wo?.lcNumber ?? "",
@@ -130,7 +132,7 @@ export function WorkOrderDialog({ open, workOrder, childOrderType, onClose }: Wo
     defaultValues: defaultsFor(workOrder, childOrderType),
   });
 
-  const productType = (useWatch({ control: methods.control, name: "productType" }) ?? "printed") as ProductType;
+  const productType = (useWatch({ control: methods.control, name: "productType" }) ?? "pri@nted") as ProductType;
   const isWoven = productType === "woven";
 
   const isSaving = createWorkOrder.isPending || updateWorkOrder.isPending;
@@ -160,6 +162,7 @@ export function WorkOrderDialog({ open, workOrder, childOrderType, onClose }: Wo
         pick: Number(data.pick),
         repeat: Number(data.repeat),
         density: Number(data.density),
+        speed: data.speed === "" || data.speed == null ? 0 : Number(data.speed),
         extra: data.extra === "" || data.extra == null ? 0 : Number(data.extra),
         sizeLabels,
       }
@@ -176,6 +179,7 @@ export function WorkOrderDialog({ open, workOrder, childOrderType, onClose }: Wo
         const body = { ...header, ...dispatch, ...(wovenDetail ? { wovenDetail } : {}) };
         await updateWorkOrder.mutateAsync({ id: workOrder.id, body });
       } else {
+        console.log("work",{...header, productType, wovenDetail })
         await createWorkOrder.mutateAsync({ ...header, productType, wovenDetail });
       }
       handleClose();
@@ -208,7 +212,7 @@ export function WorkOrderDialog({ open, workOrder, childOrderType, onClose }: Wo
       onOpenChange={(o) => { if (!o) handleClose(); }}
       title={dialogTitle}
       description={dialogDescription}
-      className="sm:max-w-2xl"
+      className="sm:max-w-2xl max-h-[90vh] flex flex-col"
       footer={
         <>
           <AppButton variant="outline" onClick={handleClose}>
@@ -221,7 +225,7 @@ export function WorkOrderDialog({ open, workOrder, childOrderType, onClose }: Wo
       }
     >
       <FormProvider {...methods}>
-        <form className="grid gap-4 sm:grid-cols-2" onSubmit={methods.handleSubmit(onSubmit)}>
+        <form className="grid gap-4 sm:grid-cols-2 max-h-[65vh] overflow-y-auto pr-1" onSubmit={methods.handleSubmit(onSubmit)}>
           <SubmitOnEnter disabled={isSaving} />
 
           <WorkOrderBasicInfo isEdit={isEdit} isLocked={isLocked} />

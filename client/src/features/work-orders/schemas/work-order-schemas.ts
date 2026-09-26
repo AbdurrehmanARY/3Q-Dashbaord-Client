@@ -46,6 +46,7 @@ export const workOrderSchema = z.object({
   pick: z.union([z.coerce.number(), z.literal("")]).optional(),
   repeat: z.union([z.coerce.number(), z.literal("")]).optional(),
   density: z.union([z.coerce.number(), z.literal("")]).optional(),
+  speed: z.union([z.coerce.number(), z.literal("")]).optional(),
   extra: z.union([z.coerce.number(), z.literal("")]).optional(),
   dcNumber: z.string().optional().or(z.literal("")),
   lcNumber: z.string().optional().or(z.literal("")),

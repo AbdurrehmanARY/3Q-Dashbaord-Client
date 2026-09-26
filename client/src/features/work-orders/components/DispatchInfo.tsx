@@ -8,10 +8,11 @@ export function DispatchInfo({ isDispatched }: { isDispatched: boolean }) {
 
   return (
     <>
-      <AppInput label="DC Number" error={errors.dcNumber?.message} {...register("dcNumber")} />
-      <AppInput label="LC Number" error={errors.lcNumber?.message} {...register("lcNumber")} />
+      <AppInput label="DC Number" maxLength={50} error={errors.dcNumber?.message} {...register("dcNumber")} />
+      <AppInput label="LC Number" maxLength={50} error={errors.lcNumber?.message} {...register("lcNumber")} />
       <AppInput
         label="FBR Invoice Number"
+        maxLength={50}
         error={errors.fbrInvoiceNumber?.message}
         {...register("fbrInvoiceNumber")}
       />
