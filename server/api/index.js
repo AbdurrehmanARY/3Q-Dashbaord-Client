@@ -1247,6 +1247,14 @@ var wovenWorkOrderDetails = pgTable25(
     speed: numeric5("speed", { precision: 12, scale: 2 }).default("0").notNull(),
     /** Extra allowance added on top of the ordered quantity, e.g. 150. */
     extra: numeric5("extra", { precision: 12, scale: 2 }).default("0").notNull(),
+    /**
+     * Derived figure: hours to weave the whole order at the loom speed —
+     * `(totalQty / repeat) * pick / (speed * 60)`, rounded to 2dp, speed defaulting to
+     * 600 RPM when unset. Computed **server-side** on create/update (see
+     * `work-order.service.ts`), never accepted from the client, and backfilled by
+     * migration 0024 for pre-existing woven orders.
+     */
+    estimatedWeavingHours: numeric5("estimated_weaving_hours", { precision: 12, scale: 2 }).default("0").notNull(),
     /** Size labels woven on this order, e.g. ["10", "12", "XL", "34/34"]. */
     sizeLabels: jsonb3("size_labels").$type().default([]).notNull(),
     createdAt: timestamp25("created_at").defaultNow().notNull(),
@@ -2199,10 +2207,10 @@ router2.put("/:id", validateParams(idParamsSchema), validateRequest(updateCompan
 router2.delete("/:id", validateParams(idParamsSchema), companyController.deleteCompany);
 var company_routes_default = router2;
 
-// src/modules/companies/brand.routes.ts
+// src/modules/brands/brand.routes.ts
 import { Router as Router3 } from "express";
 
-// src/modules/companies/brand.controller.ts
+// src/modules/brands/brand.controller.ts
 var BrandController = class {
   getBrands = asyncHandler(async (req, res) => {
     const data = await brandService.getBrands();
@@ -2241,7 +2249,7 @@ var BrandController = class {
 };
 var brandController = new BrandController();
 
-// src/modules/companies/brand.schema.ts
+// src/modules/brands/brand.schema.ts
 import { z as z6 } from "zod";
 var createBrandSchema = z6.object({
   body: z6.object({
@@ -2256,7 +2264,7 @@ var updateBrandSchema = z6.object({
   })
 });
 
-// src/modules/companies/brand.routes.ts
+// src/modules/brands/brand.routes.ts
 var router3 = Router3();
 router3.get("/", brandController.getBrands);
 router3.get("/:id", validateParams(idParamsSchema), brandController.getBrand);
@@ -2676,10 +2684,10 @@ router4.put("/:id", validateParams(idParamsSchema), validateRequest(updateMateri
 router4.delete("/:id", validateParams(idParamsSchema), materialController.deleteMaterial);
 var material_routes_default = router4;
 
-// src/modules/inventory/material-receipts.routes.ts
+// src/modules/material-receipts/material-receipts.routes.ts
 import { Router as Router5 } from "express";
 
-// src/modules/inventory/material-receipts.repository.ts
+// src/modules/material-receipts/material-receipts.repository.ts
 import { desc as desc2, eq as eq4 } from "drizzle-orm";
 var StickerMaterialRepository = class {
   findAll() {
@@ -2748,7 +2756,7 @@ var stickerMaterialRepository = new StickerMaterialRepository();
 var localSheetRepository = new LocalSheetRepository();
 var labelSheetRepository = new LabelSheetRepository();
 
-// src/modules/inventory/material-receipts.service.ts
+// src/modules/material-receipts/material-receipts.service.ts
 var money = (n2) => String(n2);
 var StickerMaterialService = class {
   getAll() {
@@ -2853,7 +2861,7 @@ var stickerMaterialService = new StickerMaterialService();
 var localSheetService = new LocalSheetService();
 var labelSheetService = new LabelSheetService();
 
-// src/modules/inventory/material-receipts.controller.ts
+// src/modules/material-receipts/material-receipts.controller.ts
 var StickerMaterialController = class {
   getAll = asyncHandler(async (_req, res) => {
     res.json({ data: await stickerMaterialService.getAll() });
@@ -2915,7 +2923,7 @@ var stickerMaterialController = new StickerMaterialController();
 var localSheetController = new LocalSheetController();
 var labelSheetController = new LabelSheetController();
 
-// src/modules/inventory/material-receipts.schema.ts
+// src/modules/material-receipts/material-receipts.schema.ts
 import { z as z8 } from "zod";
 var createStickerMaterialSchema = z8.object({
   body: z8.object({
@@ -2952,7 +2960,7 @@ var updateLabelSheetSchema = z8.object({
   body: createLabelSheetSchema.shape.body.partial()
 });
 
-// src/modules/inventory/material-receipts.routes.ts
+// src/modules/material-receipts/material-receipts.routes.ts
 var stickerMaterialsRouter = Router5();
 stickerMaterialsRouter.get("/", stickerMaterialController.getAll);
 stickerMaterialsRouter.post("/", validateRequest(createStickerMaterialSchema), stickerMaterialController.create);
@@ -3018,7 +3026,7 @@ var MachineRepository = class {
 };
 var machineRepository = new MachineRepository();
 
-// src/modules/production/production-order.repository.ts
+// src/modules/production/production-orders/production-order.repository.ts
 import { eq as eq6, desc as desc3, and as and4, sql as sql4, inArray as inArray2 } from "drizzle-orm";
 var DEFAULT_HISTORY_LIMIT = 200;
 function workOrderStatusFor(productionStatus) {
@@ -3571,7 +3579,7 @@ var ProductionOrderRepository = class {
 };
 var productionOrderRepository = new ProductionOrderRepository();
 
-// src/modules/production/resource-availability.service.ts
+// src/modules/production/batch-and-runs/resource-availability.service.ts
 var RANK = { "In Production": 3, Working: 3, Reserved: 2, Assigned: 2, Completed: 1 };
 async function classify() {
   const rows = await productionOrderRepository.findResourceUsage();
@@ -4074,6 +4082,7 @@ var workOrderWithBrandSelect = {
   density: wovenWorkOrderDetails.density,
   speed: wovenWorkOrderDetails.speed,
   extra: wovenWorkOrderDetails.extra,
+  estimatedWeavingHours: wovenWorkOrderDetails.estimatedWeavingHours,
   sizeLabels: wovenWorkOrderDetails.sizeLabels
 };
 var WorkOrderRepository = class {
@@ -4138,6 +4147,17 @@ var WorkOrderRepository = class {
   }
 };
 var workOrderRepository = new WorkOrderRepository();
+
+// src/modules/work-orders/work-order.helpers.ts
+function estimateWeavingHours(input) {
+  const qty = Number(input.totalQty) || 0;
+  const repeatVal = Number(input.repeat) || 0;
+  const pickVal = Number(input.pick) || 0;
+  const speedRaw = Number(input.speed ?? 0);
+  const speedVal = speedRaw > 0 ? speedRaw : 600;
+  if (qty <= 0 || repeatVal <= 0 || pickVal <= 0) return 0;
+  return Math.round(qty / repeatVal * pickVal / (speedVal * 60) * 100) / 100;
+}
 
 // src/shared/services/mail.service.ts
 import nodemailer from "nodemailer";
@@ -4272,8 +4292,18 @@ var WorkOrderService = class {
         density: data.wovenDetail.density,
         // Decimal columns take strings through Drizzle.
         repeat: String(data.wovenDetail.repeat),
+        speed: String(data.wovenDetail.speed ?? 0),
         extra: String(data.wovenDetail.extra ?? 0),
-        sizeLabels: data.wovenDetail.sizeLabels ?? []
+        sizeLabels: data.wovenDetail.sizeLabels ?? [],
+        // Derived server-side — never accepted from the client (clinerules §3).
+        estimatedWeavingHours: String(
+          estimateWeavingHours({
+            totalQty: data.totalQty,
+            repeat: data.wovenDetail.repeat,
+            pick: data.wovenDetail.pick,
+            speed: data.wovenDetail.speed
+          })
+        )
       });
     }
     return workOrderRepository.create({ ...header, productType: "printed" });
@@ -4357,14 +4387,44 @@ var WorkOrderService = class {
           throw new ConflictError(`Design code '${wovenDetail.designCode}' is already in use`);
         }
       }
+      const loomChanged = wovenDetail.pick !== void 0 || wovenDetail.repeat !== void 0 || wovenDetail.speed !== void 0 || commercial.totalQty !== void 0;
+      let estimatedWeavingHoursPatch;
+      if (loomChanged) {
+        const current = await workOrderRepository.findWovenDetail(id);
+        const merged = {
+          totalQty: commercial.totalQty ?? existing.totalQty,
+          pick: wovenDetail.pick ?? current?.pick ?? 0,
+          repeat: wovenDetail.repeat ?? current?.repeat ?? 0,
+          speed: wovenDetail.speed ?? current?.speed ?? 0
+        };
+        estimatedWeavingHoursPatch = {
+          estimatedWeavingHours: String(estimateWeavingHours(merged))
+        };
+      }
       await workOrderRepository.upsertWovenDetail(Number(id), {
         ...wovenDetail.designCode !== void 0 ? { designCode: wovenDetail.designCode } : {},
         ...wovenDetail.pick !== void 0 ? { pick: wovenDetail.pick } : {},
         ...wovenDetail.density !== void 0 ? { density: wovenDetail.density } : {},
         ...wovenDetail.repeat !== void 0 ? { repeat: String(wovenDetail.repeat) } : {},
+        ...wovenDetail.speed !== void 0 ? { speed: String(wovenDetail.speed) } : {},
         ...wovenDetail.extra !== void 0 ? { extra: String(wovenDetail.extra) } : {},
-        ...wovenDetail.sizeLabels !== void 0 ? { sizeLabels: wovenDetail.sizeLabels } : {}
+        ...wovenDetail.sizeLabels !== void 0 ? { sizeLabels: wovenDetail.sizeLabels } : {},
+        ...estimatedWeavingHoursPatch
       });
+    } else if (commercial.totalQty !== void 0 && existing.productType === "woven") {
+      const current = await workOrderRepository.findWovenDetail(id);
+      if (current) {
+        await workOrderRepository.upsertWovenDetail(Number(id), {
+          estimatedWeavingHours: String(
+            estimateWeavingHours({
+              totalQty: commercial.totalQty,
+              repeat: current.repeat,
+              pick: current.pick,
+              speed: current.speed
+            })
+          )
+        });
+      }
     }
     return workOrderRepository.update(id, {
       ...commercial,
@@ -4429,7 +4489,7 @@ var WorkOrderController = class {
 };
 var workOrderController = new WorkOrderController();
 
-// src/modules/production/production-run.repository.ts
+// src/modules/production/batch-and-runs/production-run.repository.ts
 import { and as and8, desc as desc5, eq as eq10, gte, isNull, sql as sql7 } from "drizzle-orm";
 var ProductionRunRepository = class {
   /** Append-only: only ever inserts, never updates a prior run. */
@@ -4506,7 +4566,7 @@ var ProductionRunRepository = class {
 };
 var productionRunRepository = new ProductionRunRepository();
 
-// src/modules/production/production-run.service.ts
+// src/modules/production/batch-and-runs/production-run.service.ts
 var ProductionRunService = class {
   /**
    * Append a production pass. Never updates a prior run — every call is one INSERT, so the
@@ -4574,7 +4634,7 @@ var ProductionRunService = class {
 };
 var productionRunService = new ProductionRunService();
 
-// src/modules/production/production-run.controller.ts
+// src/modules/production/batch-and-runs/production-run.controller.ts
 var ProductionRunController = class {
   logRun = asyncHandler(async (req, res) => {
     const { saleOrderId } = req.validatedParams ?? req.params;
@@ -4663,7 +4723,7 @@ var dispatchWorkOrderSchema = z12.object({
   })
 });
 
-// src/modules/production/production-run.schema.ts
+// src/modules/production/batch-and-runs/production-run.schema.ts
 import { z as z13 } from "zod";
 var RUN_REASONS = [
   "initial",
@@ -4716,10 +4776,10 @@ router8.post(
 );
 var work_orders_routes_default = router8;
 
-// src/modules/production/production-order.routes.ts
+// src/modules/production/production-orders/production-order.routes.ts
 import { Router as Router10 } from "express";
 
-// src/modules/production/batch-flow.repository.ts
+// src/modules/production/batch-and-runs/batch-flow.repository.ts
 import { eq as eq11, and as and9, desc as desc6, asc as asc7, inArray as inArray4, sql as sql8 } from "drizzle-orm";
 
 // src/shared/db/size-plans.ts
@@ -4730,7 +4790,7 @@ function normalizeSize(size) {
   return (size ?? "").trim().toLowerCase();
 }
 
-// src/modules/production/batch-flow.helpers.ts
+// src/modules/production/batch-and-runs/batch-flow.helpers.ts
 var STAGES_OF = {
   printed: ["printing", "cutting", "packaging"],
   woven: ["weaving", "cutting", "packaging"]
@@ -4871,7 +4931,7 @@ function beamThreadKgOf(packagedWeightKg, dyedThreadUsedKg) {
   return Math.round((Number(packagedWeightKg || 0) - Number(dyedThreadUsedKg || 0)) * 1e3) / 1e3;
 }
 
-// src/modules/production/batch-flow.repository.ts
+// src/modules/production/batch-and-runs/batch-flow.repository.ts
 var batchSelect = {
   id: productionBatches.id,
   productionOrderId: productionBatches.productionOrderId,
@@ -5510,21 +5570,25 @@ var BatchFlowRepository = class {
   }
   /**
    * planned − Σ assigned across the live FIRST-stage batches, optionally excluding one.
-   * The plan lives on a different table per workflow, so the quantity comes from the
-   * caller's locked read rather than a second lookup.
+   *
+   * The plan is read FROM THE LINE TABLE, one select per workflow, and never from
+   * `production_batches`. That is load-bearing, not stylistic: an outer query over
+   * `production_batches` returns ZERO rows while no batch exists anywhere yet, so its
+   * scalar sub-selects never evaluate and `row?.planned ?? 0` silently collapses to 0 —
+   * which made the FIRST first-stage batch on a fresh database impossible to create, with
+   * the nonsensical "0 of the 40000 planned pcs remain unassigned". The line table always
+   * has exactly one row for the line, so the guard reports a real figure.
    */
   async remainingPlannedTx(tx, line, excludeBatchId) {
     const first = STAGES_OF[line.kind][0];
     const col = line.kind === "woven" ? "woven_production_line_id" : "production_order_line_id";
-    const [row] = await tx.select({
-      planned: line.kind === "woven" ? sql8`(SELECT quantity FROM woven_production_lines WHERE id = ${line.id})` : sql8`(SELECT total_rolls FROM production_order_lines WHERE id = ${line.id})`,
-      assigned: sql8`COALESCE((
-          SELECT SUM(b.assigned_rolls) FROM production_batches b
-          WHERE b.${sql8.raw(col)} = ${line.id}
-            AND b.stage = ${first} AND b.status <> 'CANCELLED'
-            ${excludeBatchId ? sql8`AND b.id <> ${excludeBatchId}` : sql8``}
-        ), 0)`
-    }).from(productionBatches).limit(1);
+    const assigned = sql8`COALESCE((
+      SELECT SUM(b.assigned_rolls) FROM production_batches b
+      WHERE b.${sql8.raw(col)} = ${line.id}
+        AND b.stage = ${first} AND b.status <> 'CANCELLED'
+        ${excludeBatchId ? sql8`AND b.id <> ${excludeBatchId}` : sql8``}
+    ), 0)`;
+    const [row] = line.kind === "woven" ? await tx.select({ planned: wovenProductionLines.quantity, assigned }).from(wovenProductionLines).where(eq11(wovenProductionLines.id, line.id)).limit(1) : await tx.select({ planned: productionOrderLines.totalRolls, assigned }).from(productionOrderLines).where(eq11(productionOrderLines.id, line.id)).limit(1);
     return round22(Number(row?.planned ?? 0) - Number(row?.assigned ?? 0));
   }
   /**
@@ -6095,7 +6159,7 @@ function completionPct(packagedRolls, totalRolls) {
   return Math.round(packagedRolls / totalRolls * 1e4) / 100;
 }
 
-// src/modules/production/production-order.helpers.ts
+// src/modules/production/production-orders/production-order.helpers.ts
 var RESOURCE_SLOTS = [
   { key: "printingMachineId", kind: "machine", label: "Printing machine" },
   { key: "cuttingMachineId", kind: "machine", label: "Cutting machine" },
@@ -6181,7 +6245,7 @@ function deriveOrderPatch(lines, current) {
   };
 }
 
-// src/modules/production/production-order-overview.builder.ts
+// src/modules/production/production-orders/production-order-overview.builder.ts
 function nameOf(map, id) {
   return id != null ? map.get(id)?.name ?? null : null;
 }
@@ -6423,7 +6487,7 @@ function normalizeSizePlan(sizes) {
   return out;
 }
 
-// src/modules/production/production-order.service.ts
+// src/modules/production/production-orders/production-order.service.ts
 var ProductionOrderService = class {
   /* ============================ Reads ============================ */
   async getProductionOrders(filters) {
@@ -7250,7 +7314,7 @@ var ProductionOrderService = class {
 };
 var productionOrderService = new ProductionOrderService();
 
-// src/modules/production/production-order.controller.ts
+// src/modules/production/production-orders/production-order.controller.ts
 var ProductionOrderController = class {
   getProductionOrders = asyncHandler(async (req, res) => {
     const { status, soNumber, poNumber } = req.validatedQuery ?? req.query;
@@ -7396,7 +7460,7 @@ var ProductionOrderController = class {
 };
 var productionOrderController = new ProductionOrderController();
 
-// src/modules/production/production-order.schema.ts
+// src/modules/production/production-orders/production-order.schema.ts
 import { z as z14 } from "zod";
 var sizePlanItemSchema = z14.object({
   size: z14.string().trim().min(1, "Size name is required").max(120),
@@ -7525,7 +7589,7 @@ var updateBatchSchema = z14.object({
   })
 });
 
-// src/modules/production/production-order.routes.ts
+// src/modules/production/production-orders/production-order.routes.ts
 var router9 = Router10();
 router9.get("/", validateQuery(listProductionOrdersQuerySchema), productionOrderController.getProductionOrders);
 router9.get("/eligible-sales-orders", productionOrderController.getEligibleSalesOrders);
@@ -7582,13 +7646,13 @@ router9.get("/lines/:lineId/issuances", validateParams(lineIdParamsSchema), vali
 router9.get("/lines/:lineId/events", validateParams(lineIdParamsSchema), validateQuery(paginationQuerySchema), productionOrderController.getLineEvents);
 var production_order_routes_default = router9;
 
-// src/modules/production/woven-production.routes.ts
+// src/modules/production/woven-production/woven-production.routes.ts
 import { Router as Router11 } from "express";
 
-// src/modules/production/woven-production.repository.ts
+// src/modules/production/woven-production/woven-production.repository.ts
 import { eq as eq14, and as and12, sql as sql11 } from "drizzle-orm";
 
-// src/modules/thread/thread-inventory.repository.ts
+// src/modules/thread/thread-inventory/thread-inventory.repository.ts
 import { eq as eq13, desc as desc8, and as and11, sql as sql10, isNull as isNull2, inArray as inArray5 } from "drizzle-orm";
 var ThreadInventoryRepository = class {
   /* ============================ Reads ============================ */
@@ -7920,7 +7984,7 @@ var ThreadInventoryRepository = class {
 };
 var threadInventoryRepository = new ThreadInventoryRepository();
 
-// src/modules/production/woven-production.repository.ts
+// src/modules/production/woven-production/woven-production.repository.ts
 var PLAN_REF = "woven_production_line";
 var WovenProductionRepository = class {
   async findLines(productionOrderId) {
@@ -8096,7 +8160,7 @@ var WovenProductionRepository = class {
 };
 var wovenProductionRepository = new WovenProductionRepository();
 
-// src/modules/production/woven-production.helpers.ts
+// src/modules/production/woven-production/woven-production.helpers.ts
 var MAX_THREAD_COLORS = 8;
 function toNumbers2(line) {
   return {
@@ -8142,7 +8206,7 @@ function canStartPackaging(line) {
   return n2.cutQty > 0 && n2.cutQty >= n2.wovenQty;
 }
 
-// src/modules/production/woven-production.service.ts
+// src/modules/production/woven-production/woven-production.service.ts
 var WovenProductionService = class {
   async getLineOrThrow(lineId) {
     const line = await wovenProductionRepository.findLineById(lineId);
@@ -8506,7 +8570,7 @@ var WovenProductionService = class {
 };
 var wovenProductionService = new WovenProductionService();
 
-// src/modules/production/woven-production.controller.ts
+// src/modules/production/woven-production/woven-production.controller.ts
 var WovenProductionController = class {
   getOverview = asyncHandler(async (req, res) => {
     const { id } = req.validatedParams ?? req.params;
@@ -8559,7 +8623,7 @@ var WovenProductionController = class {
 };
 var wovenProductionController = new WovenProductionController();
 
-// src/modules/production/woven-production.schema.ts
+// src/modules/production/woven-production/woven-production.schema.ts
 import { z as z15 } from "zod";
 var denierEnum = z15.enum(["45", "75", "100", "150"]);
 var threadPlanItemSchema = z15.object({
@@ -8619,7 +8683,7 @@ var reconcileRemainingThreadsSchema = z15.object({
   })
 });
 
-// src/modules/production/woven-production.routes.ts
+// src/modules/production/woven-production/woven-production.routes.ts
 import { z as z16 } from "zod";
 var router10 = Router11();
 var orderLineParamsSchema = z16.object({
@@ -8666,10 +8730,10 @@ router10.patch(
 );
 var woven_production_routes_default = router10;
 
-// src/modules/production/batch-flow.routes.ts
+// src/modules/production/batch-and-runs/batch-flow.routes.ts
 import { Router as Router12 } from "express";
 
-// src/modules/production/batch-flow.service.ts
+// src/modules/production/batch-and-runs/batch-flow.service.ts
 var BatchFlowService = class {
   /**
    * Resolves a line id to the workflow that owns it. Printed and woven lines live in
@@ -9029,14 +9093,16 @@ var BatchFlowService = class {
 };
 var batchFlowService = new BatchFlowService();
 
-// src/modules/production/batch-flow.controller.ts
+// src/modules/production/batch-and-runs/batch-flow.controller.ts
 var BatchFlowController = class {
   constructor(stage) {
     this.stage = stage;
   }
   stage;
   listByLine = asyncHandler(async (req, res) => {
+    console.log("working");
     const { lineId } = req.validatedParams ?? req.params;
+    console.log("route hit", lineId, this.stage);
     const data = await batchFlowService.getLineBatches(lineId, this.stage);
     res.json({ data });
   });
@@ -9132,7 +9198,7 @@ var cuttingBatchController = new BatchFlowController("cutting");
 var packagingBatchController = new BatchFlowController("packaging");
 var batchOverviewController = new BatchOverviewController();
 
-// src/modules/production/batch-flow.schema.ts
+// src/modules/production/batch-and-runs/batch-flow.schema.ts
 import { z as z17 } from "zod";
 var rolls = z17.coerce.number().int("Rolls must be a whole number").positive("Rolls must be greater than zero").max(1e6);
 var optionalRolls = z17.coerce.number().int("Rolls must be a whole number").min(0, "Rolls cannot be negative").max(1e6);
@@ -9203,7 +9269,7 @@ var stageResourcesQuerySchema = z17.object({
   batchId: z17.coerce.number().int().positive().optional()
 });
 
-// src/modules/production/batch-flow.routes.ts
+// src/modules/production/batch-and-runs/batch-flow.routes.ts
 function stageRouter(controller, stage) {
   const router19 = Router12({ mergeParams: true });
   const createSchema = stage === "printing" || stage === "weaving" ? createPrintingBatchSchema : createConsumingBatchSchema;
@@ -9671,10 +9737,10 @@ router13.delete("/purchases/:id", validateParams(idParamsSchema), inventoryContr
 router13.get("/stock", validateQuery(listStockQuerySchema), inventoryController.getStock);
 var inventory_routes_default = router13;
 
-// src/modules/thread/thread-inventory.routes.ts
+// src/modules/thread/thread-inventory/thread-inventory.routes.ts
 import { Router as Router15 } from "express";
 
-// src/modules/thread/thread-inventory.service.ts
+// src/modules/thread/thread-inventory/thread-inventory.service.ts
 var ThreadInventoryService = class {
   /* ========================= Stock ========================= */
   async getStocks(filters) {
@@ -9884,7 +9950,7 @@ var ThreadInventoryService = class {
 };
 var threadInventoryService = new ThreadInventoryService();
 
-// src/modules/thread/thread-inventory.controller.ts
+// src/modules/thread/thread-inventory/thread-inventory.controller.ts
 var ThreadInventoryController = class {
   /* ---- Stock ---- */
   getStocks = asyncHandler(async (req, res) => {
@@ -9947,7 +10013,7 @@ var ThreadInventoryController = class {
 };
 var threadInventoryController = new ThreadInventoryController();
 
-// src/modules/thread/thread-inventory.schema.ts
+// src/modules/thread/thread-inventory/thread-inventory.schema.ts
 import { z as z20 } from "zod";
 var denierEnum2 = z20.enum(["45", "75", "100", "150"]);
 var baseColorEnum = z20.enum(["White", "Black"]);
@@ -10010,7 +10076,7 @@ var listThreadMovementsQuerySchema = z20.object({
   limit: z20.coerce.number().int().positive().max(500).optional()
 });
 
-// src/modules/thread/thread-inventory.routes.ts
+// src/modules/thread/thread-inventory/thread-inventory.routes.ts
 var router14 = Router15();
 router14.get("/stocks", validateQuery(listThreadStocksQuerySchema), threadInventoryController.getStocks);
 router14.get("/stocks/summary", threadInventoryController.getStockSummary);
@@ -10046,10 +10112,10 @@ router14.get("/dye-batches", threadInventoryController.getDyeBatches);
 router14.post("/dye-batches", validateRequest(createDyeBatchSchema), threadInventoryController.createDyeBatch);
 var thread_inventory_routes_default = router14;
 
-// src/modules/thread/thread-service-provider.routes.ts
+// src/modules/thread/thread-service-provider/thread-service-provider.routes.ts
 import { Router as Router16 } from "express";
 
-// src/modules/thread/thread-service-provider.repository.ts
+// src/modules/thread/thread-service-provider/thread-service-provider.repository.ts
 import { asc as asc9, eq as eq15 } from "drizzle-orm";
 var ThreadServiceProviderRepository = class {
   findAll() {
@@ -10074,7 +10140,7 @@ var ThreadServiceProviderRepository = class {
 };
 var threadServiceProviderRepository = new ThreadServiceProviderRepository();
 
-// src/modules/thread/thread-service-provider.service.ts
+// src/modules/thread/thread-service-provider/thread-service-provider.service.ts
 var ThreadServiceProviderService = class {
   getAll() {
     return threadServiceProviderRepository.findAll();
@@ -10098,7 +10164,7 @@ var ThreadServiceProviderService = class {
 };
 var threadServiceProviderService = new ThreadServiceProviderService();
 
-// src/modules/thread/thread-service-provider.controller.ts
+// src/modules/thread/thread-service-provider/thread-service-provider.controller.ts
 var ThreadServiceProviderController = class {
   getAll = asyncHandler(async (_req, res) => {
     res.json({ data: await threadServiceProviderService.getAll() });
@@ -10120,7 +10186,7 @@ var ThreadServiceProviderController = class {
 };
 var threadServiceProviderController = new ThreadServiceProviderController();
 
-// src/modules/thread/thread-service-provider.schema.ts
+// src/modules/thread/thread-service-provider/thread-service-provider.schema.ts
 import { z as z21 } from "zod";
 var createThreadServiceProviderSchema = z21.object({
   body: z21.object({
@@ -10134,7 +10200,7 @@ var updateThreadServiceProviderSchema = z21.object({
   body: createThreadServiceProviderSchema.shape.body.partial()
 });
 
-// src/modules/thread/thread-service-provider.routes.ts
+// src/modules/thread/thread-service-provider/thread-service-provider.routes.ts
 var router15 = Router16();
 router15.get("/", threadServiceProviderController.getAll);
 router15.post("/", validateRequest(createThreadServiceProviderSchema), threadServiceProviderController.create);
@@ -10147,10 +10213,10 @@ router15.put(
 router15.delete("/:id", validateParams(idParamsSchema), threadServiceProviderController.remove);
 var thread_service_provider_routes_default = router15;
 
-// src/modules/thread/thread-dyeing.routes.ts
+// src/modules/thread/thread-dyeing/thread-dyeing.routes.ts
 import { Router as Router17 } from "express";
 
-// src/modules/thread/thread-dyeing.repository.ts
+// src/modules/thread/thread-dyeing/thread-dyeing.repository.ts
 import { desc as desc10, eq as eq16, inArray as inArray6 } from "drizzle-orm";
 var ThreadDyeingRepository = class {
   async findSends() {
@@ -10248,7 +10314,7 @@ var ThreadDyeingRepository = class {
 };
 var threadDyeingRepository = new ThreadDyeingRepository();
 
-// src/modules/thread/thread-dyeing.service.ts
+// src/modules/thread/thread-dyeing/thread-dyeing.service.ts
 var ThreadDyeingService = class {
   /** Sends with their colour allocations and receive records folded in. */
   async listSends() {
@@ -10319,7 +10385,7 @@ var ThreadDyeingService = class {
 };
 var threadDyeingService = new ThreadDyeingService();
 
-// src/modules/thread/thread-dyeing.controller.ts
+// src/modules/thread/thread-dyeing/thread-dyeing.controller.ts
 var ThreadDyeingController = class {
   listSends = asyncHandler(async (_req, res) => {
     res.json({ data: await threadDyeingService.listSends() });
@@ -10336,7 +10402,7 @@ var ThreadDyeingController = class {
 };
 var threadDyeingController = new ThreadDyeingController();
 
-// src/modules/thread/thread-dyeing.schema.ts
+// src/modules/thread/thread-dyeing/thread-dyeing.schema.ts
 import { z as z22 } from "zod";
 var denierEnum3 = z22.enum(["45", "75", "100", "150"]);
 var baseColorEnum2 = z22.enum(["White", "Black"]);
@@ -10375,7 +10441,7 @@ var receiveDyeingSchema = z22.object({
   })
 });
 
-// src/modules/thread/thread-dyeing.routes.ts
+// src/modules/thread/thread-dyeing/thread-dyeing.routes.ts
 var router16 = Router17();
 router16.get("/sends", threadDyeingController.listSends);
 router16.post("/sends", validateRequest(createDyeingSendSchema), threadDyeingController.send);
