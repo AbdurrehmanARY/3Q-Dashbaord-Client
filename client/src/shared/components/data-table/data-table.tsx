@@ -12,6 +12,7 @@ import {
   type ColumnFiltersState,
   type ColumnPinningState,
   type Header,
+  type OnChangeFn,
   type Row,
   type RowData,
   type RowPinningState,
@@ -22,6 +23,12 @@ import {
   type VisibilityState,
 } from "@tanstack/react-table";
 import { FileSpreadsheetIcon, PrinterIcon, Trash2Icon } from "lucide-react";
+import {
+  EMPTY_COLUMN_VISIBILITY,
+  sanitizeColumnVisibility,
+  useTableColumnVisibility,
+  useTableVisibilityStore,
+} from "@/store/table-visibility-store";
 import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -89,6 +96,18 @@ function resolveColumnId<TData, TValue>(col: ColumnDef<TData, TValue>): string |
   return accessorKey != null ? String(accessorKey) : undefined;
 }
 
+/**
+ * TanStack's own column-id rule (`columnDef.id ?? accessorKey ?? string header`), used
+ * only to build the protected-column set so it can never drift from the real ids.
+ * Kept separate from `resolveColumnId` so existing pinning defaults are untouched.
+ */
+function tanstackColumnId<TData, TValue>(col: ColumnDef<TData, TValue>): string | undefined {
+  if (col.id) return col.id;
+  const accessorKey = (col as { accessorKey?: string | number }).accessorKey;
+  if (accessorKey != null) return String(accessorKey).replace(/\./g, "_");
+  return typeof col.header === "string" ? col.header : undefined;
+}
+
 /** Drop export columns whose matching table column is hidden, so export == what's on screen. */
 function visibleExportColumns<TData>(
   table: TanstackTable<TData>,
@@ -123,7 +142,10 @@ export interface DataTableProps<TData extends RowData, TValue> {
   /** Legacy freeze of the last column by index. Ignored when `enableColumnPinning`. Default: false */
   stickyLastColumn?: boolean;
 
-  /* ---- Opt-in advanced features ---- */
+      /* ---- Opt-in advanced features ---- */
+  /** Stable id for persisted column visibility (Zustand → localStorage). Omit to keep
+   *  visibility ephemeral and per-instance — the original behaviour for every table. */
+  tableId?: string;
   /** TanStack column pinning: per-column Pin left/right/unpin, sticky via getStart/getAfter. */
   enableColumnPinning?: boolean;
   /** TanStack row pinning: rows pinned top/bottom stay put through sort/filter. */
@@ -165,11 +187,12 @@ export function DataTable<TData extends RowData, TValue>({
   isRowActive,
   pagination = true,
   initialPageSize = 20,
-  className,
+    className,
   stickyFirstColumn = false,
   stickyLastColumn = false,
   enableColumnPinning = false,
   enableRowPinning = false,
+  tableId,
   showColumnToggle = false,
   exportColumns,
   exportFilename = "export",
@@ -181,7 +204,9 @@ export function DataTable<TData extends RowData, TValue>({
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
-  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
+  // Column visibility has two modes: with a `tableId` Zustand owns it (persisted); without
+  // one it stays in local state, which is the original per-instance behaviour.
+  const [localColumnVisibility, setLocalColumnVisibility] = React.useState<VisibilityState>({});
   const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({});
   const [globalFilter, setGlobalFilter] = React.useState("");
   const [rowPinning, setRowPinning] = React.useState<RowPinningState>({ top: [], bottom: [] });
@@ -219,6 +244,62 @@ export function DataTable<TData extends RowData, TValue>({
     [enableRowSelection, selectionColumn, columns]
   );
 
+  /** Ids of columns declaring `enableHiding: false` — they must stay visible, always. */
+  const protectedColumnIds = React.useMemo(
+    () =>
+      resolvedColumns
+        .filter((col) => col.enableHiding === false)
+        .map(tanstackColumnId)
+        .filter((id): id is string => Boolean(id)),
+    [resolvedColumns]
+  );
+
+  // Zustand is the single source of truth for persisted tables; the `?? EMPTY_COLUMN_VISIBILITY`
+  // fallback (a stable `{}`) means "no saved state → TanStack's defaults", never "hide everything".
+  const persistedColumnVisibility = useTableColumnVisibility(tableId);
+
+  // Guard the *read* path too, so a stale or hand-edited localStorage value can never hide an
+  // `enableHiding: false` column. `useMemo` keeps the reference stable (the sanitizer returns
+  // its input when nothing changed), so this cannot re-trigger the subscriber and loop.
+  const sanitizedColumnVisibility = React.useMemo(
+    () =>
+      persistedColumnVisibility
+        ? sanitizeColumnVisibility(persistedColumnVisibility, protectedColumnIds)
+        : undefined,
+    [persistedColumnVisibility, protectedColumnIds]
+  );
+
+  const columnVisibility = tableId
+    ? sanitizedColumnVisibility ?? EMPTY_COLUMN_VISIBILITY
+    : localColumnVisibility;
+
+  /**
+   * Controlled-state write path — the *only* place visibility changes. There is deliberately
+   * no `useEffect` syncing TanStack ⇄ Zustand: TanStack reads `state.columnVisibility` above
+   * and every user change lands straight in the store, so state can never ping-pong.
+   */
+  const handleColumnVisibilityChange = React.useCallback<OnChangeFn<VisibilityState>>(
+    (updater) => {
+      if (!tableId) {
+        setLocalColumnVisibility((prev) => (typeof updater === "function" ? updater(prev) : updater));
+        return;
+      }
+      // Read the freshest value at event time rather than closing over a render-time one, so
+      // TanStack's functional updaters (`old => ({ ...old, [id]: !old[id] })`) compose safely.
+      const current = useTableVisibilityStore.getState().columnVisibility[tableId] ?? EMPTY_COLUMN_VISIBILITY;
+      const next = typeof updater === "function" ? updater(current) : updater;
+      useTableVisibilityStore
+        .getState()
+        .setColumnVisibility(tableId, sanitizeColumnVisibility(next, protectedColumnIds));
+    },
+    [tableId, protectedColumnIds]
+  );
+
+  /** "Reset columns" → drop the saved override so TanStack's defaults apply again. */
+  const handleResetColumnVisibility = React.useCallback(() => {
+    if (tableId) useTableVisibilityStore.getState().resetColumnVisibility(tableId);
+  }, [tableId]);
+
   // Default pins, only in the pinning-enabled path: select left, last column (actions) right,
   // and — when there's no selection column — the first column left.
   const [columnPinning, setColumnPinning] = React.useState<ColumnPinningState>(() => {
@@ -248,7 +329,7 @@ export function DataTable<TData extends RowData, TValue>({
     keepPinnedRows: true,
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
-    onColumnVisibilityChange: setColumnVisibility,
+    onColumnVisibilityChange: handleColumnVisibilityChange,
     onGlobalFilterChange: setGlobalFilter,
     onColumnPinningChange: setColumnPinning,
     onRowPinningChange: setRowPinning,
@@ -357,6 +438,7 @@ export function DataTable<TData extends RowData, TValue>({
           enablePrint={enablePrint}
           onDeleteSelected={onDeleteSelected}
           deleteSelectedLabel={deleteSelectedLabel}
+          onResetColumns={tableId ? handleResetColumnVisibility : undefined}
         />
       )}
 
@@ -423,6 +505,7 @@ function DataTableActionBar<TData>({
   enablePrint,
   onDeleteSelected,
   deleteSelectedLabel,
+  onResetColumns,
 }: {
   table: TanstackTable<TData>;
   enableRowSelection: boolean;
@@ -432,6 +515,8 @@ function DataTableActionBar<TData>({
   enablePrint: boolean;
   onDeleteSelected?: (rows: TData[]) => void | Promise<void>;
   deleteSelectedLabel: string;
+  /** Restores default column visibility; only passed for tables with a persisted `tableId`. */
+  onResetColumns?: () => void;
 }) {
   const [deleting, setDeleting] = React.useState(false);
   const selectedCount = enableRowSelection ? table.getFilteredSelectedRowModel().rows.length : 0;
@@ -513,7 +598,7 @@ function DataTableActionBar<TData>({
           />
         )}
 
-        {showColumnToggle && <DataTableViewOptions table={table} />}
+        {showColumnToggle && <DataTableViewOptions table={table} onReset={onResetColumns} />}
       </div>
     </div>
   );

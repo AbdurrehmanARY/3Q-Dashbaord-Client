@@ -122,6 +122,7 @@ export function InkConsumptionPage() {
         <TabsContent value="history" className="mt-4">
           <div className="overflow-hidden rounded-xl border bg-card shadow-card">
             <DataTable
+              tableId="ink-consumption"
               columns={columns}
               data={filteredData}
               loading={isLoading}

@@ -56,6 +56,7 @@ export function InkPurchasesPage() {
 
       <div className="overflow-hidden rounded-xl border bg-card shadow-card">
         <DataTable
+          tableId="ink-purchases"
           columns={columns}
           data={data ?? []}
           loading={isLoading}

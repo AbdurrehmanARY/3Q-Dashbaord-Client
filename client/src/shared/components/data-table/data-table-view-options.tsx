@@ -1,11 +1,12 @@
 import type { Column, Table } from "@tanstack/react-table";
-import { Settings2Icon } from "lucide-react";
+import { RotateCcwIcon, Settings2Icon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -24,8 +25,17 @@ function columnLabel<TData>(column: Column<TData>): string {
 /**
  * "Columns" dropdown — show/hide any column where `getCanHide()` is true. The `select` and
  * `actions` columns opt out via `enableHiding: false`, so they never appear here.
+ *
+ * `onReset` is supplied only by tables whose visibility is persisted, and adds a
+ * "Reset columns" action that clears the saved override back to the column defaults.
  */
-export function DataTableViewOptions<TData>({ table }: { table: Table<TData> }) {
+export function DataTableViewOptions<TData>({
+  table,
+  onReset,
+}: {
+  table: Table<TData>;
+  onReset?: () => void;
+}) {
   const hideable = table.getAllColumns().filter((c) => c.getCanHide());
   if (hideable.length === 0) return null;
 
@@ -49,6 +59,15 @@ export function DataTableViewOptions<TData>({ table }: { table: Table<TData> }) 
             {columnLabel(column)}
           </DropdownMenuCheckboxItem>
         ))}
+        {onReset && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={onReset}>
+              <RotateCcwIcon className="text-muted-foreground" />
+              Reset columns
+            </DropdownMenuItem>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );
