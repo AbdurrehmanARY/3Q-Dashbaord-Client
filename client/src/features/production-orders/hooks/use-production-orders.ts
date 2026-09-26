@@ -309,3 +309,18 @@ export function useReconcileLine(orderId: string) {
     onError: (err: any) => toast.error(err.message),
   });
 }
+
+/* Batch hooks live in `use-batches.ts` — see the material-flow model. */
+
+export function useCompleteProductionOrder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => productionOrderService.completeOrder(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: PRODUCTION_ORDER_KEYS.all });
+      qc.invalidateQueries({ queryKey: ["work-orders"] });
+      toast.success("Production order marked as complete!");
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+}

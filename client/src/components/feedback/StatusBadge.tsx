@@ -8,35 +8,37 @@ const statusBadgeVariants = cva(
     variants: {
       variant: {
         /* --- Work Order / Generic --- */
-        draft:     "bg-muted text-muted-foreground ring-border",
+        draft: "bg-muted text-muted-foreground ring-border",
         submitted: "bg-success/10 text-success ring-success/30",
-        pending:   "bg-warning/10 text-warning ring-warning/30",
-        approved:  "bg-success/10 text-success ring-success/30",
-        rejected:  "bg-destructive/10 text-destructive ring-destructive/30",
+        pending: "bg-warning/10 text-warning ring-warning/30",
+        approved: "bg-success/10 text-success ring-success/30",
+        rejected: "bg-destructive/10 text-destructive ring-destructive/30",
 
         /* --- Production --- */
-        active:    "bg-primary/10 text-primary ring-primary/30",
+        active: "bg-primary/10 text-primary ring-primary/30",
+        in_progress: "bg-blue-500/10 text-blue-600 dark:text-blue-400 ring-blue-500/30",
         completed: "bg-success/10 text-success ring-success/30",
-        paused:    "bg-warning/10 text-warning ring-warning/30",
+        paused: "bg-warning/10 text-warning ring-warning/30",
         cancelled: "bg-muted text-muted-foreground ring-border",
 
+
         /* --- Machine / Operator --- */
-        online:    "bg-success/10 text-success ring-success/30",
-        offline:   "bg-muted text-muted-foreground ring-border",
-        idle:      "bg-warning/10 text-warning ring-warning/30",
-        maintenance:"bg-destructive/10 text-destructive ring-destructive/30",
+        online: "bg-success/10 text-success ring-success/30",
+        offline: "bg-muted text-muted-foreground ring-border",
+        idle: "bg-warning/10 text-warning ring-warning/30",
+        maintenance: "bg-destructive/10 text-destructive ring-destructive/30",
 
         /* --- Stock --- */
-        "in-stock":    "bg-success/10 text-success ring-success/30",
-        "low-stock":   "bg-warning/10 text-warning ring-warning/30",
-        "out-of-stock":"bg-destructive/10 text-destructive ring-destructive/30",
+        "in-stock": "bg-success/10 text-success ring-success/30",
+        "low-stock": "bg-warning/10 text-warning ring-warning/30",
+        "out-of-stock": "bg-destructive/10 text-destructive ring-destructive/30",
 
         /* --- Generic --- */
-        success:   "bg-success/10 text-success ring-success/30",
-        warning:   "bg-warning/10 text-warning ring-warning/30",
-        error:     "bg-destructive/10 text-destructive ring-destructive/30",
-        info:      "bg-primary/10 text-primary ring-primary/30",
-        neutral:   "bg-muted text-muted-foreground ring-border",
+        success: "bg-success/10 text-success ring-success/30",
+        warning: "bg-warning/10 text-warning ring-warning/30",
+        error: "bg-destructive/10 text-destructive ring-destructive/30",
+        info: "bg-primary/10 text-primary ring-primary/30",
+        neutral: "bg-muted text-muted-foreground ring-border",
       },
     },
     defaultVariants: {
@@ -49,26 +51,28 @@ type StatusVariant = VariantProps<typeof statusBadgeVariants>["variant"];
 
 const DOT_COLORS: Partial<Record<NonNullable<StatusVariant>, string>> = {
   submitted: "bg-success",
-  approved:  "bg-success",
+  approved: "bg-success",
   completed: "bg-success",
-  online:    "bg-success",
-  "in-stock":"bg-success",
-  success:   "bg-success",
-  active:    "bg-primary",
-  info:      "bg-primary",
-  pending:   "bg-warning",
-  paused:    "bg-warning",
-  idle:      "bg-warning",
-  "low-stock":"bg-warning",
-  warning:   "bg-warning",
-  rejected:  "bg-destructive",
+  online: "bg-success",
+  "in-stock": "bg-success",
+  success: "bg-success",
+  active: "bg-primary",
+  in_progress: "bg-blue-500",
+  info: "bg-primary",
+
+  pending: "bg-warning",
+  paused: "bg-warning",
+  idle: "bg-warning",
+  "low-stock": "bg-warning",
+  warning: "bg-warning",
+  rejected: "bg-destructive",
   cancelled: "bg-muted-foreground",
-  maintenance:"bg-destructive",
-  "out-of-stock":"bg-destructive",
-  error:     "bg-destructive",
-  draft:     "bg-muted-foreground",
-  offline:   "bg-muted-foreground",
-  neutral:   "bg-muted-foreground",
+  maintenance: "bg-destructive",
+  "out-of-stock": "bg-destructive",
+  error: "bg-destructive",
+  draft: "bg-muted-foreground",
+  offline: "bg-muted-foreground",
+  neutral: "bg-muted-foreground",
 };
 
 interface StatusBadgeProps extends VariantProps<typeof statusBadgeVariants> {

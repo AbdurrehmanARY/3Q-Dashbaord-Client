@@ -50,9 +50,30 @@ describe("cascadeDraft", () => {
 describe("validateLineDraft", () => {
   it("passes a consistent chain", () => {
     const errors = validateLineDraft(
-      makeDraft({ printedRolls: 8, sentToCuttingRolls: 6, cutRolls: 4, sentToPackagingRolls: 2, packagedRolls: 1 }),
+      makeDraft({
+        printedRolls: 8,
+        sentToCuttingRolls: 6,
+        cutRolls: 4,
+        sentToPackagingRolls: 2,
+        packagedRolls: 1,
+        // Rolls cannot reach cutting without the pair that runs it — see the guard below.
+        cuttingMachineId: 2,
+        cuttingOperatorId: 2,
+      }),
       planning
     );
+    expect(errors).toEqual({});
+  });
+
+  it("requires a cutting machine and operator once rolls are sent to cutting", () => {
+    const errors = validateLineDraft(makeDraft({ printedRolls: 5, sentToCuttingRolls: 5 }), planning);
+    expect(errors.cuttingMachineId).toBeTruthy();
+    expect(errors.cuttingOperatorId).toBeTruthy();
+    expect(errors.sentToCuttingRolls).toBeTruthy();
+  });
+
+  it("does not demand cutting resources while nothing is sent to cutting", () => {
+    const errors = validateLineDraft(makeDraft({ printedRolls: 5 }), planning);
     expect(errors).toEqual({});
   });
 

@@ -79,4 +79,9 @@ export const productionOrderService = {
 
   reconcileLine: (lineId: string, body: ReconcileInput) =>
     api.put<{ data: ProductionOrderLine }>(`/production-orders/lines/${lineId}/reconcile`, body),
+
+  /* Batch CRUD lives in `batch-service.ts` — three stage-scoped resources. */
+
+  completeOrder: (id: string) =>
+    api.post<{ data: ProductionOrder }>(`/production-orders/${id}/complete`),
 };

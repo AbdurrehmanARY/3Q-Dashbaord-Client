@@ -1,5 +1,8 @@
 export type ProductionOrderStatus = "planned" | "production" | "complete";
 
+/** Which workflow an order runs — drives which planning form and stage board is rendered. */
+export type ProductType = "printed" | "woven";
+
 export type ProductionLineStatus = "pending" | "active" | "paused" | "completed" | "cancelled";
 
 export type ProductionStage = "printing" | "cutting" | "packaging";
@@ -60,6 +63,7 @@ export interface ProductionOrder {
   brandName: string | null;
   companyId: number | null;
   companyName: string | null;
+  estimatedWeavingHours?: number | null;
 }
 
 /** Raw line row. Every decimal arrives from Postgres as a string — convert before arithmetic. */
@@ -113,7 +117,12 @@ export interface LinePlanning {
   totalWeight: number;
   printingMachineId: number | null;
   printingOperatorId: number | null;
+  /** Planned sizes of a Size Label — empty for other label types. */
+  sizes?: import("./label-types").SizePlan[];
 }
+
+/** Re-export the shared SizePlan type so consumers only import from `types.ts`. */
+export type { SizePlan } from "./label-types";
 
 /** Material detail is echoed back with the line so the floor can verify the selection. */
 export interface LineMaterial {
@@ -201,6 +210,25 @@ export interface ReconcileInput {
   extraWeight: number;
 }
 
+export interface StageInventoryPosition {
+  plannedRolls: number;
+  printedTotal: number;
+  cuttedTotal: number;
+  packagedTotal: number;
+  printedConsumed?: number;
+  printedAvailable: number;
+  cuttedConsumed?: number;
+  cuttedAvailable: number;
+  printable: number;
+  cuttable: number;
+  packagable: number;
+  remainingRolls: number;
+  isReadyForCompletion?: boolean;
+}
+
+/* Batch shapes live in `batch-types.ts` — the material-flow model with its four
+   quantities (assigned / produced / wasted / consumed) and consumption edges. */
+
 export interface ProductionLineOverview {
   id: number;
   labelType: string;
@@ -214,6 +242,7 @@ export interface ProductionLineOverview {
   packaging: LinePackaging;
   reconciliation?: LineReconciliation;
   liveProgress: LineLiveProgress;
+  stageInventory?: StageInventoryPosition;
 }
 
 export interface ProductionOrderHeader {
@@ -264,6 +293,7 @@ export interface ProductionOrderTotals {
   waitingForCutting: number;
   waitingForPackaging: number;
   completionPct: number;
+  stageInventory?: StageInventoryPosition;
 }
 
 export interface ProductionOrderOverview {
@@ -311,14 +341,16 @@ export interface CreateProductionOrderInput {
 export interface PlanLineInput {
   labelType: string;
   quantity: number;
+  /** Planned sizes of a Size Label — summed to quantity by the service. */
+  sizes?: import("./label-types").SizePlan[];
   labelSize: number;
   rollLength?: number;
   extraRolls?: number;
   materialCode: string;
   /** Manual figure — drawn from inventory when the record is submitted. */
   assignedRolls?: number;
-  printingMachineId: number;
-  printingOperatorId: number;
+  printingMachineId?: number | null;
+  printingOperatorId?: number | null;
   notes?: string;
   actorUserId?: number;
 }
