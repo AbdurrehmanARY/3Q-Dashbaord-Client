@@ -29,3 +29,14 @@ Thumbs.db
 
 # Old duplicate snapshot (has its own .git history — kept out of this repo)
 3Q-Dashbaord/
+
+# graphify — commit graph.json / GRAPH_REPORT.md, but never the local SHA256 cache
+.graphify/cache/
+
+# Superseded graphify output dir (.graphify/GRAPH_REPORT.md is the live report) and the
+# refactor's head-comparison snapshot — both generated, both regenerable, neither shipped.
+graphify-out/
+.verify-head/
+
+# Claude Code local settings (machine-specific)
+.claude/settings.local.json

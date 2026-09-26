@@ -1,0 +1,37 @@
+# graphify input scope — mirrors .gitignore (same syntax).
+# Keeps generated output, dependencies and the old duplicate snapshot out of the graph.
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# Environment / secrets
+.env
+.env.*
+
+# Logs
+*.log
+
+# Editor / OS
+.vscode/
+.idea/
+
+# Archives
+*.zip
+
+# Old duplicate snapshot (separate .git history — kept out of this repo)
+3Q-Dashbaord/
+
+# graphify's own output must never be re-ingested
+.graphify/
+
+# Compiled server bundle committed for deploy — graph the TypeScript sources instead
+server/api/
+
+# Tool scratch / chat state
+.kilo/
+.claude/
