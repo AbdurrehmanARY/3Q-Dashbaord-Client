@@ -307,3 +307,37 @@ For any future AI agent (or human) working in this repo:
 10. **Keep changes production-ready and maintainable.** Run `npx tsc --noEmit` in whichever package(s) you touched before considering a task done; run `npm run build` in `client/` for anything touching routing, lazy imports, or build-sensitive code.
 11. **Decimal columns are strings over the wire** (see Database Summary) — always convert with `Number(...)` before doing arithmetic or comparisons, on both server and client.
 12. **Work order completion lock** (`status === "complete"`) follows the "throw ApiError 400 on mutation attempt" pattern — apply it consistently to any new locking business rule rather than inventing a different mechanism (e.g. silently ignoring the update, or a boolean `readOnly` flag returned to the client for it to self-enforce). Purchase records are deliberately **not** locked: they are plain CRUD.
+
+## Health check
+
+A lightweight backend health probe exists at `server/src/modules/health/health.routes.ts` and is mounted at `/api/health` (behind the API rate limiter). The server also exposes a public `/health` route on the Express app itself.
+
+Client-side probes live in `client/src/lib/healthcheck/`:
+
+- `client_healthcheck.tsx` — `ClientHealthcheck` React component that pings `/api/health` on a configurable interval and renders a status chip + detail card. Also exports a standalone `probeBackend()` promise for use outside React state.
+- `health-check-shell.tsx` — `HealthCheckShell` panel wrapper used by probe consumers.
+- `materials-health.ts` — `probeMaterialsHealth()` checks the `/materials` endpoint and reports record count.
+- `production-health.ts` — `probeProductionHealth()` checks the `/production-orders` endpoint and reports record count.
+
+These are dev/debug utilities. The public UI degrades gracefully when probes are disabled (the `enabled` prop on `ClientHealthcheck`).
+
+## Root runner
+
+`tox.mjs` is a monorepo-aware test + typecheck runner modelled on `tox`. It defines per-package environments in the `ENVS` map and runs them in order, stopping on the first failure unless `--keep-going` is passed.
+
+```bash
+node tox.mjs                  # default: server typecheck + test, client typecheck + test
+node tox.mjs --keep-going     # run everything even after failures
+node tox.mjs server build     # single environment
+node tox.mjs client test server typecheck   # specific environments
+```
+
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+Rules:
+- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).

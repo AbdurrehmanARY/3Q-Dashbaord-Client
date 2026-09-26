@@ -1,0 +1,147 @@
+# 3Q Facility Dashboard — clinerules
+#
+# Single source of project-specific rules for a coding agent. Read
+# `.graphify/GRAPH_REPORT.md` for architecture review; run `graphify update .`
+# after edits to keep it current.
+
+# 1. TECH STACK BOUNDARIES
+# Monorepo topology: TWO INDEPENDENT packages, no root package.json, no npm
+# workspaces. Commands ALWAYS run per-package (cd into the package first).
+#
+# client/  (label-erp-client)
+#   React 18.3.1 · TS 5.9.3 · Vite 5.4.21 · Vitest 4.1.10
+#   shadcn/ui base-nova (Radix + @base-ui/react both installed)
+#   TanStack Query 5.101.2 · TanStack Table 8.21.3
+#   react-hook-form 7.81.0 · @hookform/resolvers 5.4.0 · zod 4.4.3
+#   zustand 5.0.14 · axios 1.18 · date-fns 4.4 · recharts 3.8 · sonner 1.5
+#   lucide-react · cmdk · xlsx 0.18 · canvas-confetti
+#   Tests: vitest + jsdom 29 + @testing-library/react 16.3 + jest-dom 7
+#   Path alias: @/* -> src/*
+#
+# server/  (label-erp-server)
+#   Node engines 24.x (NOTE: CI pins Node 20 — fix or align) · TS 5.9.3
+#   Express 4.22.2 · Drizzle ORM 0.36.4 + drizzle-kit 0.30 (postgres 3.4)
+#   Supabase PostgreSQL · zod 3.25.76 · tsup 8.5 · tsx 4.19 · vitest 4.1.10
+#   helmet · cors · compression · express-rate-limit 8.6.1 · nodemailer 9
+#   Path aliases: @api/* | @db/* | @config/*
+#
+# ⚠ Zod divergence: client zod v4 vs server zod v3. Zod SCHEMA objects are NOT
+#   portable between packages (v4 changed error-message syntax, deprecations).
+#   Share only TS types; never runtime schema objects across packages.
+# Do not add a dependency without confirming it is genuinely missing from the
+# version list above and that the installed version matches.
+
+# 2. CODE STYLE & QUALITY
+# Frontend
+# - Feature layout: features/<feature>/{pages,components,hooks,services,schemas,types.ts}.
+# - Hooks (use-<resource>.ts): export a <RESOURCE>_KEYS query-key factory; read
+#   hooks use select: (res) => res.data to unwrap the {data} envelope; mutations
+#   invalidateQueries + toast.success/error. Copy this shape exactly.
+# - Services: thin async wrappers over lib/api.ts — endpoint + type mapping only.
+# - Forms: react-hook-form + zodResolver. The ONLY accepted `any` is
+#   `zodResolver(schema) as any` (resolvers v5 generic-inference workaround).
+# - Use AppButton/AppInput/AppSelect/AppCard/AppDialog in feature code; reach for
+#   a raw shadcn primitive only when no App* wrapper exists. Before hand-writing
+#   a UI component, check the live registry: npx shadcn@latest add <name>.
+# - Server state via TanStack Query ONLY; Zustand is for UI theme state only.
+# Backend
+# - layers: routes -> controllers -> services -> repositories.
+#   controllers: one service call, shape response, asyncHandler-wrapped.
+#   services: existence checks, cross-entity validation, number->String for
+#     Drizzle decimal columns before passing to repositories.
+#   repositories: raw Drizzle query builders only, return raw rows.
+# - Validation: Zod in api/validations/<resource>.validation.ts;
+#   validateRequest stashes on req.validatedBody/Params/Query (never mutate
+#   req.body directly); query-only schemas are flat. Controllers read via
+#   (req.validatedX ?? req.X) fallback.
+# - Errors: throw ApiError subclasses from services; controllers stay thin.
+# - Decimal columns are strings over the wire — Number(...) before arithmetic.
+# - Path aliases: @api/* | @db/* | @config/* inside server/src; @/* client.
+# - Strict mode on both packages; keep zero TS errors.
+# Tests
+# - Write strict unit tests for any modified logic. `npm test` after editing.
+# - typecheck in the touched package (`npm run typecheck`, tsc --noEmit).
+
+# 3. PRODUCTION PIPELINE RULES
+# One order runs exactly ONE workflow, selected by productType: "printed"|"woven".
+# PRINTED: Planning -> Printing -> Cutting -> Packaging -> Dispatch  (units: rolls)
+# WOVEN:   Planning -> Weaving  -> Cutting -> Packaging -> Dispatch  (units: pieces)
+# Cutting and packaging are ORDER-SCOPED on the live DB (a batch spans label types,
+# so BOTH line columns are NULL and numbering restarts per order + stage). Enforced
+# by CHECK production_batches_first_stage_one_line (first stages: num_nonulls(...) = 1;
+# cutting/packaging: num_nonulls(...) = 0) and the unique index
+# production_batches_order_stage_no_uq.
+# CORRECTED 2026-09-26: migration 0023_revert_cutting_packaging_line_scope.sql AND the
+# schema.ts production_batches_one_line check (num_nonulls(...) = 1 for every stage)
+# describe a LINE-SCOPED variant that was recorded as applied but NEVER executed, and
+# matches neither the live schema nor the running code. Keep-order-scoped vs
+# move-to-line-scoped is an open product decision — read
+# memory-bank/migration-reconciliation.md before touching either.
+# production_stage_tx_type (append-only, ordered):
+#   print_credit -> cut_consume_print/cut_credit -> package_consume_cut/package_credit
+# - Printing/Weaving only CREDIT their stage.
+# - Cut consumes the stage above + credits its own; Package consumes cut + credits.
+# - Waste is allowed ONLY at the FIRST stage (printing or weaving) — enforced.
+# - Packaging batches have an operator but NO machine — enforced.
+# - Only COMPLETED batches count toward stage totals; CANCELLED never moves counts.
+# - Never hand-write server-calculated production fields on the client.
+
+# 4. ROLES & SECURITY
+# REAL state: NO authentication and NO RBAC in the code. JWT_SECRET is commented
+# out in server/src/config/env.ts; grepping src for jsonwebtoken|passport|req.user
+# returns nothing. The user_role enum is descriptive only and actorUserId is an
+# optional attribution field, NOT an authorization signal — do not treat it as
+# auth. Do NOT invent a CEO/Initiator/Accountant matrix — it does not exist here.
+#
+# user_role enum (server/src/db/tables/users.table.ts):
+#   office_staff         — office staff; work-order master data
+#   production_manager   — production planning + machine/operator assignment
+#   production_operator  — operates machines; packaging is done by this role
+#   (deliberately no packaging-specific role.)
+# apiRateLimiter (express-rate-limit) IS active: 1000 req/IP/min on /api.
+# authRateLimiter is pre-wired for when auth arrives (unused today).
+# CORS_ORIGIN is a comma-separated allow-list; "*" is rejected loudly in prod.
+
+# 5. VERCEL / SERVERLESS DEPLOYMENT
+# TWO VERCEL PROJECTS: server (Root Directory=server) and client
+# (Root Directory=client). Deploy server first, then client, then lock CORS down.
+# Server build (package.json "build"): tsup bundles src/api-entry.ts -> api/, then
+# renames api/api-entry.js -> api/index.js. vercel.json exposes
+# functions["api/index.js"] (maxDuration 30, regions ["bom1"]) and rewrites
+# everything to /api. NOTE the compiled bundle (server/api/index.js) is checked
+# into the repo — keep it in sync with `npm run build` before pushing.
+# Runtime DB: DATABASE_URL = Supabase transaction pooler (6543, prepare:false).
+# DIRECT_URL (session pooler :5432) is for migrations/DDL from a dev machine ONLY.
+
+# 6. KNOWLEDGE GRAPH / TOOLING
+# - Prefer `graphify query|path|explain` over raw grep. Report lives at
+#   `.graphify/GRAPH_REPORT.md` (NOT the old graphify-out/ path).
+# - After modifying code: `graphify update .` (AST-only, no API cost).
+# - Run typecheck + tests in BOTH packages (CI runs them independently, on Node 20).
+
+# 7. MEMORY BANK
+# - Read memory-bank/{projectbrief,activeContext,progress}.md before work.
+# - Update activeContext.md and progress.md after changes; keep projectbrief.md
+#   stable (only change when goals/invariants genuinely shift).
+# - Treat CLAUDE.md as PARTIALLY STALE (predates woven/thread/dyeing/batch-flow;
+#   still claims rate limiter is a no-op); verify against code, never contradict it.
+# - Verify before trusting: run `npm run typecheck` + `npm test` + `npm run build`
+#   in the relevant package; align CI (Node 20) with engines (Node 24) at some point.
+# Strict Dependency & Runtime Version Constraints
+
+## Client Package (`/client` - React 18, TanStack Query v5, Zod v4)
+- **TanStack Query v5 Rules:**
+  - ALWAYS use single-object options syntax: `useQuery({ queryKey: [...], queryFn: ... })`.
+  - NEVER write `onSuccess`, `onError`, or `onSettled` inside `useQuery` or `useInfiniteQuery` (these do not exist in v5).
+  - Use `isPending` for initial loading states rather than `isLoading`.
+  - Use `gcTime` instead of `cacheTime`.
+- **Zod v4 Rules:**
+  - Keep client Zod schemas isolated within `/client/src/lib/validations` or `/client/src/schemas`.
+  - Do NOT import Zod schemas directly across the `/client` and `/server` boundary to avoid Zod 4 vs Zod 3 runtime type mismatches.
+
+## Server Package (`/server` - Node 24, Express, Drizzle ORM, Zod v3)
+- **Node 24 Runtime Rules:**
+  - Do NOT import or initialize `dotenv` in server code—Node handles environment variables via `--env-file .env` at CLI startup.
+  - Rely on global `fetch` and native Web APIs; do not install or import `node-fetch` or `axios` in the server package.
+- **Zod v3 Rules:**
+  - Keep server validation schemas inside `/server/src/schemas` using standard Zod 3 syntax.
