@@ -38,6 +38,7 @@ const workOrderWithBrandSelect = {
   density: wovenWorkOrderDetails.density,
   speed: wovenWorkOrderDetails.speed,
   extra: wovenWorkOrderDetails.extra,
+  estimatedWeavingHours: wovenWorkOrderDetails.estimatedWeavingHours,
   sizeLabels: wovenWorkOrderDetails.sizeLabels,
 };
 

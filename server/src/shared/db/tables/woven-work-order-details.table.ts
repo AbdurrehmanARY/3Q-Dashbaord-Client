@@ -32,6 +32,16 @@ export const wovenWorkOrderDetails = pgTable(
     speed: numeric("speed", { precision: 12, scale: 2 }).default("0").notNull(),
     /** Extra allowance added on top of the ordered quantity, e.g. 150. */
     extra: numeric("extra", { precision: 12, scale: 2 }).default("0").notNull(),
+    /**
+     * Derived figure: hours to weave the whole order at the loom speed —
+     * `(totalQty / repeat) * pick / (speed * 60)`, rounded to 2dp, speed defaulting to
+     * 600 RPM when unset. Computed **server-side** on create/update (see
+     * `work-order.service.ts`), never accepted from the client, and backfilled by
+     * migration 0024 for pre-existing woven orders.
+     */
+    estimatedWeavingHours: numeric("estimated_weaving_hours", { precision: 12, scale: 2 })
+      .default("0")
+      .notNull(),
     /** Size labels woven on this order, e.g. ["10", "12", "XL", "34/34"]. */
     sizeLabels: jsonb("size_labels").$type<string[]>().default([]).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
