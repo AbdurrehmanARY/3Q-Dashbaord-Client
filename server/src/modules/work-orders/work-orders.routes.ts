@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { workOrderController } from "./work-order.controller";
-import { productionRunController } from "@modules/production/production-run.controller";
+import { productionRunController } from "@modules/production/batch-and-runs/production-run.controller";
 import { validateRequest, validateQuery, validateParams } from "@shared/middleware/validateRequest";
 import {
   createWorkOrderSchema,
@@ -10,7 +10,7 @@ import {
 import {
   createProductionRunSchema,
   saleOrderParamsSchema,
-} from "@modules/production/production-run.schema";
+} from "@modules/production/batch-and-runs/production-run.schema";
 import { listWorkOrdersQuerySchema } from "@shared/validation/query.schema";
 import { idParamsSchema } from "@shared/validation/common.schema";
 

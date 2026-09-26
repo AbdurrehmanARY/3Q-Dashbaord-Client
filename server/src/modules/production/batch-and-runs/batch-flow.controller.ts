@@ -20,7 +20,9 @@ export class BatchFlowController {
   constructor(private readonly stage: BatchStage) {}
 
   listByLine = asyncHandler(async (req: Request, res: Response) => {
+    console.log("working")
     const { lineId } = (req.validatedParams ?? req.params) as { lineId: number };
+    console.log("route hit",lineId, this.stage)
     const data = await batchFlowService.getLineBatches(lineId, this.stage);
     res.json({ data });
   });

@@ -18,7 +18,7 @@ const SRC = path.resolve(ROOT, "src");
 
 /** Cross-module repo->repo edges that are known-safe (leaf -> leaf). */
 const ALLOWED_CROSS_MODULE_REPO_EDGES = [
-  "modules/production/woven-production.repository.ts -> modules/thread/thread-inventory.repository.ts",
+  "modules/production/woven-production/woven-production.repository.ts -> modules/thread/thread-inventory/thread-inventory.repository.ts",
 ];
 
 function walkTs(dir: string, out: string[] = []): string[] {
@@ -125,7 +125,7 @@ describe("architecture: guard integrity (the guards above must not be vacuous)",
     // an aliased edge and a relative edge, both real and stable
     expect(graph.get("app.ts") ?? []).toContain("modules/health/health.routes.ts");
     expect(graph.get("modules/work-orders/work-order.service.ts") ?? [])
-      .toContain("modules/production/production-order.repository.ts");
+      .toContain("modules/production/production-orders/production-order.repository.ts");
   });
 });
 

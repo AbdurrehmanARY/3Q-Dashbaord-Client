@@ -4,13 +4,13 @@ import {
   type UpdateBatchInput,
   type RecordOutputInput,
 } from "./batch-flow.repository";
-import { productionOrderRepository } from "./production-order.repository";
+import { productionOrderRepository } from "../production-orders/production-order.repository";
 import { machineRepository } from "@modules/machines/machine.repository";
 import { operatorRepository } from "@modules/operators/operator.repository";
 import { NotFoundError, BadRequestError } from "@shared/errors/ApiError";
 import { Messages } from "@shared/constants/messages";
 import { userService } from "@modules/users/user.service";
-import { wovenProductionRepository } from "./woven-production.repository";
+import { wovenProductionRepository } from "../woven-production/woven-production.repository";
 import type { SizePlan } from "@db/size-plans";
 import {
   type BatchStage,

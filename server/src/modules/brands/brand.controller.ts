@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { asyncHandler } from "@shared/errors/asyncHandler";
-import { brandService } from "./company.service";
+import { brandService } from "../companies/company.service";
 import type { CreateBrandDTO, UpdateBrandDTO } from "./brand.schema";
 
 class BrandController {

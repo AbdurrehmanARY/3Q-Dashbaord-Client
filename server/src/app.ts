@@ -9,24 +9,24 @@ import { apiRateLimiter } from "@shared/middleware/rateLimiter";
 // --- module routers (one vertical slice per domain) ------------------------
 import healthRoutes from "@modules/health/health.routes";
 import companiesRoutes from "@modules/companies/company.routes";
-import brandsRoutes from "@modules/companies/brand.routes";
+import brandsRoutes from "@modules/brands/brand.routes";
 import materialsRoutes from "@modules/inventory/material.routes";
 import {
   stickerMaterialsRouter,
   localSheetsRouter,
   labelSheetsRouter,
-} from "@modules/inventory/material-receipts.routes";
+} from "@modules/material-receipts/material-receipts.routes";
 import machinesRoutes from "@modules/machines/machine.routes";
 import operatorsRoutes from "@modules/operators/operator.routes";
 import usersRoutes from "@modules/users/users.routes";
 import workOrdersRoutes from "@modules/work-orders/work-orders.routes";
-import productionOrdersRoutes from "@modules/production/production-order.routes";
-import wovenProductionRoutes from "@modules/production/woven-production.routes";
-import batchFlowRoutes from "@modules/production/batch-flow.routes";
+import productionOrdersRoutes from "@modules/production/production-orders/production-order.routes";
+import wovenProductionRoutes from "@modules/production/woven-production/woven-production.routes";
+import batchFlowRoutes from "@modules/production/batch-and-runs/batch-flow.routes";
 import inventoryRoutes from "@modules/inventory/inventory.routes";
-import threadInventoryRoutes from "@modules/thread/thread-inventory.routes";
-import threadServiceProviderRoutes from "@modules/thread/thread-service-provider.routes";
-import threadDyeingRoutes from "@modules/thread/thread-dyeing.routes";
+import threadInventoryRoutes from "@modules/thread/thread-inventory/thread-inventory.routes";
+import threadServiceProviderRoutes from "@modules/thread/thread-service-provider/thread-service-provider.routes";
+import threadDyeingRoutes from "@modules/thread/thread-dyeing/thread-dyeing.routes";
 import inkRoutes from "@modules/ink/ink.routes";
 import analyticsRoutes from "@modules/analytics/analytics.routes";
 

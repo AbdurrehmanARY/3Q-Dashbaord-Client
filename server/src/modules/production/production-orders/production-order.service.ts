@@ -1,5 +1,5 @@
 import { productionOrderRepository, type PageOpts } from "./production-order.repository";
-import { batchFlowRepository } from "./batch-flow.repository";
+import { batchFlowRepository } from "../batch-and-runs/batch-flow.repository";
 import { workOrderRepository } from "@modules/work-orders/work-order.repository";
 import { machineRepository } from "@modules/machines/machine.repository";
 import { operatorRepository } from "@modules/operators/operator.repository";

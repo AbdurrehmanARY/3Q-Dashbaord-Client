@@ -1,5 +1,5 @@
 import { machineRepository } from "./machine.repository";
-import { resourceAvailabilityService } from "@modules/production/resource-availability.service";
+import { resourceAvailabilityService } from "@modules/production/batch-and-runs/resource-availability.service";
 import { ApiError, ConflictError, NotFoundError } from "@shared/errors/ApiError";
 import { Messages, Entity } from "@shared/constants/messages";
 import type { Machine } from "@db/schema";

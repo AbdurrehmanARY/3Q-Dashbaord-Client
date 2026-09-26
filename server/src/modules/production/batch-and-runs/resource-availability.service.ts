@@ -1,4 +1,4 @@
-import { productionOrderRepository } from "./production-order.repository";
+import { productionOrderRepository } from "../production-orders/production-order.repository";
 
 /**
  * Real-time availability of production resources, derived from what production lines are

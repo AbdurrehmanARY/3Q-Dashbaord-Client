@@ -1,5 +1,5 @@
 import { operatorRepository, type OperatorFilters, type OperatorType } from "./operator.repository";
-import { resourceAvailabilityService } from "@modules/production/resource-availability.service";
+import { resourceAvailabilityService } from "@modules/production/batch-and-runs/resource-availability.service";
 import { ConflictError, NotFoundError } from "@shared/errors/ApiError";
 import { Messages, Entity } from "@shared/constants/messages";
 import type { Operator } from "@db/schema";

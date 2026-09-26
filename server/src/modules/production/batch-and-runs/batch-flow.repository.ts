@@ -996,30 +996,40 @@ export class BatchFlowRepository {
 
   /**
    * planned − Σ assigned across the live FIRST-stage batches, optionally excluding one.
-   * The plan lives on a different table per workflow, so the quantity comes from the
-   * caller's locked read rather than a second lookup.
+   *
+   * The plan is read FROM THE LINE TABLE, one select per workflow, and never from
+   * `production_batches`. That is load-bearing, not stylistic: an outer query over
+   * `production_batches` returns ZERO rows while no batch exists anywhere yet, so its
+   * scalar sub-selects never evaluate and `row?.planned ?? 0` silently collapses to 0 —
+   * which made the FIRST first-stage batch on a fresh database impossible to create, with
+   * the nonsensical "0 of the 40000 planned pcs remain unassigned". The line table always
+   * has exactly one row for the line, so the guard reports a real figure.
    */
   private async remainingPlannedTx(tx: Tx, line: LineRef, excludeBatchId?: number) {
     const first = STAGES_OF[line.kind][0];
     const col = line.kind === "woven" ? "woven_production_line_id" : "production_order_line_id";
 
-    const [row] = await tx
-      .select({
-        planned:
-          line.kind === "woven"
-            ? sql<string>`(SELECT quantity FROM woven_production_lines WHERE id = ${line.id})`
-            : sql<string>`(SELECT total_rolls FROM production_order_lines WHERE id = ${line.id})`,
-        assigned: sql<string>`COALESCE((
-          SELECT SUM(b.assigned_rolls) FROM production_batches b
-          WHERE b.${sql.raw(col)} = ${line.id}
-            AND b.stage = ${first} AND b.status <> 'CANCELLED'
-            ${excludeBatchId ? sql`AND b.id <> ${excludeBatchId}` : sql``}
-        ), 0)`,
-      })
-      .from(productionBatches)
-      .limit(1);
+    const assigned = sql<string>`COALESCE((
+      SELECT SUM(b.assigned_rolls) FROM production_batches b
+      WHERE b.${sql.raw(col)} = ${line.id}
+        AND b.stage = ${first} AND b.status <> 'CANCELLED'
+        ${excludeBatchId ? sql`AND b.id <> ${excludeBatchId}` : sql``}
+    ), 0)`;
 
-        return round2(Number(row?.planned ?? 0) - Number(row?.assigned ?? 0));
+    const [row] =
+      line.kind === "woven"
+        ? await tx
+            .select({ planned: wovenProductionLines.quantity, assigned })
+            .from(wovenProductionLines)
+            .where(eq(wovenProductionLines.id, line.id))
+            .limit(1)
+        : await tx
+            .select({ planned: productionOrderLines.totalRolls, assigned })
+            .from(productionOrderLines)
+            .where(eq(productionOrderLines.id, line.id))
+            .limit(1);
+
+    return round2(Number(row?.planned ?? 0) - Number(row?.assigned ?? 0));
   }
 
   /**

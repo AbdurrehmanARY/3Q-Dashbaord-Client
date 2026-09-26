@@ -1,5 +1,5 @@
 import { threadDyeingRepository } from "./thread-dyeing.repository";
-import { threadServiceProviderRepository } from "./thread-service-provider.repository";
+import { threadServiceProviderRepository } from "../thread-service-provider/thread-service-provider.repository";
 import { BadRequestError, NotFoundError } from "@shared/errors/ApiError";
 import { Messages, Entity } from "@shared/constants/messages";
 import type { CreateDyeingSendDTO, ReceiveDyeingDTO } from "./thread-dyeing.schema";

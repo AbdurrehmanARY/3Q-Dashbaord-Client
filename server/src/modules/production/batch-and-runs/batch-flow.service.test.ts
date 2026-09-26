@@ -45,11 +45,11 @@ vi.mock("./batch-flow.repository", () => ({
         ? { kind: "printed", id: b.productionOrderLineId }
         : null,
 }));
-vi.mock("./woven-production.repository", () => ({
+vi.mock("../woven-production/woven-production.repository", () => ({
   __esModule: true,
   wovenProductionRepository: mocks.wovenProductionRepository,
 }));
-vi.mock("./production-order.repository", () => ({
+vi.mock("../production-orders/production-order.repository", () => ({
   __esModule: true,
   productionOrderRepository: mocks.productionOrderRepository,
 }));

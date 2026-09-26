@@ -1,7 +1,7 @@
 import { wovenProductionRepository, type ThreadPlanInput } from "./woven-production.repository";
-import { productionOrderRepository } from "./production-order.repository";
+import { productionOrderRepository } from "../production-orders/production-order.repository";
 import { userService } from "@modules/users/user.service";
-import { beamThreadKgOf } from "./batch-flow.helpers";
+import { beamThreadKgOf } from "../batch-and-runs/batch-flow.helpers";
 import { mailService } from "@shared/services/mail.service";
 import { ApiError, NotFoundError } from "@shared/errors/ApiError";
 import { Messages, Entity } from "@shared/constants/messages";

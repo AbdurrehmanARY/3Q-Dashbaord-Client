@@ -10,7 +10,7 @@ import {
 } from "@db/schema";
 import { eq, desc, and, sql } from "drizzle-orm";
 import { NotFoundError } from "@shared/errors/ApiError";
-import { threadInventoryRepository, type Denier } from "@modules/thread/thread-inventory.repository";
+import { threadInventoryRepository, type Denier } from "@modules/thread/thread-inventory/thread-inventory.repository";
 import type {
   ProductionOrder,
   WovenProductionLine,

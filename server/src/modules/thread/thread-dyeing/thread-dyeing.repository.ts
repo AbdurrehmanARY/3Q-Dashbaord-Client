@@ -6,7 +6,7 @@ import {
   threadServiceProviders,
 } from "@db/schema";
 import { and, desc, eq, inArray } from "drizzle-orm";
-import { threadInventoryRepository, type Denier } from "./thread-inventory.repository";
+import { threadInventoryRepository, type Denier } from "../thread-inventory/thread-inventory.repository";
 import { BadRequestError, NotFoundError } from "@shared/errors/ApiError";
 import type { NewThreadDyeingSend, NewThreadDyeingAllocation, NewThreadDyeingReceive } from "@db/schema";
 
