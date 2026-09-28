@@ -1,9 +1,9 @@
 # Migration reconciliation plan — fresh-DB provisioning
 
 *Drafted 2026-09-26 from live-DB verification (`server/scripts/verify-batch-constraints.mjs`,
-`server/scripts/reconcile-migrations.mjs` dry-run) and a migration-file audit. Status: **plan
-only** — everything executed so far was read-only evidence gathering; no schema or data was
-changed.*
+`server/scripts/reconcile-migrations.mjs` dry-run) and a migration-file audit. **Phases 1, 2 and 4
+were executed 2026-09-28** (journal repaired; baseline provisioning implemented and validated
+end-to-end on a scratch database). **Phase 3 / Step 0 remains an open product decision.***
 
 ## TL;DR
 - Live DB and the migration chain disagree in three independent ways: a **lost journal entry**
@@ -12,7 +12,8 @@ changed.*
 - `drizzle-kit migrate` from an empty database **fails first at 0018** and could not reproduce
   live even if it didn't.
 - Recommended path: repair the journal (safe immediately), then provision fresh databases from a
-  **pg_dump baseline of live + "mark all applied"** instead of replaying 0000–0023.
+  **pg_dump baseline of live + "mark all applied"** instead of replaying 0000–0024.
+  ✅ **Done 2026-09-28** — see "What was executed" below.
 - **Step 0 is a product decision**: keep cutting/packaging ORDER-scoped (recommended — live, code
   and tests already agree) or move to LINE-scoped (needs a data migration + code rewrite).
 
@@ -84,35 +85,44 @@ rows) and DROP the two live objects. Fix this (Phase 3) **before anyone runs pus
   one line is a real business mapping — plus rewrites of repository/service/tests and of the
   schema check. Migration 0023 stays obsolete either way (its content was never executed).
 
-### Phase 1 — journal repair (safe now, decision-independent)
-1. Insert into `server/drizzle/meta/_journal.json` between idx 18 and idx 20:
+### Phase 1 — journal repair — ✅ EXECUTED 2026-09-28
+1. Inserted into `server/drizzle/meta/_journal.json` between idx 18 and idx 20:
    ```json
    { "idx": 19, "version": "7", "when": 1786533923814, "tag": "0019_batch_flow_sync", "breakpoints": true }
    ```
-   `when` **must** be `1786533923814` (the orphan row's `created_at`) so drizzle/reconcile match
-   it as already-applied on live.
-2. Validate the JSON parses:
-   `node -e "JSON.parse(require('fs').readFileSync('server/drizzle/meta/_journal.json','utf8'))"`.
-3. Re-run `node --env-file server/.env server/scripts/reconcile-migrations.mjs` → the missing
-   list must stay empty, and `drizzle-kit migrate` on live must report nothing to do.
-4. Live is never at risk: recorded entries are skipped by `when`, and drizzle does not re-verify
+   `when` is `1786533923814` (the orphan row's `created_at`) so drizzle/reconcile match it as
+   already-applied on live. Journal is now a complete 0–24 sequence with strictly increasing
+   `when`, and the diff is exactly this one 7-line insertion.
+2. JSON parses: `node -e "JSON.parse(...)"` → OK.
+3. `reconcile-migrations.mjs` dry-run against live → missing list empty; `drizzle-kit migrate` on
+   live → **nothing to do** (exit 0).
+4. Live was never at risk: recorded entries are skipped by `when`, and drizzle does not re-verify
    hashes (proven — 0024 applied after placeholder hashes were inserted).
 
-### Phase 2 — fresh provisioning = baseline, not replay
-1. Capture the baseline from live (read-only):
-   `pg_dump --schema-only --no-owner --no-privileges "$DIRECT_URL" -n public > server/scripts/baseline/live-schema.sql`
-   (keep it **outside** `server/drizzle/` so drizzle-kit never mistakes it for a migration.)
-2. Add a `--fresh` mode to `server/scripts/reconcile-migrations.mjs`: after the baseline is
-   applied to an empty DB, insert **all** journal `when`s with `"baseline:"||tag` placeholder
-   hashes (including the idx-19 timestamp from Phase 1). `drizzle-kit migrate` then applies only
-   genuinely-new migrations — the same mechanism already proven on live for 0022/0023.
-3. Document the procedure (clinerules §5 / CLAUDE.md): *fresh DB = apply baseline → run
-   provision `--fresh` → `drizzle-kit migrate`*. Replay of 0000–0023 becomes an audit path only,
-   never the provisioning path.
-4. Optional hardening: add `IF NOT EXISTS` guards to 0019's CREATEs so a curious manual replay
-   fails later rather than earlier — not required once (2) exists.
+### Phase 2 — fresh provisioning = baseline, not replay — ✅ EXECUTED 2026-09-28
+1. Baseline captured from live (read-only) to `server/scripts/baseline/live-schema.sql`
+   (kept **outside** `server/drizzle/` so drizzle-kit never mistakes it for a migration).
+   Handled by **`server/scripts/dump-baseline.mjs`** (`npm run db:baseline`), which finds `pg_dump`
+   even when it is off PATH, runs `--schema-only --no-owner --no-privileges -n public`, and patches
+   `CREATE SCHEMA public;` → `CREATE SCHEMA IF NOT EXISTS public;`.
+   Counts: **34 tables · 17 enums · 81 indexes · 104 named constraints**, zero GRANT/RLS cruft.
+2. `reconcile-migrations.mjs` gained **`--fresh`**: after the baseline is applied to an empty DB it
+   inserts **all 25** journal `when`s with `baseline:<tag>` placeholder hashes (including the idx-19
+   timestamp from Phase 1). It **refuses** when the tracker already holds rows (exit 1) unless
+   `--force`, so it cannot be run against live by accident. `--write` remains the live-DB path.
+3. Procedure documented (`server/scripts/baseline/README.md`, `.clinerules` §5):
+   *fresh DB = apply baseline → `reconcile-migrations --fresh` → `drizzle-kit migrate`*.
+   Replay of 0000–0024 is an **audit path only**, never the provisioning path.
+4. Optional hardening (IF NOT EXISTS guards in 0019) — **not done and no longer needed**: replay is
+   abandoned as a provisioning strategy.
 
-### Phase 3 — make the repo files tell the truth (decision-gated by Step 0)
+**Guard added after a real near-miss:** Node's `--env-file` does **not** override a pre-existing
+environment variable, so a stale `DIRECT_URL` in the shell silently redirected a dump at the wrong
+database and briefly overwrote the baseline. `dump-baseline.mjs` now resolves the target URL and
+**refuses** unless it equals `server/.env`'s `DIRECT_URL` (override with `--force`). Verified: a
+stale `DIRECT_URL` → `exit 1` with a message naming both URLs.
+
+### Phase 3 — make the repo files tell the truth — ⏸ NOT STARTED (blocked on Step 0; needs explicit go-ahead)
 **If Option A (keep order-scoped):**
 1. `production-batches.table.ts`: replace the stale `production_batches_one_line` check with
    `production_batches_first_stage_one_line` using the exact live definition, and declare
@@ -131,13 +141,36 @@ rows) and DROP the two live objects. Fix this (Phase 3) **before anyone runs pus
 `one_line` + drop `order_stage_no_uq`), update the schema check/indexes and all batch
 code/tests, and still rewrite 0023 as obsolete (Phase 3.2).
 
-### Phase 4 — validation checklist
-1. Empty scratch DB (Supabase branch or local PG 15+): baseline → provision `--fresh` →
-   `drizzle-kit migrate` → must report no pending migrations.
-2. `pg_dump --schema-only` scratch vs live → diff must be empty modulo stats/owners.
-3. Point `verify-batch-constraints.mjs` at the scratch DB → output must match the Appendix.
-4. Server suite (107 tests) + optional boot smoke against scratch.
-5. `reconcile-migrations.mjs` dry-run against live → missing list stays empty (regression guard).
+### Phase 4 — validation checklist — ✅ EXECUTED 2026-09-28 (scratch DB `q3_provision_scratch`, local PG 18.3)
+1. ✅ Empty scratch DB: baseline applied clean (34 tables / 17 enums / 81 indexes; 404 constraints
+   on PG18 vs 113 on live = PG18 stores NOT NULL in `pg_constraint`, otherwise type-for-type
+   identical) → `--fresh` recorded all 25 entries → `drizzle-kit migrate` → **nothing to apply**
+   (exit 0).
+2. ✅ `pg_dump --schema-only` scratch vs live → identical modulo pg_dump nonce/banner lines.
+3. ✅ **Future-migration probe**: a throwaway `0025_tmp_provision_probe.sql` applied **only that
+   migration** (tracker 25 → 26, probe table created) — proving genuinely-new migrations still
+   flow through a baseline-provisioned DB. Probe artifacts reverted; journal restored to the single
+   idx-19 insertion.
+4. ✅ Safety guard: `reconcile-migrations.mjs --fresh` against live → `exit 1`, live untouched.
+5. ✅ Server suite green after the script changes (`typecheck` 0 / `test` 120 / `build` OK).
+
+## Where things stand (2026-09-28)
+
+| Phase | Status |
+|---|---|
+| 1 — journal repair (idx 19) | ✅ executed, committed |
+| 2 — baseline + `--fresh` provisioning | ✅ executed, committed |
+| 3 — `schema.ts` / 0023 reconciliation (D4) | ⏸ decision-gated on Step 0 — **not started** |
+| 4 — scratch-DB validation | ✅ executed, evidence above |
+
+Provisioning a new database today (from `server/`):
+
+```bash
+npm run db:baseline                                                   # refresh from live
+psql "$SCRATCH_URL" -f scripts/baseline/live-schema.sql               # apply to empty DB
+node --env-file <scratch.env> scripts/reconcile-migrations.mjs --fresh  # mark all applied
+npx drizzle-kit migrate                                               # only genuinely-new ones
+```
 
 ## Appendix — exact live DDL targets (captured 2026-09-26)
 

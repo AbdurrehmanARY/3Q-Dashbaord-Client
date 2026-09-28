@@ -112,6 +112,16 @@
 # into the repo — keep it in sync with `npm run build` before pushing.
 # Runtime DB: DATABASE_URL = Supabase transaction pooler (6543, prepare:false).
 # DIRECT_URL (session pooler :5432) is for migrations/DDL from a dev machine ONLY.
+#
+# DATABASE PROVISIONING — the migration chain CANNOT be replayed from 0000
+# (0018 ALTERs a table only 0019 creates; live also has objects no migration makes).
+# New/empty DBs are provisioned from a pg_dump baseline instead — see
+# server/scripts/baseline/README.md and memory-bank/migration-reconciliation.md:
+#   npm run db:baseline          # refresh scripts/baseline/live-schema.sql from live
+#   psql "$URL" -f scripts/baseline/live-schema.sql
+#   node --env-file <env> scripts/reconcile-migrations.mjs --fresh
+#   npx drizzle-kit migrate      # applies ONLY genuinely-new migrations
+# Replaying 0000–0024 is an audit path only, never the provisioning path.
 
 # 6. KNOWLEDGE GRAPH / TOOLING
 # - Prefer `graphify query|path|explain` over raw grep. Report lives at

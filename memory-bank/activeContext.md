@@ -221,10 +221,18 @@ CHECK forbids those batches to have (`implementation.md` §13).
    followed on 2026-09-28, and **both are now committed as `0a3ef12`** — item closed.
    Provisioning (`memory-bank/migration-reconciliation.md`) is unaffected — no migration and
    no `schema.ts` change were made.
-2. **Execute `memory-bank/migration-reconciliation.md`.** Fresh-DB provisioning is
-   still broken (0018/0019 mutual redundancy, the lost 0019 journal entry, the
-   unapplied-but-recorded 0023, and live-only objects created out-of-band). Step 0 of
-   that plan is the scope decision in item 1.
+2. ~~**Execute `memory-bank/migration-reconciliation.md`.**~~ — **Phases 1, 2 and 4
+   EXECUTED 2026-09-28**: the lost `0019` journal entry is restored (journal is now a complete
+   0–24 sequence), and fresh-DB provisioning now runs off a **pg_dump baseline** instead of
+   replaying 0000–0024. New script `server/scripts/dump-baseline.mjs` (`npm run db:baseline`)
+   captures `server/scripts/baseline/live-schema.sql` with a mis-target guard;
+   `reconcile-migrations.mjs` gained `--fresh` (marks every journal entry `baseline:<tag>`,
+   refuses on a non-empty tracker) alongside the existing live `--write` path. Validated
+   end-to-end on scratch DB `q3_provision_scratch`: baseline clean → `--fresh` records 25 →
+   `drizzle-kit migrate` = nothing to apply → `pg_dump` diff vs live empty → a throwaway
+   `0025` probe applied *only* that migration. **Still outstanding: Phase 3 / D4**
+   (`schema.ts` still declares the non-existent `production_batches_one_line` check and omits
+   `first_stage_one_line` / `order_stage_no_uq`) — decision-gated, needs explicit go-ahead.
 3. **Re-affirm client gates**: `typecheck` 0 errors, `lint` 0 errors (184 warnings), `test` 7 files / 71 tests, `build` green — all re-verified 2026-09-28.
 4. ~~**Decide on the committed `server/api/index.js` build artifact**~~ — **DECIDED
    2026-09-28: keep it committed and in sync** (`.clinerules` §5 — `vercel.json` serves

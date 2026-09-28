@@ -73,13 +73,18 @@
 - Two-project Vercel deployment with the pooler (runtime) vs session-pooler
   (migrations) DB split, and the `api/index.js` serverless-function entry.
 - All migration files `0000`–`0024` exist and are applied to Supabase. The journal
-  holds 24 entries — the `0019_batch_flow_sync` entry was lost, leaving its live
-  tracker row orphaned (id 20, `created_at=1786533923814`) — and every journal entry
-  IS recorded on live (0022/0023 via placeholder hashes from
-  `server/scripts/reconcile-migrations.mjs`; 0024 with its real hash). Fresh-DB
-  provisioning from scratch is still broken (0018/0019 mutual redundancy + the 0023
-  divergence + out-of-band live objects) — full findings and plan in
-  `memory-bank/migration-reconciliation.md`.
+  now holds **25 entries (idx 0–24, complete)** — the `0019_batch_flow_sync` entry was
+  lost and was **restored 2026-09-28** (`when: 1786533923814`, matching its orphaned live
+  tracker row, id 20). Every journal entry IS recorded on live (0022/0023 via placeholder
+  hashes from `server/scripts/reconcile-migrations.mjs`; 0024 with its real hash).
+  **Fresh-DB provisioning is fixed (2026-09-28) via a pg_dump baseline rather than a replay**:
+  `server/scripts/baseline/live-schema.sql` (34 tables / 17 enums / 81 indexes / 104 constraints)
+  + `npm run db:baseline` (`dump-baseline.mjs`, with a mis-target guard) +
+  `reconcile-migrations.mjs --fresh` (records all entries `baseline:<tag>`, refuses a non-empty
+  tracker) + `drizzle-kit migrate`. Proven on scratch DB `q3_provision_scratch` including a
+  future-migration probe. Replaying 0000–0024 stays an audit path only — the chain still cannot
+  run from 0000 (0018/0019 mutual redundancy, 0023 divergence, out-of-band live objects).
+  Remaining: Phase 3 / D4 — `schema.ts` still disagrees with live (decision-gated).
 
 ## Roadmap (not built)
 - **Auth + RBAC.** No authentication exists; roles are descriptive. Wire up
