@@ -14,6 +14,7 @@
  * line, so a line-scoped URL must never report one.
  *
  * Usage (from server/):  npm run verify:batch-visibility [orderId]
+ *                         (no argument = the newest production order)
  * NOTE: this script loads server/.env itself, so node --env-file is NOT needed.
  */
 import fs from "node:fs";
@@ -46,9 +47,20 @@ if (!url) {
   process.exit(1);
 }
 
-/** The order to inspect: whatever the caller passes, defaulting to the reported one. */
-const orderId = Number(process.argv[2] ?? 22);
 const sql = postgres(url, { prepare: false, max: 1 });
+
+/**
+ * The order to inspect: the caller's argument, else the newest order on the database.
+ *
+ * This used to hard-code `22` (the order the bug was reported against). Once that order stopped
+ * existing — it has; the live database now starts at a later id — the documented no-argument
+ * invocation failed with "No production order 22", i.e. a green gate went red for no reason.
+ */
+const requested = process.argv[2];
+const parsed = requested === undefined ? Number.NaN : Number(requested);
+const orderId = Number.isFinite(parsed)
+  ? parsed
+  : ((await sql`SELECT id FROM production_orders ORDER BY id DESC LIMIT 1`)[0]?.id ?? 22);
 
 let failures = 0;
 const report = (ok, label, value) => {

@@ -53,6 +53,9 @@
   scope from the stage, and one pure helper — `utils/batch-scope.ts#batchCreateTarget` — decides
   line vs order for the mutation (order wins for cutting/packaging). `batch-scope.test.ts` 9 → 17
   tests; client gates green (7 files / 71 tests). See `implementation.md` §13.
+  **Both halves are committed** (2026-09-28) as `0a3ef12` on `chore/ci` — 24 files, +2807/−170 —
+  together with the regenerated `server/api/index.js` (509 070 B): a fresh `npm run build` leaves
+  `server/api/` byte-identical, so the committed bundle is in sync.
 - Woven production: `woven_production_lines`, `woven_thread_plan_items`, dyeing
   workflow + service-provider send/receive, thread-dye-batches.
 - Append-only `production_runs` audit log (+ one-time backfill migration).
@@ -97,14 +100,18 @@
   `Continue`, `client/tsc-cli.txt`, `server/scripts/tmp-diag-line15.mjs`,
   `server/seed-master.ts` and `.verify-head/` are removed; `client.zip` was already gone and
   the `_journal.json` duplication is resolved (one file remains). `3Q-Dashbaord/` is
-  gitignored but NOT deleted — it holds its own `.git` history, so removing it is a
-  data-loss decision needing an explicit go-ahead.
+  gitignored (`.gitignore:31`) but NOT deleted — it holds its own `.git` history, so removing it
+  is a data-loss decision needing an explicit go-ahead. **Characterised 2026-09-28:** an
+  unrelated repo on `main` (3 commits — `Initial commit`, `first repo`, `Create .git.zip`), no
+  remote, 720 files / 6.8 MB, its HEAD is *not* an ancestor of `chore/ci`; it also carries local
+  duplicate `client/`/`server/` copies plus regenerable build output. Safe to delete **only**
+  with explicit approval.
 
 ## Quality gates & known issues
 - **TypeScript**: both packages `npm run typecheck` → **0 errors** (verified on
   this session). `strict` mode on in both `tsconfig.json` files.
-- **Tests** (re-verified 2026-09-26): `client/` **6 files / 54 tests**;
-  `server/` **9 files / 107 tests**. Suites:
+- **Tests** (re-verified 2026-09-28): `client/` **7 files / 71 tests**;
+  `server/` **9 files / 120 tests**. Server suites:
   `batch-and-runs/batch-flow.helpers.test.ts` (53),
   `batch-and-runs/batch-flow.service.test.ts` (2),
   `batch-and-runs/batch-flow.repository.test.ts` (3),
@@ -112,12 +119,19 @@
   `woven-production/woven-production.helpers.test.ts` (13),
   `work-orders/work-order.helpers.test.ts` (7), `shared/formulas/*` (13),
   `shared/__tests__/architecture.test.ts` (5).
+  Client suites: `utils/batch-scope.test.ts` (17) plus six pre-existing pure util/store tests
+  (`utils/line-draft`, `utils/planning-dialog`, `utils/planning-rows`, `lib/format`,
+  `utils/weaving-time`, `store/table-visibility-store`).
 - **Known issues / drift**
   - CI runs on **Node 20** but `server/package.json` declares `engines: 24.x`.
   - **Zod v3 (server) vs v4 (client)** — schemas cannot be shared across packages.
   - `CLAUDE.md` is **partially stale** (no woven/thread/dyeing/batch-flow, rate
     limiter wrongly called a no-op); treat as secondary to the real code.
-  - The compiled `server/api/index.js` (~4.4k lines) is **committed to git**.
+  - The compiled `server/api/index.js` is **committed to git** — **decided 2026-09-28: keep it
+    committed and in sync** (`.clinerules` §5: `vercel.json` serves `functions["api/index.js"]`).
+    Verified by rebuilding: `server/api/` comes out byte-identical to the committed bundle. The
+    build's rename step only maps `api/api-entry.js` → `api/index.js`, so the committed
+    `api/index.js.map` lags one build (runtime-irrelevant, pre-existing script quirk).
   - The working tree on `chore/ci` was resolved 2026-09-26: the server sub-module
     reorg, the client unified-planning + batch UI work, migration 0024, the tooling
     changes and `memory-bank/` all landed in a run of atomic commits. Only the

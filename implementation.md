@@ -846,3 +846,56 @@ request, not two — the same dedupe §12 relied on, now preserved across the sc
 - §9.4 (end-to-end against the *deployed* Vercel API) and §9.5 (manual UI pass) — unchanged.
 - D4 (`schema.ts` CHECK reconciliation) and D5 (creation-time `assigned_rolls > 0`) — unchanged.
 
+---
+
+## 14. Execution record — landed, committed, and the T5 default fixed (2026-09-28)
+
+**Status: executed.** §12 and §13 are no longer "for review" — the whole change set (server read
+path, client create path, this document, and the regenerated bundle) is **committed on `chore/ci`
+as `0a3ef12`** (24 files, +2807/−170), and the working tree is clean.
+
+### Post-commit validation (re-run against the committed tree)
+
+| Gate | Result |
+|---|---|
+| `client/ npm run typecheck` | 0 errors |
+| `client/ npm test` | 7 files / **71 tests** pass |
+| `client/ npm run lint` | 0 errors, **184 warnings** (baseline, unchanged) |
+| `server/ npm run typecheck` | 0 errors |
+| `server/ npm test` | 9 files / **120 tests** pass |
+| `server/ npm run build` | tsup OK — and `git status server/api/` stays **empty**: the committed `api/index.js` (509 070 B) is byte-identical to a fresh build |
+| `server/ npm run verify:batch-visibility` | **All checks PASS** (see below) |
+
+### The live database changed, and that exposed one real defect
+
+Order `22` — the order the bug was reported against, and the id T5 hard-coded as its default —
+**no longer exists**. The database now holds a single order, **`#24`** (`PRD-00001`, woven,
+60 000 pcs) with 2 weaving and 1 cutting batch. So `npm run verify:batch-visibility`, the
+documented argument-less invocation, had started failing with `No production order 22` — a green
+gate gone red for a stale reason, which is precisely the failure mode a gate must not have.
+
+**Fix:** the default now resolves to the newest production order
+(`SELECT id FROM production_orders ORDER BY id DESC LIMIT 1`); an explicit id still wins, and a
+bad argument (`… 9999`) still fails loudly with `No production order 9999` and exit code 1.
+
+Re-run against the current data:
+
+```
+order 24 · woven · first stage weaving
+PASS  cutting: every batch is order-scoped             = 1/1
+PASS  findByLine(woven_production_lines 20,'weaving')  = 1
+PASS  findByOrder(24,'woven','cutting')                = 1     ← 0 before S1
+PASS  findByLine(woven_production_lines 20,'cutting')  = 0 (by design)
+All checks PASS
+```
+
+That is independent, live evidence for the §12 fix: `findByOrder(…, 'cutting')` returns the
+order-scoped batch that no line-scoped read can ever see.
+
+### Still not done (unchanged)
+
+- §9.4 (end-to-end against the *deployed* Vercel API) and §9.5 (manual UI pass) — after deploy.
+- D4 (`schema.ts` CHECK reconciliation — see `migration-reconciliation.md` Phase 3) and
+  D5 (creation-time `assigned_rolls > 0`).
+- `3Q-Dashbaord/` stays in place pending an explicit go-ahead: deleting it destroys its own
+  unrelated `.git` history.

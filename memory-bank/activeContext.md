@@ -9,13 +9,20 @@ but it is a **work-in-progress branch** (`chore/ci`) with a **clean working tree
 the large dirty change set was committed as atomic commits on 2026-09-26 (see
 "Working-tree state" below).
 
-### Verified gate state right now (re-verified 2026-09-28, after the order-scoped create wiring)
+### Verified gate state right now (re-verified 2026-09-28, **committed as `0a3ef12`**)
 - `client/`: `npm run typecheck` → 0 errors; `npm run lint` → 0 errors (184 warnings); `npm test` → 7 files / 71 tests pass (`utils/batch-scope.test.ts` 9 → 17); `npm run build` → vite build OK.
 - `server/`: `npm run typecheck` → **0 errors**; `npm test` → **9 files / 120 tests pass**
   (`vitest.config.ts` injects a dummy `DATABASE_URL` when none is set, so suites no
   longer die on env import-time validation locally or in CI);
-  `npm run build` → tsup OK (`dist/index.js` + `api/index.js`, bundle regenerated);
+  `npm run build` → tsup OK (`dist/index.js` + `api/index.js`), and a rebuild leaves
+  `server/api/` **byte-identical** to the committed bundle (so it is in sync);
   `npm run verify:batch-visibility` → all checks PASS against the live DB.
+- ⚠ **The live DB was reset since the bug report.** Order `22` no longer exists — the database
+  now holds one order, **`#24`** (`PRD-00001`, woven, 60 000), with 2 weaving + 1 cutting batch.
+  The T5 script therefore **defaults to the newest order** instead of a hard-coded `22` (the old
+  default made the documented no-argument command die with "No production order 22"). Re-run on
+  `#24`: `findByOrder(24,'woven','cutting') = 1` (the S1 check that read 0 before the fix),
+  `findByLine(woven 20,'weaving') = 1`, `findByLine(…,'cutting') = 0` → **All checks PASS**.
 
 ## Estimated weaving time (woven work orders) — DONE (2026-09-23)
 - New persisted column `woven_work_order_details.estimated_weaving_hours` (numeric 12,2,
@@ -102,6 +109,10 @@ status code, payload shape, or SQL query changed. Evidence gathered at the time:
   constraint: schemas are NOT shared.
 
 ## Working-tree state — RESOLVED 2026-09-26
+**And re-resolved 2026-09-28:** the batch-visibility change set — §12 (server read path) + §13
+(client create path) + `implementation.md` — was **committed as `0a3ef12`** on `chore/ci`
+(24 files, +2807/−170), including the regenerated `server/api/index.js`. The tree is clean.
+
 The large dirty change set was committed on `chore/ci` in atomic commits: server
 sub-module reorg; migration 0024 + estimated-weaving feature (server + client);
 client batch planning/stage UI (unified dialog; `WovenStageBoard`,
@@ -206,22 +217,26 @@ CHECK forbids those batches to have (`implementation.md` §13).
 
 ## Immediate next steps
 1. ~~**DECIDE the cutting/packaging scope**~~ — **DECIDED 2026-09-26 (D1: keep
-   order-scoped)**, and the read path was fixed to match in the same pass (see
-   "Cutting/packaging batch visibility — FIXED" above). What remains from this item is
-   only the commit: the working tree still holds the change set for review, including the
-   regenerated `server/api/index.js`. Provisioning (`memory-bank/migration-reconciliation.md`)
-   is unaffected — no migration and no `schema.ts` change were made.
+   order-scoped)**: the read path was fixed to match in the same pass, the client create path
+   followed on 2026-09-28, and **both are now committed as `0a3ef12`** — item closed.
+   Provisioning (`memory-bank/migration-reconciliation.md`) is unaffected — no migration and
+   no `schema.ts` change were made.
 2. **Execute `memory-bank/migration-reconciliation.md`.** Fresh-DB provisioning is
    still broken (0018/0019 mutual redundancy, the lost 0019 journal entry, the
    unapplied-but-recorded 0023, and live-only objects created out-of-band). Step 0 of
    that plan is the scope decision in item 1.
 3. **Re-affirm client gates**: `typecheck` 0 errors, `lint` 0 errors (184 warnings), `test` 7 files / 71 tests, `build` green — all re-verified 2026-09-28.
-4. **Decide on the committed `server/api/index.js` build artifact**: keep it in sync
-   via `npm run build` or gitignore it in favor of Vercel building it. `npm run build`
-   rebuilds it, but the rename step renames only `api/api-entry.js` → `api/index.js`
-   and leaves `api/index.js.map` stale (pre-existing quirk in the build script).
-5. **Housekeep**: delete the stray `3Q-Dashbaord/` duplicate (needs an explicit
-   go-ahead — it holds its own `.git` history) and refresh the stale `CLAUDE.md`.
+4. ~~**Decide on the committed `server/api/index.js` build artifact**~~ — **DECIDED
+   2026-09-28: keep it committed and in sync** (`.clinerules` §5 — `vercel.json` serves
+   `functions["api/index.js"]`, and the file is tracked). Verified by rebuilding: `server/api/`
+   came out byte-identical to the committed bundle. Residual quirk (no action needed): the rename
+   step maps only `api/api-entry.js` → `api/index.js`, so the committed `api/index.js.map` lags
+   one build; nothing reads it at runtime.
+5. **Housekeep**: `3Q-Dashbaord/` is **characterised but NOT deleted** — 2026-09-28
+   investigation: its own unrelated `.git` on `main` (3 commits, no remote), 720 files / 6.8 MB,
+   gitignored at `.gitignore:31`, HEAD *not* an ancestor of `chore/ci`, carrying duplicate
+   `client/` + `server/` copies and regenerable build output. Deleting it destroys that history,
+   so it stays pending an explicit go-ahead. Also outstanding: refresh the stale `CLAUDE.md`.
 6. **Longer-term (roadmap items, see progress.md)**: auth + RBAC, invoicing/ledger,
    list-endpoint pagination, the `production-runs` page/route, CI Node 20→24, and
    the deferred follow-ups below.
