@@ -12,6 +12,7 @@ import { idParamsSchema } from "@shared/validation/common.schema";
 import {
   createPrintingBatchSchema,
   createConsumingBatchSchema,
+  createOrderScopedBatchSchema,
   updateBatchSchema,
   recordOutputSchema,
   batchActionSchema,
@@ -77,5 +78,33 @@ router.get(
   validateQuery(listBatchesQuerySchema),
   batchOverviewController.getOrderBatches
 );
+
+/**
+ * Order-scoped create for cutting and packaging (D3). These stages carry no line on the
+ * live schema, so demanding a `lineId` that only resolves back to the order was a lie in
+ * the URL — the batch is created against the order directly.
+ */
+function orderStageRouter(stage: "cutting" | "packaging") {
+  const router = Router({ mergeParams: true });
+  router.get(
+    "/:id/sources",
+    validateParams(idParamsSchema),
+    batchOverviewController.getSourcesFromOrder(stage)
+  );
+  router.get(
+    "/:id/resources",
+    validateParams(idParamsSchema),
+    validateQuery(stageResourcesQuerySchema),
+    batchOverviewController.getResourcesFromOrder(stage)
+  );
+  router.post(
+    "/:id",
+    validateRequest(createOrderScopedBatchSchema),
+    batchOverviewController.createFromOrder(stage)
+  );
+  return router;
+}
+router.use("/orders/cutting-batches", orderStageRouter("cutting"));
+router.use("/orders/packaging-batches", orderStageRouter("packaging"));
 
 export default router;

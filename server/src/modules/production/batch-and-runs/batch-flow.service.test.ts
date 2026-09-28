@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { NotFoundError } from "@shared/errors/ApiError";
 import { BatchFlowService } from "./batch-flow.service";
 
 /**
@@ -13,37 +12,31 @@ const mocks = vi.hoisted(() => ({
     findById: vi.fn(),
     findByOrder: vi.fn(),
     findByLine: vi.fn(),
+    labelMixForOrder: vi.fn(),
   },
   wovenProductionRepository: {
     findLineById: vi.fn(),
     findOrderContext: vi.fn(),
+    findLines: vi.fn(),
   },
   productionOrderRepository: {
     findLineById: vi.fn(),
     findById: vi.fn(),
+    findLines: vi.fn(),
   },
   machineRepository: { findAll: vi.fn() },
   operatorRepository: { findAll: vi.fn() },
   userService: { assertActor: vi.fn() },
 }));
 
+/**
+ * The repository layer is mocked so the service can be exercised as a pure unit without a
+ * database. Nothing re-exports `lineRefOfBatch` any more: a batch's line is optional by design
+ * (cutting and packaging have none), so a helper that threw for them would BE the bug.
+ */
 vi.mock("./batch-flow.repository", () => ({
   __esModule: true,
   batchFlowRepository: mocks.batchFlowRepository,
-  // Re-exported so the type-only import still resolves for any caller; the throwing
-  // variant is preserved to assert the regression — the service must NOT call it anymore.
-  lineRefOfBatch: (b: { productionOrderLineId: number | null; wovenProductionLineId: number | null }) => {
-    if (b.wovenProductionLineId != null) return { kind: "woven", id: b.wovenProductionLineId };
-    if (b.productionOrderLineId != null) return { kind: "printed", id: b.productionOrderLineId };
-    const err = new NotFoundError("Batch is not attached to a production line");
-    throw err;
-  },
-  lineRefOfBatchOrNull: (b: { productionOrderLineId: number | null; wovenProductionLineId: number | null }) =>
-    b.wovenProductionLineId != null
-      ? { kind: "woven", id: b.wovenProductionLineId }
-      : b.productionOrderLineId != null
-        ? { kind: "printed", id: b.productionOrderLineId }
-        : null,
 }));
 vi.mock("../woven-production/woven-production.repository", () => ({
   __esModule: true,
@@ -158,3 +151,216 @@ describe("BatchFlowService.getAvailableSources (order-scoped)", () => {
     expect(result.totalAvailable).toBe(4000);
   });
 });
+
+/* --------------------------------------------- order flow (order-scoped attribution) */
+
+/** A batch row as the order-wide read returns it: decimals as strings, sources/mix attached. */
+const batchRow = (over: Record<string, unknown>) => ({
+  id: 1,
+  productionOrderId: 22,
+  productionOrderLineId: null as number | null,
+  wovenProductionLineId: null as number | null,
+  stage: "cutting",
+  batchNumber: 1,
+  batchCode: "C-001",
+  machineId: null,
+  machineName: null,
+  operatorId: null,
+  operatorName: null,
+  labelSize: null,
+  assignedRolls: "0.00",
+  producedRolls: "0.00",
+  wastedRolls: "0.00",
+  consumedRolls: "0.00",
+  availableRolls: "0.00",
+  packagedQty: "0.00",
+  status: "COMPLETED",
+  notes: null,
+  startedAt: null,
+  completedAt: null,
+  createdAt: new Date("2026-09-01T00:00:00Z"),
+  updatedAt: new Date("2026-09-01T00:00:00Z"),
+  labelType: null,
+  sources: [],
+  labelMix: [],
+  ...over,
+});
+
+/** Order 22 on the floor: one woven label type, cutting batches fed entirely by it. */
+function mockOrder22(batches: unknown[], mix: Array<[number, unknown[]]>) {
+  mocks.productionOrderRepository.findById.mockResolvedValue({ id: 22, productType: "woven" });
+  mocks.wovenProductionRepository.findLines.mockResolvedValue([
+    { id: 15, labelType: "Size Label", quantity: 40000, sizes: [] },
+  ]);
+  mocks.batchFlowRepository.findByOrder.mockResolvedValue(batches);
+  mocks.batchFlowRepository.labelMixForOrder.mockResolvedValue(new Map(mix));
+}
+
+/**
+ * Regression (reported from the floor): the stage progress bars showed cutting at 0 while two
+ * cutting batches sat on the floor, and the order could never reach "ready to complete".
+ *
+ * Cause: `getOrderFlow` summed cutting and packaging from the batches that carry the LINE's id.
+ * Those stages are order-scoped — both line columns are NULL — so the sums were structurally 0,
+ * and with them `packagedProduced` (which gates `readyForCompletion`).
+ */
+describe("BatchFlowService.getOrderFlow (order-scoped attribution)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("credits the cutting batches to the label type that fed them", async () => {
+    mockOrder22(
+      [
+        batchRow({
+          id: 30,
+          stage: "weaving",
+          batchCode: "W-001",
+          wovenProductionLineId: 15,
+          labelType: "Size Label",
+          assignedRolls: "40000.00",
+          producedRolls: "22000.00",
+          availableRolls: "22000.00",
+        }),
+        batchRow({
+          id: 41,
+          batchCode: "C-001",
+          assignedRolls: "12000.00",
+          producedRolls: "12000.00",
+          availableRolls: "12000.00",
+        }),
+        batchRow({
+          id: 42,
+          batchCode: "C-002",
+          assignedRolls: "10000.00",
+          producedRolls: "10000.00",
+          availableRolls: "10000.00",
+        }),
+      ],
+      [
+        [41, [{ lineId: 15, labelType: "Size Label", rolls: 12000, share: 1 }]],
+        [42, [{ lineId: 15, labelType: "Size Label", rolls: 10000, share: 1 }]],
+      ]
+    );
+
+    const flow = await service().getOrderFlow(22);
+
+    expect(flow.lines[0].cutProduced).toBe(22000);
+    expect(flow.lines[0].cutAvailable).toBe(22000);
+    expect(flow.lines[0].batchCounts.cutting).toBe(2);
+    expect(flow.totals.cutProduced).toBe(22000);
+    // 40 000 planned, nothing packaged yet — the banner stays off.
+    expect(flow.readyForCompletion).toBe(false);
+  });
+
+
+  it("makes the ready-for-completion banner reachable once packaging covers the plan", async () => {
+    mockOrder22(
+      [
+        batchRow({
+          id: 30,
+          stage: "weaving",
+          batchCode: "W-001",
+          wovenProductionLineId: 15,
+          assignedRolls: "40000.00",
+          producedRolls: "40000.00",
+          availableRolls: "0.00",
+        }),
+        batchRow({
+          id: 41,
+          batchCode: "C-001",
+          assignedRolls: "40000.00",
+          producedRolls: "40000.00",
+          availableRolls: "0.00",
+        }),
+        batchRow({
+          id: 43,
+          stage: "packaging",
+          batchCode: "PK-001",
+          assignedRolls: "40000.00",
+          producedRolls: "40000.00",
+          packagedQty: "40000.00",
+        }),
+      ],
+      [
+        [41, [{ lineId: 15, labelType: "Size Label", rolls: 40000, share: 1 }]],
+        [43, [{ lineId: 15, labelType: "Size Label", rolls: 40000, share: 1 }]],
+      ]
+    );
+
+    const flow = await service().getOrderFlow(22);
+
+    expect(flow.lines[0].packagedProduced).toBe(40000);
+    expect(flow.lines[0].packagedLabels).toBe(40000);
+    expect(flow.lines[0].batchCounts.packaging).toBe(1);
+    expect(flow.lines[0].cutProduced).toBe(40000);
+    // Nothing else in the system can currently produce this trueness.
+    expect(flow.readyForCompletion).toBe(true);
+  });
+
+  it("counts one cutting batch once across two label types", async () => {
+    mocks.productionOrderRepository.findById.mockResolvedValue({ id: 22, productType: "woven" });
+    mocks.wovenProductionRepository.findLines.mockResolvedValue([
+      { id: 15, labelType: "Size Label", quantity: 40000, sizes: [] },
+      { id: 16, labelType: "Care Label", quantity: 20000, sizes: [] },
+    ]);
+    mocks.batchFlowRepository.findByOrder.mockResolvedValue([
+      batchRow({
+        id: 41,
+        batchCode: "C-001",
+        assignedRolls: "10000.00",
+        producedRolls: "22000.00",
+        availableRolls: "22000.00",
+      }),
+    ]);
+    // One batch drew 6000 from Size Label and 4000 from Care Label.
+    mocks.batchFlowRepository.labelMixForOrder.mockResolvedValue(
+      new Map([
+        [
+          41,
+          [
+            { lineId: 15, labelType: "Size Label", rolls: 6000, share: 0.6 },
+            { lineId: 16, labelType: "Care Label", rolls: 4000, share: 0.4 },
+          ],
+        ],
+      ])
+    );
+
+    const flow = await service().getOrderFlow(22);
+
+    expect(flow.lines.map((l) => l.cutProduced)).toEqual([13200, 8800]);
+    // Summed, the batch's output appears exactly once — never twice.
+    expect(flow.totals.cutProduced).toBe(22000);
+  });
+
+  it("lists running order-scoped batches on the label types they feed", async () => {
+    mockOrder22(
+      [batchRow({ id: 41, batchCode: "C-001", status: "IN_PROGRESS", assignedRolls: "5000.00" })],
+      [[41, [{ lineId: 15, labelType: "Size Label", rolls: 5000, share: 1 }]]]
+    );
+
+    const flow = await service().getOrderFlow(22);
+
+    expect(flow.lines[0].running).toEqual(["C-001"]);
+  });
+
+  it("moves nothing when the attributed batch is cancelled", async () => {
+    mockOrder22(
+      [
+        batchRow({
+          id: 41,
+          batchCode: "C-001",
+          status: "CANCELLED",
+          assignedRolls: "5000.00",
+          producedRolls: "5000.00",
+        }),
+      ],
+      [[41, [{ lineId: 15, labelType: "Size Label", rolls: 5000, share: 1 }]]]
+    );
+
+    const flow = await service().getOrderFlow(22);
+
+    expect(flow.lines[0].cutProduced).toBe(0);
+    expect(flow.lines[0].batchCounts.cutting).toBe(0);
+    expect(flow.totals.cutProduced).toBe(0);
+  });
+});
+

@@ -5,7 +5,8 @@ import { AppButton } from "@/components/forms/AppButton";
 import { AppInput } from "@/components/forms/AppInput";
 import { AppSelect } from "@/components/forms/AppSelect";
 import { formatNumber } from "@/lib/format";
-import { useBatchSources, useCreateBatch, useStageResources } from "../hooks/use-batches";
+import { useCreateBatch, useStageScopedResources, useStageSources } from "../hooks/use-batches";
+import { isOrderScopedStage } from "../utils/batch-scope";
 import {
   STAGE_LABEL,
   UNIT_LABEL,
@@ -25,8 +26,8 @@ interface CreateBatchDialogProps {
   open: boolean;
   onClose: () => void;
   stage: BatchStage;
-  lineId: number;
-  labelType: string;
+  lineId?: number;
+  labelType?: string;
   /** Printed lines count rolls; woven lines count pieces. */
   kind: LineKind;
   orderId: string;
@@ -45,15 +46,15 @@ export function CreateBatchDialog({
   onClose,
   stage,
   lineId,
-  labelType,
+  labelType = "",
   kind,
   orderId,
 }: CreateBatchDialogProps) {
   const upstream = UPSTREAM_STAGE[kind][stage];
   const unit = UNIT_LABEL[kind];
-  const sourcesQuery = useBatchSources(stage, lineId);
+  const sourcesQuery = useStageSources(orderId, stage, lineId, kind);
   // Already filtered by stage and by live holds — the UI never applies those rules itself.
-  const resources = useStageResources(stage, lineId);
+  const resources = useStageScopedResources(orderId, stage, lineId, kind);
   const createBatch = useCreateBatch(orderId);
 
   const [assignedRolls, setAssignedRolls] = React.useState("");
@@ -193,7 +194,7 @@ export function CreateBatchDialog({
    */
   const resourcesReady = (!needsMachine || !!machineId) && !!operatorId;
   const inputReady = fromPlan ? Number(assignedRolls) > 0 : allocated > 0;
-  const canSubmit = inputReady && resourcesReady && !error;
+  const canSubmit = inputReady && resourcesReady && !error && (!fromPlan || !!lineId);
 
   async function handleSubmit() {
     const shared = {
@@ -213,8 +214,13 @@ export function CreateBatchDialog({
               rolls: Number(allocations[s.sourceBatchId]),
             })),
         };
-console.log(stage, lineId, body)
-    await createBatch.mutateAsync({ stage, lineId, body });
+
+    /**
+     * Both ids are handed over as facts; `useCreateBatch` picks the endpoint from the stage. A
+     * cutting batch belongs to the ORDER even though this board renders it under one label type,
+     * and the hook is where that rule lives — stated once, and unit-tested.
+     */
+    await createBatch.mutateAsync({ stage, lineId, orderId, body });
     onClose();
   }
 
@@ -223,7 +229,11 @@ console.log(stage, lineId, body)
       open={open}
       onOpenChange={(v) => !v && onClose()}
       title={`New ${STAGE_LABEL[stage]} Batch`}
-      description={`${labelType} — consumes ${stageInputLabel(kind, stage)}`}
+      description={
+        isOrderScopedStage(kind, stage) || !labelType
+          ? `Order-wide — consumes ${stageInputLabel(kind, stage)} from every label type`
+          : `${labelType} — consumes ${stageInputLabel(kind, stage)}`
+      }
       className="sm:max-w-[560px]"
       footer={
         <>

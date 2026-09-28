@@ -28,10 +28,21 @@ export const batchService = {
   getSources: (stage: BatchStage, lineId: number) =>
     api.get<{ data: AvailableSources }>(`${base(stage)}/lines/${lineId}/sources`),
 
+  /** Available upstream sources for an order-scoped batch (cutting/packaging). */
+  getSourcesFromOrder: (stage: BatchStage, orderId: string | number) =>
+    api.get<{ data: AvailableSources }>(`/production/orders/${stage}-batches/${orderId}/sources`),
+
   /** Stage-appropriate machines and operators, with holds already applied. */
   getResources: (stage: BatchStage, lineId: number, batchId?: number) =>
     api.get<{ data: StageResources }>(
       `${base(stage)}/lines/${lineId}/resources`,
+      batchId ? { batchId } : undefined
+    ),
+
+  /** Stage-appropriate machines and operators for order-scoped stages (cutting/packaging). */
+  getResourcesFromOrder: (stage: BatchStage, orderId: string | number, batchId?: number) =>
+    api.get<{ data: StageResources }>(
+      `/production/orders/${stage}-batches/${orderId}/resources`,
       batchId ? { batchId } : undefined
     ),
 
@@ -51,6 +62,10 @@ export const batchService = {
   /* ---- writes ---- */
   create: (stage: BatchStage, lineId: number, body: CreatePrintingBatchInput | CreateConsumingBatchInput) =>
     api.post<{ data: ProductionBatch }>(`${base(stage)}/lines/${lineId}`, body),
+
+  /** Create an order-scoped batch (cutting/packaging) directly against the order. */
+  createFromOrder: (stage: BatchStage, orderId: string | number, body: CreateConsumingBatchInput) =>
+    api.post<{ data: ProductionBatch }>(`/production/orders/${stage}-batches/${orderId}`, body),
 
   update: (stage: BatchStage, batchId: number, body: UpdateBatchInput) =>
     api.patch<{ data: ProductionBatch }>(`${base(stage)}/${batchId}`, body),

@@ -33,9 +33,11 @@ import {
   useCancelBatch,
   useCompleteBatch,
   useDeleteBatch,
-  useLineBatches,
+  useStageBatches,
+  useStageSources,
   useStartBatch,
 } from "../hooks/use-batches";
+import { isOrderScopedStage } from "../utils/batch-scope";
 import { CreateBatchDialog } from "./CreateBatchDialog";
 import { BatchOutputDialog } from "./BatchOutputDialog";
 import { BatchTraceDialog } from "./BatchTraceDialog";
@@ -94,9 +96,14 @@ interface BatchStageBoardProps {
 /**
  * One label type's three stages, each with its own batch CRUD.
  *
- * The stages are shown side by side because that is how the material moves: what printing
- * makes available is exactly what cutting can take. Each panel's header states its own
- * position, so the operator never has to compute availability themselves.
+ * The stages are shown side by side because that is how the material moves: what printing makes
+ * available is exactly what cutting can take. Each panel's header states its own position, so the
+ * operator never has to compute availability themselves.
+ *
+ * The three panels do NOT ask the same question: printing (or weaving) is per label type, while
+ * cutting and packaging batches belong to the whole ORDER and carry no line at all. Each panel
+ * therefore reads the scope that owns its stage — see `useStageBatches` — and the order-scoped
+ * ones say so in their header, since the same `C-001` legitimately appears on every board.
  */
 export function BatchStageBoard({ orderId, flow, readOnly, defaultOpen = true }: BatchStageBoardProps) {
   const [createStage, setCreateStage] = React.useState<BatchStage | null>(null);
@@ -150,7 +157,7 @@ export function BatchStageBoard({ orderId, flow, readOnly, defaultOpen = true }:
         <CreateBatchDialog
           open
           stage={createStage}
-          lineId={flow.lineId}
+          lineId={isOrderScopedStage(flow.kind, createStage) ? undefined : flow.lineId}
           kind={flow.kind}
           labelType={flow.labelType}
           orderId={orderId}
@@ -190,9 +197,25 @@ function StagePanel({
   onRecordOutput: (b: ProductionBatch) => void;
   onTrace: (b: ProductionBatch) => void;
 }) {
-  const batches = useLineBatches(stage, flow.lineId);
+  /** Cutting and packaging belong to the order, so this panel must not filter by a line. */
+  const orderScoped = isOrderScopedStage(flow.kind, stage);
+  /** The batches of this stage, read from the scope that owns it. */
+  const batches = useStageBatches(orderId, stage, flow.lineId, flow.kind);
+  /**
+   * Whether a batch can be started at all, asked of the SOURCES rather than of this line's own
+   * figures: for cutting and packaging the server accepts upstream output from ANY label type of
+   * the order, so the line's own number would disable a button that should work.
+   * The dialog reads the same query key, so this costs no extra request.
+   */
+  const sourcesQuery = useStageSources(orderId, stage, flow.lineId, flow.kind, !readOnly);
+  /** Until the sources answer, the button stays enabled — the dialog guards the submission. */
+  const sourcesData = sourcesQuery.data;
+  const canCreate = !sourcesData
+    ? true
+    : sourcesData.fromPlan
+      ? (sourcesData.remainingPlanned ?? 0) > 0
+      : (sourcesData.totalAvailable ?? 0) > 0;
   const Icon = STAGE_ICON[stage];
-
   /* What this stage can still take in, and what it has ready for the next one. The first
      stage draws from the plan; the rest draw from the stage above them. */
   const first = isFirstStage(flow.kind, stage);
@@ -227,6 +250,11 @@ function StagePanel({
             <ChevronRight className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-90" : ""}`} />
             <Icon className="h-3.5 w-3.5" />
             {STAGE_LABEL[stage]}
+            {orderScoped && (
+              <span className="font-normal normal-case tracking-normal text-muted-foreground">
+                · order-wide
+              </span>
+            )}
             {liveCount > 0 && (
               <span className="rounded bg-muted px-1 font-mono text-[10px] text-muted-foreground">
                 {liveCount}
@@ -240,8 +268,8 @@ function StagePanel({
               className="h-7 px-2"
               leftIcon={<Plus className="h-3.5 w-3.5" />}
               onClick={onCreate}
-              disabled={intake.value <= 0}
-              title={intake.value <= 0 ? `No ${intake.label.toLowerCase()} to draw from` : undefined}
+              disabled={!canCreate}
+              title={canCreate ? undefined : `No ${intake.label.toLowerCase()} to draw from`}
             >
               Batch
             </AppButton>
@@ -298,12 +326,13 @@ function StagePanel({
 
       {open && (
       <div className="flex-1 divide-y">
-        {batches.isLoading && (
+        {batches.isPending && (
           <p className="px-3 py-6 text-center text-xs text-muted-foreground">Loading…</p>
         )}
-        {!batches.isLoading && rows.length === 0 && (
+        {!batches.isPending && rows.length === 0 && (
           <p className="px-3 py-6 text-center text-xs text-muted-foreground">
-            No {STAGE_LABEL[stage].toLowerCase()} batches yet.
+            No {STAGE_LABEL[stage].toLowerCase()} batches yet
+            {orderScoped ? " for this order" : ""}.
           </p>
         )}
         {rows.map((batch) => (
@@ -379,6 +408,17 @@ function BatchRow({
         <Badge variant={STATUS_VARIANT[batch.status]} className="h-4 px-1.5 text-[10px]">
           {STATUS_LABEL[batch.status]}
         </Badge>
+        {/* An order-wide batch serves several label types: saying which, and by how much, is
+            what makes the same C-001 on three boards read as design rather than duplication. */}
+        {batch.labelMix.length > 0 && (
+          <span className="flex flex-wrap items-center gap-1">
+            {batch.labelMix.map((m) => (
+              <Badge key={m.lineId} variant="outline" className="h-4 px-1.5 text-[10px] font-normal">
+                {m.labelType ?? `Line ${m.lineId}`} {Math.round(m.share * 100)}%
+              </Badge>
+            ))}
+          </span>
+        )}
         <span className="ml-auto flex items-center gap-2">
           {available > 0 && (
             <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">

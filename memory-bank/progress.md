@@ -40,6 +40,19 @@
   CORRECTED 2026-09-26: a previous note here claimed line-scoped via migration `0023` +
   `production_batches_one_line`, but that constraint does not exist on the live DB and the
   migration never executed (it was recorded as applied with a placeholder hash).
+  **The read path now matches (2026-09-26):** `findByOrder` anchors on
+  `production_batches.production_order_id` with both line tables LEFT joined;
+  `labelMixForOrder` reuses the write path's `lineMixCte` to report which label types fed each
+  order-scoped batch; `getOrderFlow` uses a pure `attributedFlowOf()` for per-label-type
+  cut/packaging figures and counts; the client reads each stage through `useStageBatches`
+  (line scope for the first stage, order scope for cutting/packaging). See
+  `implementation.md` §12 for the execution record.
+- **The create path matches (2026-09-28).** The client no longer POSTs cutting/packaging batches to
+  `/cutting-batches/lines/:lineId`: `batchService.createFromOrder` / `getSourcesFromOrder` /
+  `getResourcesFromOrder` serve both stages, `useStageSources` / `useStageScopedResources` pick the
+  scope from the stage, and one pure helper — `utils/batch-scope.ts#batchCreateTarget` — decides
+  line vs order for the mutation (order wins for cutting/packaging). `batch-scope.test.ts` 9 → 17
+  tests; client gates green (7 files / 71 tests). See `implementation.md` §13.
 - Woven production: `woven_production_lines`, `woven_thread_plan_items`, dyeing
   workflow + service-provider send/receive, thread-dye-batches.
 - Append-only `production_runs` audit log (+ one-time backfill migration).

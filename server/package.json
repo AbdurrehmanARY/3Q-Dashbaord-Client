@@ -24,6 +24,7 @@
     "db:migrate:production-runs": "tsx --env-file .env src/shared/db/migrate-production-runs.ts",
     "test": "vitest run",
     "test:watch": "vitest",
+    "verify:batch-visibility": "node scripts/verify-batch-visibility.mjs",
     "db:reset:production": "tsx --env-file .env src/shared/db/reset-production.ts"
   },
   "dependencies": {

@@ -4898,6 +4898,43 @@ function lineFlowOf(planned, batches, kind = "printed", sizes = []) {
     sizes: lineSizeFlows(sizes, batches, first)
   };
 }
+function attributedFlowOf(batches, mixByBatch, lineId) {
+  const acc = {
+    cutProduced: 0,
+    cutConsumed: 0,
+    packagedProduced: 0,
+    packagedLabels: 0,
+    cuttingBatches: 0,
+    packagingBatches: 0,
+    running: []
+  };
+  if (mixByBatch.size === 0) return acc;
+  for (const b of batches) {
+    if (b.status === "CANCELLED") continue;
+    const entries = (mixByBatch.get(b.id) ?? []).filter((e) => e.lineId === lineId && e.share > 0);
+    if (entries.length === 0) continue;
+    const share = Math.min(1, entries.reduce((n2, e) => n2 + e.share, 0));
+    const p = batchPositionOf(b);
+    if (b.stage === "cutting") {
+      acc.cutProduced += p.produced * share;
+      acc.cutConsumed += p.consumed * share;
+      acc.cuttingBatches += 1;
+    }
+    if (b.stage === "packaging") {
+      acc.packagedProduced += p.produced * share;
+      acc.packagedLabels += (Number(b.packagedQty ?? 0) || 0) * share;
+      acc.packagingBatches += 1;
+    }
+    if (b.status === "IN_PROGRESS") acc.running.push(b.batchCode);
+  }
+  return {
+    ...acc,
+    cutProduced: round2(acc.cutProduced),
+    cutConsumed: round2(acc.cutConsumed),
+    packagedProduced: round2(acc.packagedProduced),
+    packagedLabels: round2(acc.packagedLabels)
+  };
+}
 function isReadyForCompletion(lines) {
   if (lines.length === 0) return false;
   return lines.every((l) => l.planned > 0 && l.packagedProduced >= l.planned - EPSILON);
@@ -5010,32 +5047,47 @@ var attributedForLine = (orderId, lineId) => sql8`
     AND b.status <> 'CANCELLED'
     AND m.line_id = ${lineId}
 `;
+function mixDenominator(assignedRolls, totalMixRolls) {
+  if (assignedRolls > 0) return assignedRolls;
+  return totalMixRolls > 0 ? totalMixRolls : 0;
+}
+function labelShare(rolls2, denominator) {
+  if (!(denominator > 0)) return 0;
+  const share = rolls2 / denominator;
+  return Math.round(Math.min(1, Math.max(0, share)) * 1e4) / 1e4;
+}
 var BatchFlowRepository = class {
   /* ------------------------------------------------------------------ reads */
+  /**
+   * Batches of ONE label type. Line-scoped batches only ever exist at a workflow's FIRST stage
+   * (`production_batches_first_stage_one_line`), so `labelMix` is always empty here — an
+   * order-scoped batch has no line to filter by and is not listable from a line at all.
+   */
   async findByLine(line, stage) {
     const conditions = [eq11(lineColumn(line.kind), line.id)];
     if (stage) conditions.push(eq11(productionBatches.stage, stage));
     const rows = await db.select(batchSelect).from(productionBatches).leftJoin(machines, eq11(productionBatches.machineId, machines.id)).leftJoin(operators, eq11(productionBatches.operatorId, operators.id)).where(and9(...conditions)).orderBy(asc7(productionBatches.stage), asc7(productionBatches.batchNumber));
-    return this.attachSources(rows);
+    return this.attachSources(rows.map((r) => ({ ...r, labelMix: [] })));
   }
   /** Every batch on an order, for whichever workflow it runs. */
   async findByOrder(productionOrderId, kind = "printed", stage) {
-    const rows = kind === "woven" ? await (async () => {
-      const conditions = [eq11(wovenProductionLines.productionOrderId, productionOrderId)];
-      if (stage) conditions.push(eq11(productionBatches.stage, stage));
-      return db.select({ ...batchSelect, labelType: wovenProductionLines.labelType }).from(productionBatches).innerJoin(
-        wovenProductionLines,
-        eq11(productionBatches.wovenProductionLineId, wovenProductionLines.id)
-      ).leftJoin(machines, eq11(productionBatches.machineId, machines.id)).leftJoin(operators, eq11(productionBatches.operatorId, operators.id)).where(and9(...conditions)).orderBy(desc6(productionBatches.createdAt));
-    })() : await (async () => {
-      const conditions = [eq11(productionOrderLines.productionOrderId, productionOrderId)];
-      if (stage) conditions.push(eq11(productionBatches.stage, stage));
-      return db.select({ ...batchSelect, labelType: productionOrderLines.labelType }).from(productionBatches).innerJoin(
-        productionOrderLines,
-        eq11(productionBatches.productionOrderLineId, productionOrderLines.id)
-      ).leftJoin(machines, eq11(productionBatches.machineId, machines.id)).leftJoin(operators, eq11(productionBatches.operatorId, operators.id)).where(and9(...conditions)).orderBy(desc6(productionBatches.createdAt));
-    })();
-    return this.attachSources(rows);
+    const conditions = [
+      eq11(productionBatches.productionOrderId, productionOrderId),
+      inArray4(productionBatches.stage, STAGES_OF[kind])
+    ];
+    if (stage) conditions.push(eq11(productionBatches.stage, stage));
+    const rows = await db.select({
+      ...batchSelect,
+      labelType: sql8`COALESCE(${productionOrderLines.labelType}, ${wovenProductionLines.labelType})`
+    }).from(productionBatches).leftJoin(
+      productionOrderLines,
+      eq11(productionBatches.productionOrderLineId, productionOrderLines.id)
+    ).leftJoin(
+      wovenProductionLines,
+      eq11(productionBatches.wovenProductionLineId, wovenProductionLines.id)
+    ).leftJoin(machines, eq11(productionBatches.machineId, machines.id)).leftJoin(operators, eq11(productionBatches.operatorId, operators.id)).where(and9(...conditions)).orderBy(desc6(productionBatches.createdAt));
+    const withMix = await this.attachLabelMix(productionOrderId, rows, kind);
+    return this.attachSources(withMix);
   }
   async findById(batchId) {
     const [row] = await db.select({
@@ -5049,8 +5101,72 @@ var BatchFlowRepository = class {
       eq11(productionBatches.wovenProductionLineId, wovenProductionLines.id)
     ).leftJoin(machines, eq11(productionBatches.machineId, machines.id)).leftJoin(operators, eq11(productionBatches.operatorId, operators.id)).where(eq11(productionBatches.id, batchId));
     if (!row) return void 0;
-    const [withSources] = await this.attachSources([row]);
+    const [withSources] = await this.attachSources([{ ...row, labelMix: [] }]);
     return withSources;
+  }
+  /**
+   * Which label types fed each order-scoped batch, and by how much.
+   *
+   * Built from the same `lineMixCte` weights the write path resyncs line counters with, so the
+   * mix chips on a panel and the figures in its header cannot disagree. First-stage batches
+   * have a line of their own and so have no mix — they are simply absent from the map.
+   */
+  async labelMixForOrder(orderId) {
+    const rows = await db.execute(sql8`
+      WITH ${lineMixCte()}
+      SELECT m.batch_id                              AS batch_id,
+             m.line_id                               AS line_id,
+             m.rolls                                 AS rolls,
+             b.assigned_rolls                        AS assigned_rolls,
+             COALESCE(ol.label_type, wl.label_type)  AS label_type
+      FROM mix m
+      JOIN production_batches b ON b.id = m.batch_id
+      LEFT JOIN production_order_lines ol
+             ON ol.id = m.line_id AND ol.production_order_id = b.production_order_id
+      LEFT JOIN woven_production_lines wl
+             ON wl.id = m.line_id AND wl.production_order_id = b.production_order_id
+      WHERE b.production_order_id = ${orderId} AND m.line_id IS NOT NULL
+      ORDER BY m.batch_id, m.line_id
+    `);
+    const grouped = /* @__PURE__ */ new Map();
+    for (const r of rows) {
+      const batchId = Number(r.batch_id);
+      const group = grouped.get(batchId) ?? {
+        assignedRolls: Number(r.assigned_rolls ?? 0),
+        entries: []
+      };
+      group.entries.push({
+        lineId: Number(r.line_id),
+        labelType: r.label_type,
+        rolls: Number(r.rolls)
+      });
+      grouped.set(batchId, group);
+    }
+    const byBatch = /* @__PURE__ */ new Map();
+    for (const [batchId, group] of grouped) {
+      const totalMixRolls = group.entries.reduce((n2, e) => n2 + e.rolls, 0);
+      const denominator = mixDenominator(group.assignedRolls, totalMixRolls);
+      byBatch.set(
+        batchId,
+        group.entries.map((e) => ({ ...e, share: labelShare(e.rolls, denominator) }))
+      );
+    }
+    return byBatch;
+  }
+  /**
+   * Attaches the per-label-type mix to the rows that have one. Order-scoped rows (cutting and
+   * packaging) get their mix; first-stage rows get an empty list, and when no row needs a mix
+   * the query is skipped entirely — the sources picker reads only first-stage batches.
+   */
+  async attachLabelMix(orderId, rows, kind) {
+    if (rows.length === 0) {
+      return rows.map((r) => ({ ...r, labelMix: [] }));
+    }
+    if (rows.every((r) => isFirstStage(kind, r.stage))) {
+      return rows.map((r) => ({ ...r, labelMix: [] }));
+    }
+    const mix = await this.labelMixForOrder(orderId);
+    return rows.map((r) => ({ ...r, labelMix: mix.get(r.id) ?? [] }));
   }
   /** Decorates batches with the edges that fed them — "C-001 took 5 from P-001, 3 from P-002". */
   async attachSources(rows) {
@@ -8787,6 +8903,14 @@ var BatchFlowService = class {
     }));
   }
   /* ------------------------------------------------------------------ reads */
+  /**
+   * First-stage batches of ONE label type.
+   *
+   * Cutting and packaging are ORDER-scoped — `production_batches_first_stage_one_line` forbids
+   * them a line — so a line-scoped question cannot honestly be answered for them and this
+   * answers `[]` for those stages by design. Read them from `getOrderBatches` /
+   * `GET /production/orders/:id/batches?stage=cutting` instead.
+   */
   async getLineBatches(lineId, stage) {
     const line = await this.resolveLine(lineId, this.kindForStage(stage ?? "cutting"));
     if (stage && !kindOwnsStage(line.kind, stage)) return [];
@@ -8823,6 +8947,8 @@ var BatchFlowService = class {
     const kind = order.productType === "woven" ? "woven" : "printed";
     const batches = await batchFlowRepository.findByOrder(Number(orderId), kind);
     const stages = STAGES_OF[kind];
+    const first = stages[0];
+    const labelMix = await batchFlowRepository.labelMixForOrder(Number(orderId));
     const rawLines = kind === "woven" ? (await wovenProductionRepository.findLines(Number(orderId))).map((l) => ({
       id: l.id,
       labelType: l.labelType,
@@ -8842,8 +8968,10 @@ var BatchFlowService = class {
       const own = batches.filter(
         (b) => kind === "woven" ? b.wovenProductionLineId === line.id : b.productionOrderLineId === line.id
       );
-      const flow = lineFlowOf(line.planned, own, kind, line.sizes);
-      const count = (stage) => own.filter((b) => b.stage === stage && b.status !== "CANCELLED").length;
+      const ownFirst = own.filter((b) => b.stage === first);
+      const flow = lineFlowOf(line.planned, ownFirst, kind, line.sizes);
+      const attributed = attributedFlowOf(batches, labelMix, line.id);
+      const packagedProduced = round2(flow.packagedProduced + attributed.packagedProduced);
       return {
         lineId: line.id,
         labelType: line.labelType,
@@ -8853,12 +8981,23 @@ var BatchFlowService = class {
         unit: UNIT_OF[kind],
         stages,
         ...flow,
+        /** Cutting and packaging override the (always zero) line-owned sums. */
+        cutProduced: attributed.cutProduced,
+        cutAvailable: round2(Math.max(0, attributed.cutProduced - attributed.cutConsumed)),
+        packagedProduced,
+        packagedLabels: attributed.packagedLabels,
+        remainingRolls: round2(Math.max(0, line.planned - packagedProduced)),
         batchCounts: {
-          printing: count(stages[0]),
-          cutting: count("cutting"),
-          packaging: count("packaging")
+          printing: ownFirst.filter((b) => b.status !== "CANCELLED").length,
+          cutting: attributed.cuttingBatches,
+          packaging: attributed.packagingBatches
         },
-        running: own.filter((b) => b.status === "IN_PROGRESS").map((b) => b.batchCode)
+        running: [
+          .../* @__PURE__ */ new Set([
+            ...own.filter((b) => b.status === "IN_PROGRESS").map((b) => b.batchCode),
+            ...attributed.running
+          ])
+        ]
       };
     });
     const totals = perLine.reduce(
@@ -8946,6 +9085,40 @@ var BatchFlowService = class {
       sources
     };
   }
+  /**
+   * Order-scoped variant of {@link getAvailableSources} for cutting/packaging: resolves the
+   * order directly instead of routing through a line that only exists to name it.
+   */
+  async getAvailableSourcesFromOrder(orderId, stage) {
+    const order = await productionOrderRepository.findById(orderId);
+    if (!order) throw new NotFoundError(Messages.notFound("Production order"));
+    const kind = order.productType === "woven" ? "woven" : "printed";
+    if (isFirstStage(kind, stage)) {
+      throw new BadRequestError(
+        `${STAGE_TITLE[stage]} is a first stage and draws from the plan \u2014 create it from a line`
+      );
+    }
+    const unit = UNIT_OF[kind];
+    const upstream = stage === "cutting" ? STAGES_OF[kind][0] : "cutting";
+    const batches = await batchFlowRepository.findByOrder(Number(orderId), kind, upstream);
+    const sources = batches.filter((b) => b.status !== "CANCELLED" && Number(b.availableRolls) > 0).map((b) => ({
+      sourceBatchId: b.id,
+      batchCode: b.batchCode,
+      producedRolls: Number(b.producedRolls),
+      availableRolls: Number(b.availableRolls),
+      machineName: b.machineName,
+      operatorName: b.operatorName,
+      status: b.status
+    }));
+    return {
+      stage,
+      kind,
+      unit,
+      fromPlan: false,
+      totalAvailable: sources.reduce((n2, s) => n2 + s.availableRolls, 0),
+      sources
+    };
+  }
   /** The planned quantity a line's first stage draws from. */
   async plannedQtyOf(line) {
     if (line.kind === "woven") {
@@ -8967,9 +9140,23 @@ var BatchFlowService = class {
    */
   async getStageResources(lineId, stage, excludeBatchId) {
     const line = await this.resolveLine(lineId, this.kindForStage(stage));
+    return this.resolveStageResources(line.kind, stage, excludeBatchId);
+  }
+  /**
+   * Order-scoped variant of {@link getStageResources} for cutting/packaging: the workflow
+   * kind comes from the order's productType instead of from a line.
+   */
+  async getStageResourcesFromOrder(orderId, stage, excludeBatchId) {
+    const order = await productionOrderRepository.findById(orderId);
+    if (!order) throw new NotFoundError(Messages.notFound("Production order"));
+    const kind = order.productType === "woven" ? "woven" : "printed";
+    return this.resolveStageResources(kind, stage, excludeBatchId);
+  }
+  /** Shared body of the two resource readers above — only the kind resolution differs. */
+  async resolveStageResources(kind, stage, excludeBatchId) {
     const [allMachines, allOperators, holds] = await Promise.all([
       machineRepository.findAll(),
-      operatorRepository.findAll({ productType: OPERATOR_PRODUCT_TYPE[line.kind] }),
+      operatorRepository.findAll({ productType: OPERATOR_PRODUCT_TYPE[kind] }),
       batchFlowRepository.findResourceHolds(excludeBatchId)
     ]);
     const heldMachines = new Map(
@@ -8995,7 +9182,7 @@ var BatchFlowService = class {
     }));
     return {
       stage,
-      kind: line.kind,
+      kind,
       requiresMachine: stage !== "packaging",
       machines: machines2,
       operators: operators2,
@@ -9004,6 +9191,31 @@ var BatchFlowService = class {
     };
   }
   /* ----------------------------------------------------------------- writes */
+  /** Order-scoped create for cutting/packaging — the batch belongs to the order, not a line. */
+  async createBatchFromOrder(orderId, stage, input) {
+    const order = await productionOrderRepository.findById(orderId);
+    if (!order) throw new NotFoundError(Messages.notFound("Production order"));
+    const kind = order.productType === "woven" ? "woven" : "printed";
+    if (!kindOwnsStage(kind, stage)) {
+      throw new BadRequestError(
+        `${STAGE_TITLE[stage]} is not a stage of the ${kind} workflow`
+      );
+    }
+    if (order.status === "complete") {
+      throw new BadRequestError("Cannot add batches to a completed production order");
+    }
+    const actorUserId2 = await userService.assertActor(input.actorUserId ?? void 0);
+    const batch = await batchFlowRepository.createBatch(
+      {
+        productionOrderId: Number(orderId),
+        kind,
+        line: null
+        // cutting and packaging are order-scoped — no line
+      },
+      { ...input, stage, actorUserId: actorUserId2 }
+    );
+    return this.getBatch(batch.id);
+  }
   async createBatch(lineId, stage, input) {
     const line = await this.resolveLine(lineId, this.kindForStage(stage));
     if (!kindOwnsStage(line.kind, stage)) {
@@ -9100,9 +9312,7 @@ var BatchFlowController = class {
   }
   stage;
   listByLine = asyncHandler(async (req, res) => {
-    console.log("working");
     const { lineId } = req.validatedParams ?? req.params;
-    console.log("route hit", lineId, this.stage);
     const data = await batchFlowService.getLineBatches(lineId, this.stage);
     res.json({ data });
   });
@@ -9191,6 +9401,38 @@ var BatchOverviewController = class {
     const data = await batchFlowService.getOrderBatches(id, stage);
     res.json({ data });
   });
+  /** Order-scoped create for cutting/packaging — no lineId needed. */
+  createFromOrder(stage) {
+    return asyncHandler(async (req, res) => {
+      const { id } = req.validatedParams ?? req.params;
+      const body = req.validatedBody ?? req.body;
+      const data = await batchFlowService.createBatchFromOrder(id, stage, {
+        sources: body.sources,
+        machineId: body.machineId,
+        operatorId: body.operatorId,
+        notes: body.notes,
+        actorUserId: body.actorUserId
+      });
+      res.status(201).json({ data });
+    });
+  }
+  /** Available upstream sources for an order-scoped batch (cutting/packaging). */
+  getSourcesFromOrder(stage) {
+    return asyncHandler(async (req, res) => {
+      const { id } = req.validatedParams ?? req.params;
+      const data = await batchFlowService.getAvailableSourcesFromOrder(id, stage);
+      res.json({ data });
+    });
+  }
+  /** Machines and operators for an order-scoped stage — resolved from the order's workflow kind. */
+  getResourcesFromOrder(stage) {
+    return asyncHandler(async (req, res) => {
+      const { id } = req.validatedParams ?? req.params;
+      const { batchId } = req.validatedQuery ?? req.query;
+      const data = await batchFlowService.getStageResourcesFromOrder(id, stage, batchId);
+      res.json({ data });
+    });
+  }
 };
 var weavingBatchController = new BatchFlowController("weaving");
 var printingBatchController = new BatchFlowController("printing");
@@ -9268,6 +9510,9 @@ var listBatchesQuerySchema = z17.object({
 var stageResourcesQuerySchema = z17.object({
   batchId: z17.coerce.number().int().positive().optional()
 });
+var createOrderScopedBatchSchema = createConsumingBatchSchema.extend({
+  params: idParamsSchema
+});
 
 // src/modules/production/batch-and-runs/batch-flow.routes.ts
 function stageRouter(controller, stage) {
@@ -9304,6 +9549,28 @@ router11.get(
   validateQuery(listBatchesQuerySchema),
   batchOverviewController.getOrderBatches
 );
+function orderStageRouter(stage) {
+  const router19 = Router12({ mergeParams: true });
+  router19.get(
+    "/:id/sources",
+    validateParams(idParamsSchema),
+    batchOverviewController.getSourcesFromOrder(stage)
+  );
+  router19.get(
+    "/:id/resources",
+    validateParams(idParamsSchema),
+    validateQuery(stageResourcesQuerySchema),
+    batchOverviewController.getResourcesFromOrder(stage)
+  );
+  router19.post(
+    "/:id",
+    validateRequest(createOrderScopedBatchSchema),
+    batchOverviewController.createFromOrder(stage)
+  );
+  return router19;
+}
+router11.use("/orders/cutting-batches", orderStageRouter("cutting"));
+router11.use("/orders/packaging-batches", orderStageRouter("packaging"));
 var batch_flow_routes_default = router11;
 
 // src/modules/inventory/inventory.routes.ts

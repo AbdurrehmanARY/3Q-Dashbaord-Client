@@ -20,9 +20,7 @@ export class BatchFlowController {
   constructor(private readonly stage: BatchStage) {}
 
   listByLine = asyncHandler(async (req: Request, res: Response) => {
-    console.log("working")
     const { lineId } = (req.validatedParams ?? req.params) as { lineId: number };
-    console.log("route hit",lineId, this.stage)
     const data = await batchFlowService.getLineBatches(lineId, this.stage);
     res.json({ data });
   });
@@ -111,7 +109,7 @@ export class BatchFlowController {
   });
 }
 
-/** Order-level reads, which are not stage-scoped. */
+/** Order-level reads and writes, which are not stage-scoped. */
 class BatchOverviewController {
   getOrderFlow = asyncHandler(async (req: Request, res: Response) => {
     const { id } = (req.validatedParams ?? req.params) as { id: string };
@@ -125,6 +123,41 @@ class BatchOverviewController {
     const data = await batchFlowService.getOrderBatches(id, stage);
     res.json({ data });
   });
+
+  /** Order-scoped create for cutting/packaging — no lineId needed. */
+  createFromOrder(stage: BatchStage) {
+    return asyncHandler(async (req: Request, res: Response) => {
+      const { id } = (req.validatedParams ?? req.params) as { id: number };
+      const body = (req.validatedBody ?? req.body) as CreateConsumingBatchDTO;
+      const data = await batchFlowService.createBatchFromOrder(id, stage, {
+        sources: body.sources,
+        machineId: body.machineId,
+        operatorId: body.operatorId,
+        notes: body.notes,
+        actorUserId: body.actorUserId,
+      });
+      res.status(201).json({ data });
+    });
+  }
+
+  /** Available upstream sources for an order-scoped batch (cutting/packaging). */
+  getSourcesFromOrder(stage: BatchStage) {
+    return asyncHandler(async (req: Request, res: Response) => {
+      const { id } = (req.validatedParams ?? req.params) as { id: number };
+      const data = await batchFlowService.getAvailableSourcesFromOrder(id, stage);
+      res.json({ data });
+    });
+  }
+
+  /** Machines and operators for an order-scoped stage — resolved from the order's workflow kind. */
+  getResourcesFromOrder(stage: BatchStage) {
+    return asyncHandler(async (req: Request, res: Response) => {
+      const { id } = (req.validatedParams ?? req.params) as { id: number };
+      const { batchId } = (req.validatedQuery ?? req.query) as { batchId?: number };
+      const data = await batchFlowService.getStageResourcesFromOrder(id, stage, batchId);
+      res.json({ data });
+    });
+  }
 }
 
 export const weavingBatchController = new BatchFlowController("weaving");

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { idParamsSchema } from "@shared/validation/common.schema";
 
 /**
  * Batch request schemas.
@@ -131,6 +132,15 @@ export const stageResourcesQuerySchema = z.object({
 });
 
 export type CreatePrintingBatchDTO = z.infer<typeof createPrintingBatchSchema>["body"];
+/**
+ * Order-scoped create: same body as `createConsumingBatchSchema` but the route param is the
+ * order id, not a line id. Cutting and packaging carry no line, so they are created against
+ * the order directly — `POST /orders/:id/cutting-batches`, not a line-scoped URL.
+ */
+export const createOrderScopedBatchSchema = createConsumingBatchSchema.extend({
+  params: idParamsSchema,
+});
+
 export type CreateConsumingBatchDTO = z.infer<typeof createConsumingBatchSchema>["body"];
 export type UpdateBatchDTO = z.infer<typeof updateBatchSchema>["body"];
 export type RecordOutputDTO = z.infer<typeof recordOutputSchema>["body"];

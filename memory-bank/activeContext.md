@@ -9,12 +9,13 @@ but it is a **work-in-progress branch** (`chore/ci`) with a **clean working tree
 the large dirty change set was committed as atomic commits on 2026-09-26 (see
 "Working-tree state" below).
 
-### Verified gate state right now (re-verified 2026-09-26)
-- `client/`: `npm run typecheck` → 0 errors; `npm run lint` → 0 errors (184 warnings); `npm test` → 6 files / 54 tests pass; `npm run build` → vite build OK.
-- `server/`: `npm run typecheck` → **0 errors**; `npm test` → **9 files / 107 tests pass**
+### Verified gate state right now (re-verified 2026-09-28, after the order-scoped create wiring)
+- `client/`: `npm run typecheck` → 0 errors; `npm run lint` → 0 errors (184 warnings); `npm test` → 7 files / 71 tests pass (`utils/batch-scope.test.ts` 9 → 17); `npm run build` → vite build OK.
+- `server/`: `npm run typecheck` → **0 errors**; `npm test` → **9 files / 120 tests pass**
   (`vitest.config.ts` injects a dummy `DATABASE_URL` when none is set, so suites no
   longer die on env import-time validation locally or in CI);
-  `npm run build` → tsup OK (`dist/index.js` + `api/index.js`).
+  `npm run build` → tsup OK (`dist/index.js` + `api/index.js`, bundle regenerated);
+  `npm run verify:batch-visibility` → all checks PASS against the live DB.
 
 ## Estimated weaving time (woven work orders) — DONE (2026-09-23)
 - New persisted column `woven_work_order_details.estimated_weaving_hours` (numeric 12,2,
@@ -143,19 +144,78 @@ Outstanding non-code state:
 - `server/src/config/env.ts` — Zod-validated environment (env vars list).
 - Knowledge graph at `.graphify/` (report: `.graphify/GRAPH_REPORT.md`).
 
+## Cutting/packaging batch visibility — FIXED (2026-09-26)
+
+**Symptom:** the cutting and packaging panels on the production-order dashboard stayed empty while
+the floor showed batches; `GET /production/orders/22/batches?stage=cutting` answered `[]` and
+`flow.totals.cutProduced` stayed 0, so `readyForCompletion` was unreachable. Full diagnosis, plan
+and an execution record live in `implementation.md` (§1–§12).
+
+**Root causes (all READ-path):** R1 the client asked the line endpoint for every stage;
+R2 `findByOrder` INNER JOINed the line table, which drops the NULL-line rows that cutting and
+packaging batches are (live constraint `production_batches_first_stage_one_line`);
+R3 `getOrderFlow` summed only line-owned batches. The write path
+(`lineMixCte` / `attributedForLine` / `flowInTx`) was already order-scoped and correct.
+
+**Decisions taken by proceeding:** D1 = keep cutting/packaging **order-scoped** (no migration, no
+schema change); D2 = order-wide row + mix chips now (the order-level board stays deferred).
+
+**What landed** — server: `findByOrder` anchored on `production_batches.production_order_id` with
+both line tables LEFT joined + an explicit `STAGES_OF[kind]` workflow filter; new
+`labelMixForOrder(orderId)` reusing the write path's `lineMixCte`, attached as `labelMix` on
+order-scoped rows; pure `attributedFlowOf()` in `batch-flow.helpers.ts` drives `getOrderFlow`'s
+per-label-type cut/packaging figures, `batchCounts` and `running`. Client: `useStageBatches`
+(line vs order scope), `utils/batch-scope.ts#batchScopeOf`, mix chips, "· order-wide" header,
+create button guarded by the **sources** query, debug `console.log`s removed, stale "one line per
+batch" comments corrected. Tests: +13 (T1 structural join test, T2 attributed-flow cases, T3 share
+math, T4 scope matrix, T5 live script `npm run verify:batch-visibility`).
+
+**Live proof:** order 22 now lists `C-001`/`C-002` (both `productionOrderLineId: null`) with
+`labelMix: [{lineId:15, labelType:"Care Label", rolls:10000, share:1}]`, and
+`flow.lines[Care Label].batchCounts.cutting = 2`. Both cutting batches are still `ASSIGNED`
+(`produced_rolls = 0`), so `cutProduced = 0` is the correct figure until output is recorded.
+
+**NOT committed yet** — the working tree holds this change set (+ `implementation.md`) for review;
+`server/api/index.js` was regenerated and must travel with the code (`.clinerules` §5).
+### Client side of the order-scoped create — WIRED (2026-09-28)
+The read path above fixed the *panels*; this pass fixed the **create** path, which still POSTed
+cutting/packaging batches to `/cutting-batches/lines/:lineId` — a URL claiming a line the live
+CHECK forbids those batches to have (`implementation.md` §13).
+- `services/batch-service.ts`: `getSourcesFromOrder`, `getResourcesFromOrder`, `createFromOrder`
+  now have callers (the §12 server endpoints were previously unreachable from the UI).
+- `hooks/use-batches.ts`: `BATCH_KEYS.orderSources` / `.orderResources`, `useOrderBatchSources`,
+  `useOrderStageResources`, and the unified `useStageSources` / `useStageScopedResources` that pick
+  line vs order from `batchScopeOf`. Both candidate hooks are always called (stable hook order),
+  exactly one enabled. `useBatchMutation` also invalidates `orderFlow(orderId)` resolved from
+  `args.orderId ?? orderId`, so a create from any board refreshes the flow figures.
+- `CreateBatchDialog`: `lineId` / `labelType` optional; `canSubmit` needs a line only for the
+  first stage; header reads "Order-wide — consumes … from every label type"; the dialog hands both
+  ids to the hook instead of deciding the URL itself.
+- **Single decision point, unit-tested:** `utils/batch-scope.ts#batchCreateTarget(stage, {lineId,
+  orderId})` → `{scope:"line"}` / `{scope:"order"}` / `null`, plus `isOrderScopedOnEveryWorkflow`
+  (derived from `STAGES_OF`, so no hard-coded stage list). Order wins for cutting/packaging even
+  when a line id is present; `batch-scope.test.ts` 9 → **17 tests**.
+- Gates re-verified 2026-09-28: client typecheck 0 errors · `npm test` **7 files / 71 tests** ·
+  lint 0 errors / 184 warnings (unchanged) · `npm run build` green · server typecheck 0 errors ·
+  server `npm test` 9 files / 120 tests · server build OK (`api/index.js` regenerated, 509 070 B) ·
+  `graphify update .` → 3211 nodes / 9016 edges (gitignored `graphify-out/` only).
+  Still **not committed**; §9.4 (deployed API) and §9.5 (manual UI pass) remain outstanding.
+
+
+
+
 ## Immediate next steps
-1. **DECIDE the cutting/packaging scope before touching batch-flow further.** The code
-   already matches the deployed (order-scoped) DB, so nothing needs "finishing" for the
-   system to work; the blocker is provisioning (see "Known defects"). Only after that
-   decision should `batch-flow.service.ts` / `batch-flow.repository.ts` /
-   `batch-flow.service.test.ts` be revisited. Those files now live under
-   `server/src/modules/production/batch-and-runs/` (sub-module reorg) and the test's
-   `vi.mock` paths point at `@modules/*`.
+1. ~~**DECIDE the cutting/packaging scope**~~ — **DECIDED 2026-09-26 (D1: keep
+   order-scoped)**, and the read path was fixed to match in the same pass (see
+   "Cutting/packaging batch visibility — FIXED" above). What remains from this item is
+   only the commit: the working tree still holds the change set for review, including the
+   regenerated `server/api/index.js`. Provisioning (`memory-bank/migration-reconciliation.md`)
+   is unaffected — no migration and no `schema.ts` change were made.
 2. **Execute `memory-bank/migration-reconciliation.md`.** Fresh-DB provisioning is
    still broken (0018/0019 mutual redundancy, the lost 0019 journal entry, the
    unapplied-but-recorded 0023, and live-only objects created out-of-band). Step 0 of
    that plan is the scope decision in item 1.
-3. **Re-affirm client gates**: `typecheck` 0 errors, `lint` 0 errors (184 warnings), `test` 6 files / 54 tests, `build` green — all re-verified 2026-09-26.
+3. **Re-affirm client gates**: `typecheck` 0 errors, `lint` 0 errors (184 warnings), `test` 7 files / 71 tests, `build` green — all re-verified 2026-09-28.
 4. **Decide on the committed `server/api/index.js` build artifact**: keep it in sync
    via `npm run build` or gitignore it in favor of Vercel building it. `npm run build`
    rebuilds it, but the rename step renames only `api/api-entry.js` → `api/index.js`

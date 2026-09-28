@@ -116,12 +116,14 @@ const lineValues = (line: LineRef) =>
     : { productionOrderLineId: line.id, wovenProductionLineId: null };
 
 /**
- * The label type a batch runs, read back from whichever column is set.
+ * The line a batch hangs off, when it has one — read back from whichever column is set.
  *
- * Every batch hangs off exactly one line — the `production_batches_one_line` check
- * (`num_nonnulls(production_order_line_id, woven_production_line_id) = 1`) makes that
- * a hard DB guarantee. Cutting and packaging carry a line just like the first stage, so
- * `line` is always present for every batch at every stage.
+ * Only the FIRST stage of each workflow is per-label-type, so only its batches carry a line:
+ * `production_batches_first_stage_one_line` requires
+ * `num_nonnulls(production_order_line_id, woven_production_line_id) = 1` for printing/weaving
+ * and `= 0` for cutting/packaging. An order-scoped batch spans label types instead — its own
+ * consumption mix is what says which ones — so both columns are NULL and this returns null.
+ * Callers that need the order must read `production_order_id`, which is set for every stage.
  */
 export function lineRefOfBatchOrNull(b: {
   productionOrderLineId: number | null;
@@ -129,21 +131,8 @@ export function lineRefOfBatchOrNull(b: {
 }): LineRef | null {
   if (b.wovenProductionLineId != null) return { kind: "woven", id: b.wovenProductionLineId };
   if (b.productionOrderLineId != null) return { kind: "printed", id: b.productionOrderLineId };
-  // Every batch carries a line (production_batches_one_line check), so this is unreachable
-  // for valid rows — kept as a safeguard against corrupt data only.
+  // Cutting and packaging: order-scoped by design, so no line here.
   return null;
-}
-
-/** The line of every batch — the DB check makes one line per batch a hard guarantee. */
-export function lineRefOfBatch(b: {
-  productionOrderLineId: number | null;
-  wovenProductionLineId: number | null;
-}): LineRef {
-  const line = lineRefOfBatchOrNull(b);
-  if (!line) {
-    throw new NotFoundError("Batch is not attached to a production line");
-  }
-  return line;
 }
 
 /**
@@ -227,9 +216,46 @@ const attributedForLine = (orderId: number, lineId: number) => sql`
     AND m.line_id = ${lineId}
 `;
 
+/** One label type's attested share of an order-scoped batch. */
+export interface BatchLabelMix {
+  lineId: number;
+  /** Null only if the line is gone from both tables — never for a live line. */
+  labelType: string | null;
+  /** That label type's input into the batch, in the batch's own unit. */
+  rolls: number;
+  /** That input as a share of the batch's input, clamped to `[0, 1]`. */
+  share: number;
+}
+
+/**
+ * The denominator a batch's mix shares divide by.
+ *
+ * Normally the batch's own assigned input, exactly as `attributedForLine` divides it. A batch
+ * created without one would divide by zero and attribute its output to NOBODY — the totals
+ * would silently undercount — so fall back to the batch's actual input, which keeps
+ * `Σ share = 1`.
+ */
+export function mixDenominator(assignedRolls: number, totalMixRolls: number): number {
+  if (assignedRolls > 0) return assignedRolls;
+  return totalMixRolls > 0 ? totalMixRolls : 0;
+}
+
+/** A label type's share of a batch's input. `0` — never `NaN` — with nothing to divide by. */
+export function labelShare(rolls: number, denominator: number): number {
+  if (!(denominator > 0)) return 0;
+  const share = rolls / denominator;
+  // 4 dp is display precision: percentages render whole, and Σ shares stays 1 ± 0.0001.
+  return Math.round(Math.min(1, Math.max(0, share)) * 10000) / 10000;
+}
+
 export class BatchFlowRepository {
   /* ------------------------------------------------------------------ reads */
 
+  /**
+   * Batches of ONE label type. Line-scoped batches only ever exist at a workflow's FIRST stage
+   * (`production_batches_first_stage_one_line`), so `labelMix` is always empty here — an
+   * order-scoped batch has no line to filter by and is not listable from a line at all.
+   */
   async findByLine(line: LineRef, stage?: BatchStage) {
     const conditions = [eq(lineColumn(line.kind), line.id)];
     if (stage) conditions.push(eq(productionBatches.stage, stage));
@@ -242,45 +268,51 @@ export class BatchFlowRepository {
       .where(and(...conditions))
       .orderBy(asc(productionBatches.stage), asc(productionBatches.batchNumber));
 
-    return this.attachSources(rows);
+    // One shape for every batch read: line-scoped rows simply carry no mix.
+    return this.attachSources(rows.map((r) => ({ ...r, labelMix: [] as BatchLabelMix[] })));
   }
 
   /** Every batch on an order, for whichever workflow it runs. */
   async findByOrder(productionOrderId: number, kind: LineKind = "printed", stage?: BatchStage) {
-    const rows =
-      kind === "woven"
-        ? await (async () => {
-            const conditions = [eq(wovenProductionLines.productionOrderId, productionOrderId)];
-            if (stage) conditions.push(eq(productionBatches.stage, stage));
-            return db
-              .select({ ...batchSelect, labelType: wovenProductionLines.labelType })
-              .from(productionBatches)
-              .innerJoin(
-                wovenProductionLines,
-                eq(productionBatches.wovenProductionLineId, wovenProductionLines.id)
-              )
-              .leftJoin(machines, eq(productionBatches.machineId, machines.id))
-              .leftJoin(operators, eq(productionBatches.operatorId, operators.id))
-              .where(and(...conditions))
-              .orderBy(desc(productionBatches.createdAt));
-          })()
-        : await (async () => {
-            const conditions = [eq(productionOrderLines.productionOrderId, productionOrderId)];
-            if (stage) conditions.push(eq(productionBatches.stage, stage));
-            return db
-              .select({ ...batchSelect, labelType: productionOrderLines.labelType })
-              .from(productionBatches)
-              .innerJoin(
-                productionOrderLines,
-                eq(productionBatches.productionOrderLineId, productionOrderLines.id)
-              )
-              .leftJoin(machines, eq(productionBatches.machineId, machines.id))
-              .leftJoin(operators, eq(productionBatches.operatorId, operators.id))
-              .where(and(...conditions))
-              .orderBy(desc(productionBatches.createdAt));
-          })();
+    /**
+     * Anchored on the batch's OWN order column — never on a line. Cutting and packaging are
+     * order-scoped and carry no line, so filtering through a line join could only ever drop
+     * them, which is exactly how cutting batches became invisible to this endpoint.
+     *
+     * The workflow filter replaces that join (a printed order carries no weaving rows), and
+     * both line tables are LEFT joined so `labelType` still resolves for line-attached rows
+     * and stays NULL for order-scoped ones — which is honest: such a batch serves many label
+     * types, and `labelMix` says which.
+     */
+    const conditions = [
+      eq(productionBatches.productionOrderId, productionOrderId),
+      inArray(productionBatches.stage, STAGES_OF[kind]),
+    ];
+    if (stage) conditions.push(eq(productionBatches.stage, stage));
 
-    return this.attachSources(rows);
+    const rows = await db
+      .select({
+        ...batchSelect,
+        labelType: sql<
+          string | null
+        >`COALESCE(${productionOrderLines.labelType}, ${wovenProductionLines.labelType})`,
+      })
+      .from(productionBatches)
+      .leftJoin(
+        productionOrderLines,
+        eq(productionBatches.productionOrderLineId, productionOrderLines.id)
+      )
+      .leftJoin(
+        wovenProductionLines,
+        eq(productionBatches.wovenProductionLineId, wovenProductionLines.id)
+      )
+      .leftJoin(machines, eq(productionBatches.machineId, machines.id))
+      .leftJoin(operators, eq(productionBatches.operatorId, operators.id))
+      .where(and(...conditions))
+      .orderBy(desc(productionBatches.createdAt));
+
+    const withMix = await this.attachLabelMix(productionOrderId, rows, kind);
+    return this.attachSources(withMix);
   }
 
   async findById(batchId: number) {
@@ -302,8 +334,91 @@ export class BatchFlowRepository {
       .leftJoin(operators, eq(productionBatches.operatorId, operators.id))
       .where(eq(productionBatches.id, batchId));
     if (!row) return undefined;
-    const [withSources] = await this.attachSources([row]);
+    // A single-batch read does not resolve the mix — the order-wide list read does.
+    const [withSources] = await this.attachSources([{ ...row, labelMix: [] as BatchLabelMix[] }]);
     return withSources;
+  }
+
+  /**
+   * Which label types fed each order-scoped batch, and by how much.
+   *
+   * Built from the same `lineMixCte` weights the write path resyncs line counters with, so the
+   * mix chips on a panel and the figures in its header cannot disagree. First-stage batches
+   * have a line of their own and so have no mix — they are simply absent from the map.
+   */
+  async labelMixForOrder(orderId: number): Promise<Map<number, BatchLabelMix[]>> {
+    const rows = (await db.execute(sql`
+      WITH ${lineMixCte()}
+      SELECT m.batch_id                              AS batch_id,
+             m.line_id                               AS line_id,
+             m.rolls                                 AS rolls,
+             b.assigned_rolls                        AS assigned_rolls,
+             COALESCE(ol.label_type, wl.label_type)  AS label_type
+      FROM mix m
+      JOIN production_batches b ON b.id = m.batch_id
+      LEFT JOIN production_order_lines ol
+             ON ol.id = m.line_id AND ol.production_order_id = b.production_order_id
+      LEFT JOIN woven_production_lines wl
+             ON wl.id = m.line_id AND wl.production_order_id = b.production_order_id
+      WHERE b.production_order_id = ${orderId} AND m.line_id IS NOT NULL
+      ORDER BY m.batch_id, m.line_id
+    `)) as unknown as Array<{
+      batch_id: number;
+      line_id: number;
+      rolls: string;
+      assigned_rolls: string | null;
+      label_type: string | null;
+    }>;
+
+    const grouped = new Map<
+      number,
+      { assignedRolls: number; entries: Array<Omit<BatchLabelMix, "share">> }
+    >();
+    for (const r of rows) {
+      const batchId = Number(r.batch_id);
+      const group = grouped.get(batchId) ?? {
+        assignedRolls: Number(r.assigned_rolls ?? 0),
+        entries: [],
+      };
+      group.entries.push({
+        lineId: Number(r.line_id),
+        labelType: r.label_type,
+        rolls: Number(r.rolls),
+      });
+      grouped.set(batchId, group);
+    }
+
+    const byBatch = new Map<number, BatchLabelMix[]>();
+    for (const [batchId, group] of grouped) {
+      const totalMixRolls = group.entries.reduce((n, e) => n + e.rolls, 0);
+      const denominator = mixDenominator(group.assignedRolls, totalMixRolls);
+      byBatch.set(
+        batchId,
+        group.entries.map((e) => ({ ...e, share: labelShare(e.rolls, denominator) }))
+      );
+    }
+    return byBatch;
+  }
+
+  /**
+   * Attaches the per-label-type mix to the rows that have one. Order-scoped rows (cutting and
+   * packaging) get their mix; first-stage rows get an empty list, and when no row needs a mix
+   * the query is skipped entirely — the sources picker reads only first-stage batches.
+   */
+  private async attachLabelMix<T extends { id: number; stage: BatchStage }>(
+    orderId: number,
+    rows: T[],
+    kind: LineKind
+  ): Promise<Array<T & { labelMix: BatchLabelMix[] }>> {
+    if (rows.length === 0) {
+      return rows.map((r) => ({ ...r, labelMix: [] as BatchLabelMix[] }));
+    }
+    if (rows.every((r) => isFirstStage(kind, r.stage))) {
+      return rows.map((r) => ({ ...r, labelMix: [] as BatchLabelMix[] }));
+    }
+
+    const mix = await this.labelMixForOrder(orderId);
+    return rows.map((r) => ({ ...r, labelMix: mix.get(r.id) ?? [] }));
   }
 
   /** Decorates batches with the edges that fed them — "C-001 took 5 from P-001, 3 from P-002". */

@@ -352,9 +352,13 @@ function PrintedProductionBody({
 }
 
 /**
- * Batch-based production. One board per label type, each carrying its own Printing,
- * Cutting and Packaging batch CRUD — label types are independent, so a cutting batch for
- * Care can only ever draw on Care's printed output.
+ * Batch-based production. One board per label type, each carrying its own Printing (or
+ * Weaving), Cutting and Packaging batch CRUD.
+ *
+ * The label types are independent only at the FIRST stage. Cutting and packaging batches are
+ * order-scoped — they carry no line at all — and the server accepts input for them from any
+ * label type of the order, so the same cutting batch appears on every board and says which
+ * label types fed it. Only the first-stage panels are genuinely per label type.
  */
 function BatchFlowSection({ orderId, readOnly }: { orderId: string; readOnly: boolean }) {
   const flow = useOrderFlow(orderId);

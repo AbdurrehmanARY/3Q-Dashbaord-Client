@@ -28,10 +28,23 @@ export interface BatchSourceEdge {
   rolls: number;
 }
 
+/** One label type's share of an order-scoped batch — "C-001 was 60% Size Label". */
+export interface BatchLabelMix {
+  lineId: number;
+  labelType: string | null;
+  /** That label type's input into the batch, in the batch's own unit. */
+  rolls: number;
+  /** That input as a share of the batch's input, in `[0, 1]`. */
+  share: number;
+}
+
 export interface ProductionBatch {
   id: number;
-  productionOrderLineId: number;
-  labelType?: string;
+  /** The label type of a first-stage batch. NULL for cutting/packaging: they serve the order. */
+  productionOrderLineId: number | null;
+  /** Set when the batch belongs to a WOVEN label type — the other workflow's line column. */
+  wovenProductionLineId: number | null;
+  labelType?: string | null;
   stage: BatchStage;
   batchNumber: number;
   /** P-001, C-001, PK-001 */
@@ -60,6 +73,12 @@ export interface ProductionBatch {
   createdAt: string;
   updatedAt: string;
   sources: BatchSourceEdge[];
+  /**
+   * Which label types fed this batch, and by how much. Populated for the ORDER-scoped stages
+   * (cutting and packaging), whose batches belong to the order rather than to one label type; an
+   * empty list for first-stage batches, which are one label type by definition.
+   */
+  labelMix: BatchLabelMix[];
   /**
    * How long this batch should take, in minutes. Only weaving has a known formula so far;
    * every other stage comes back as 0 and renders as `00:00` until its formula is added.
