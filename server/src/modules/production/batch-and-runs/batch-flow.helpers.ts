@@ -17,10 +17,10 @@ export type LineKind = "printed" | "woven";
 /**
  * A line of one workflow — in practice, one label type.
  *
- * Only a workflow's FIRST stage is per-label-type, so only its batches carry a `LineRef`:
- * `production_batches_first_stage_one_line` requires exactly one line column for printing and
- * weaving (num_nonnulls = 1) and neither for cutting and packaging (= 0), which are scoped to
- * the whole order and split their figures across label types by input share.
+ * Every batch carries one of these at every stage: `production_batches_one_line` requires
+ * exactly one line column to be set (num_nonnulls = 1) for printing, weaving, cutting AND
+ * packaging. The line IS the batch's label type — and which workflow its `kind` names is what
+ * says whether its figures count ROLLS (printed) or PIECES (woven).
  */
 export interface LineRef {
   kind: LineKind;
@@ -248,90 +248,6 @@ export function lineFlowOf(
     remainingRolls: round2(Math.max(0, planned - packagedProduced)),
     /** Per-size tracking from the line's Size Label plan. */
     sizes: lineSizeFlows(sizes, batches, first),
-  };
-}
-
-/* --------------------------------------------------- order-scoped attribution */
-
-/** One label type's share of an order-scoped batch — the shape the mix read returns. */
-export interface BatchMixEntry {
-  lineId: number;
-  labelType: string | null;
-  /** That label type's input into the batch, in the batch's own unit. */
-  rolls: number;
-  /** That input as a share of the batch's input, in `[0, 1]`. */
-  share: number;
-}
-
-/** What one label type is owed by the order's cutting and packaging. */
-export interface AttributedFlow {
-  cutProduced: number;
-  cutConsumed: number;
-  packagedProduced: number;
-  packagedLabels: number;
-  /** Order-scoped batches this label type fed. */
-  cuttingBatches: number;
-  packagingBatches: number;
-  running: string[];
-}
-
-/**
- * The cut and packaging figures of ONE label type, pro-rated from the order-scoped batches that
- * actually consumed its output.
- *
- * Cutting and packaging carry no line (`production_batches_first_stage_one_line`), so their
- * figures cannot be summed from the batch rows themselves — a single cutting batch can serve
- * several label types, and its output belongs to each of them in the proportion of the input
- * they contributed. That proportion is `share`, the same weight the write path resyncs the line
- * counters with, so this read and that write can never disagree.
- *
- * Weights are normalised per batch (Σ share = 1), so summing this over every label type of an
- * order yields the batch's output exactly once — never twice.
- */
-export function attributedFlowOf(
-  batches: Array<FlowBatch & { id: number; batchCode: string; status: BatchStatus }>,
-  mixByBatch: ReadonlyMap<number, readonly BatchMixEntry[]>,
-  lineId: number
-): AttributedFlow {
-  const acc: AttributedFlow = {
-    cutProduced: 0,
-    cutConsumed: 0,
-    packagedProduced: 0,
-    packagedLabels: 0,
-    cuttingBatches: 0,
-    packagingBatches: 0,
-    running: [],
-  };
-  if (mixByBatch.size === 0) return acc;
-
-  for (const b of batches) {
-    // A cancelled batch counts for nothing, exactly as it does at the first stage.
-    if (b.status === "CANCELLED") continue;
-    const entries = (mixByBatch.get(b.id) ?? []).filter((e) => e.lineId === lineId && e.share > 0);
-    if (entries.length === 0) continue;
-
-    const share = Math.min(1, entries.reduce((n, e) => n + e.share, 0));
-    const p = batchPositionOf(b);
-
-    if (b.stage === "cutting") {
-      acc.cutProduced += p.produced * share;
-      acc.cutConsumed += p.consumed * share;
-      acc.cuttingBatches += 1;
-    }
-    if (b.stage === "packaging") {
-      acc.packagedProduced += p.produced * share;
-      acc.packagedLabels += (Number(b.packagedQty ?? 0) || 0) * share;
-      acc.packagingBatches += 1;
-    }
-    if (b.status === "IN_PROGRESS") acc.running.push(b.batchCode);
-  }
-
-  return {
-    ...acc,
-    cutProduced: round2(acc.cutProduced),
-    cutConsumed: round2(acc.cutConsumed),
-    packagedProduced: round2(acc.packagedProduced),
-    packagedLabels: round2(acc.packagedLabels),
   };
 }
 

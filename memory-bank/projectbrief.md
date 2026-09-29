@@ -23,13 +23,17 @@ One order runs exactly **one** of two pipelines, selected by
 | 4 | **Packaging** | **Packaging** | labels / pieces (output) |
 | 5 | Dispatch | Dispatch | — |
 
-Cutting and packaging are **ORDER-SCOPED** in the running system: such a batch spans label
-types, so it carries **no** line of its own (both line columns NULL) and its numbers restart
-per order + stage. Enforced by the live CHECK `production_batches_first_stage_one_line` —
-*not* by the `production_batches_one_line` check that
-`0023_revert_cutting_packaging_line_scope.sql` describes, since that migration was recorded
-as applied but never executed. Order-vs-line scoping is an OPEN decision; see "Known
-defects" in `activeContext.md`.
+Cutting and packaging are **LINE-SCOPED** (settled 2026-09-29): like the first stage, such a
+batch belongs to exactly one label type / production line, so it always carries **one** non-NULL
+line column and its numbers restart per (line, stage). Enforced by the CHECK
+`production_batches_one_line` (`num_nonnulls(...) = 1` at every stage) plus the partial indexes
+`production_batches_printed_no_uq` / `production_batches_woven_no_uq`. Migration
+`0025_line_scoped_cutting_packaging.sql` performs the switch — it drops the former live CHECK
+`production_batches_first_stage_one_line` (which demanded BOTH line columns NULL for cutting and
+packaging), backfills the line-less rows, then adds the line-scoped CHECK — and was validated
+end-to-end on a scratch database. It is journalled but **not yet applied to live Supabase**;
+`0023_revert_cutting_packaging_line_scope.sql` remains the never-executed earlier attempt at the
+same thing. See `memory-bank/migration-reconciliation.md`.
 `production_stage_tx_type` is append-only and ordered:
 `print_credit → cut_consume_print/cut_credit → package_consume_cut/package_credit`;
 only `COMPLETED` batches count toward stage totals.

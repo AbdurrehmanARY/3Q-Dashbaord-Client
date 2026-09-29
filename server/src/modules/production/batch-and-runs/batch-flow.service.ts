@@ -16,11 +16,10 @@ import {
   type BatchStage,
   type LineKind,
   type LineRef,
-  attributedFlowOf,
   lineFlowOf,
   isReadyForCompletion,
   isFirstStage,
-    kindOwnsStage,
+  kindOwnsStage,
   STAGES_OF,
   STAGE_MACHINE_TYPE,
   STAGE_DESIGNATION,
@@ -110,12 +109,11 @@ export class BatchFlowService {
   /* ------------------------------------------------------------------ reads */
 
   /**
-   * First-stage batches of ONE label type.
+   * Batches of ONE label type, at every stage it runs.
    *
-   * Cutting and packaging are ORDER-scoped — `production_batches_first_stage_one_line` forbids
-   * them a line — so a line-scoped question cannot honestly be answered for them and this
-   * answers `[]` for those stages by design. Read them from `getOrderBatches` /
-   * `GET /production/orders/:id/batches?stage=cutting` instead.
+   * Line-scoped reads answer all three stages now that cutting and packaging carry a line: the
+   * panel for a stage asks this and gets the batches the floor is actually running for that
+   * label type.
    */
   async getLineBatches(lineId: number | string, stage?: BatchStage) {
     const line = await this.resolveLine(lineId, this.kindForStage(stage ?? "cutting"));
@@ -136,14 +134,12 @@ export class BatchFlowService {
     return this.withEstimates(batches, Number(orderId));
   }
 
-    async getBatch(batchId: number | string) {
+  async getBatch(batchId: number | string) {
     const batch = await batchFlowRepository.findById(Number(batchId));
     if (!batch) throw new NotFoundError(Messages.notFound("Batch"));
-    // Cutting and packaging are order-scoped: `production_batches_first_stage_one_line`
-    // requires both line columns to be NULL for those stages, so the line of a batch is resolved
-    // from whichever column is set (usually neither) rather than assumed. Every mutating route
-    // re-reads via this method, so a read that threw here made those writes report 404 while the
-    // DB change stuck.
+    // Every batch carries its line, so `withEstimates` can resolve context from the batch's own
+    // order without a special case for any stage. Every mutating route re-reads via this method,
+    // which is why it must stay total.
     const [withEstimate] = await this.withEstimates([batch], batch.productionOrderId);
     return withEstimate;
   }
@@ -158,6 +154,10 @@ export class BatchFlowService {
   /**
    * The flow position of every label type on an order — planned, assigned, produced and
    * available at each stage. This is what the dashboard reads.
+   *
+   * Every figure is a plain sum over the label type's OWN batches. All three stages carry the
+   * line, so there is no attribution to resolve, no weight to normalise, and no way for one
+   * batch to be counted twice.
    */
   async getOrderFlow(orderId: number | string) {
     const order = await productionOrderRepository.findById(orderId);
@@ -166,15 +166,6 @@ export class BatchFlowService {
     const kind: LineKind = order.productType === "woven" ? "woven" : "printed";
     const batches = await batchFlowRepository.findByOrder(Number(orderId), kind);
     const stages = STAGES_OF[kind];
-    const first = stages[0];
-    /**
-     * Cutting and packaging are order-scoped, so their figures cannot be summed from the batch
-     * rows per label type: one batch serves every label type that fed it and carries no line.
-     * The mix read returns the same weights the write path resyncs line counters with, so each
-     * label type is credited exactly its own share of those batches — and the totals below stay
-     * right because the weights of a batch sum to 1.
-     */
-    const labelMix = await batchFlowRepository.labelMixForOrder(Number(orderId));
 
         const rawLines =
       kind === "woven"
@@ -199,11 +190,26 @@ export class BatchFlowService {
       const own = batches.filter((b) =>
         kind === "woven" ? b.wovenProductionLineId === line.id : b.productionOrderLineId === line.id
       );
-      /** Only the first stage is per-label-type; the rest is attributed, never line-owned. */
+      const first = STAGES_OF[kind][0];
+      const live = <T extends { status: string }>(list: T[]) =>
+        list.filter((b) => b.status !== "CANCELLED");
       const ownFirst = own.filter((b) => b.stage === first);
+      const ownCutting = own.filter((b) => b.stage === "cutting");
+      const ownPackaging = own.filter((b) => b.stage === "packaging");
+
       const flow = lineFlowOf(line.planned, ownFirst, kind, line.sizes);
-      const attributed = attributedFlowOf(batches, labelMix, line.id);
-      const packagedProduced = round2(flow.packagedProduced + attributed.packagedProduced);
+
+      /** Summed over this label type's own batches — cancelled ones count for nothing. */
+      const sumOf = (
+        list: typeof own,
+        pick: "producedRolls" | "consumedRolls" | "packagedQty"
+      ) => round2(live(list).reduce((n, b) => n + Number(b[pick] ?? 0), 0));
+
+      const cutProduced = sumOf(ownCutting, "producedRolls");
+      const cutConsumed = sumOf(ownCutting, "consumedRolls");
+      const packagedProduced = sumOf(ownPackaging, "producedRolls");
+      const packagedLabels = sumOf(ownPackaging, "packagedQty");
+
       return {
         lineId: line.id,
         labelType: line.labelType,
@@ -213,22 +219,18 @@ export class BatchFlowService {
         unit: UNIT_OF[kind],
         stages,
         ...flow,
-        /** Cutting and packaging override the (always zero) line-owned sums. */
-        cutProduced: attributed.cutProduced,
-        cutAvailable: round2(Math.max(0, attributed.cutProduced - attributed.cutConsumed)),
+        cutProduced,
+        cutAvailable: round2(Math.max(0, cutProduced - cutConsumed)),
         packagedProduced,
-        packagedLabels: attributed.packagedLabels,
+        packagedLabels,
         remainingRolls: round2(Math.max(0, line.planned - packagedProduced)),
         batchCounts: {
-          printing: ownFirst.filter((b) => b.status !== "CANCELLED").length,
-          cutting: attributed.cuttingBatches,
-          packaging: attributed.packagingBatches,
+          printing: live(ownFirst).length,
+          cutting: live(ownCutting).length,
+          packaging: live(ownPackaging).length,
         },
         running: [
-          ...new Set([
-            ...own.filter((b) => b.status === "IN_PROGRESS").map((b) => b.batchCode),
-            ...attributed.running,
-          ]),
+          ...new Set(live(own).filter((b) => b.status === "IN_PROGRESS").map((b) => b.batchCode)),
         ],
       };
     });
@@ -293,21 +295,10 @@ export class BatchFlowService {
     }
 
     const upstream = stage === "cutting" ? STAGES_OF[line.kind][0] : "cutting";
-    // Cutting and packaging are order-scoped: a batch may consume from the upstream output
-    // of ANY label type on the order (the backend enforces this in `lockSourcesTx`, which
-    // only checks order + stage), so the picker must list across the order rather than
-    // down a single line. First-stage batches are the only ones with a line, and
-    // `findByOrder` already unions every label type of this workflow — so reuse it and
-    // keep the picker honest with what `createBatch` will actually accept.
-    const orderId =
-      line.kind === "woven"
-        ? (await wovenProductionRepository.findLineById(line.id))?.productionOrderId
-        : (await productionOrderRepository.findLineById(line.id))?.productionOrderId;
-    const batches = await batchFlowRepository.findByOrder(
-      Number(orderId),
-      line.kind,
-      upstream
-    );
+    // Input never leaves its label type: a cutting batch draws from THIS line's printed/woven
+    // output and a packaging batch from THIS line's cut output. `lockSourcesTx` enforces the
+    // same rule on write, so the picker can only ever offer what `createBatch` will accept.
+    const batches = await batchFlowRepository.findByLine(line, upstream);
     const sources = batches
       .filter((b) => b.status !== "CANCELLED" && Number(b.availableRolls) > 0)
       .map((b) => ({
@@ -323,44 +314,6 @@ export class BatchFlowService {
     return {
       stage,
       kind: line.kind,
-      unit,
-      fromPlan: false,
-      totalAvailable: sources.reduce((n, s) => n + s.availableRolls, 0),
-      sources,
-    };
-  }
-
-  /**
-   * Order-scoped variant of {@link getAvailableSources} for cutting/packaging: resolves the
-   * order directly instead of routing through a line that only exists to name it.
-   */
-  async getAvailableSourcesFromOrder(orderId: number | string, stage: BatchStage) {
-    const order = await productionOrderRepository.findById(orderId);
-    if (!order) throw new NotFoundError(Messages.notFound("Production order"));
-    const kind: LineKind = order.productType === "woven" ? "woven" : "printed";
-    if (isFirstStage(kind, stage)) {
-      throw new BadRequestError(
-        `${STAGE_TITLE[stage]} is a first stage and draws from the plan — create it from a line`
-      );
-    }
-    const unit = UNIT_OF[kind];
-    const upstream = stage === "cutting" ? STAGES_OF[kind][0] : "cutting";
-    const batches = await batchFlowRepository.findByOrder(Number(orderId), kind, upstream);
-    const sources = batches
-      .filter((b) => b.status !== "CANCELLED" && Number(b.availableRolls) > 0)
-      .map((b) => ({
-        sourceBatchId: b.id,
-        batchCode: b.batchCode,
-        producedRolls: Number(b.producedRolls),
-        availableRolls: Number(b.availableRolls),
-        machineName: b.machineName,
-        operatorName: b.operatorName,
-        status: b.status,
-      }));
-
-    return {
-      stage,
-      kind,
       unit,
       fromPlan: false,
       totalAvailable: sources.reduce((n, s) => n + s.availableRolls, 0),
@@ -393,18 +346,7 @@ export class BatchFlowService {
     return this.resolveStageResources(line.kind, stage, excludeBatchId);
   }
 
-  /**
-   * Order-scoped variant of {@link getStageResources} for cutting/packaging: the workflow
-   * kind comes from the order's productType instead of from a line.
-   */
-  async getStageResourcesFromOrder(orderId: number | string, stage: BatchStage, excludeBatchId?: number) {
-    const order = await productionOrderRepository.findById(orderId);
-    if (!order) throw new NotFoundError(Messages.notFound("Production order"));
-    const kind: LineKind = order.productType === "woven" ? "woven" : "printed";
-    return this.resolveStageResources(kind, stage, excludeBatchId);
-  }
-
-  /** Shared body of the two resource readers above — only the kind resolution differs. */
+  /** Shared body of the resource reader — the workflow kind comes from the line. */
   private async resolveStageResources(kind: LineKind, stage: BatchStage, excludeBatchId?: number) {
     const [allMachines, allOperators, holds] = await Promise.all([
       machineRepository.findAll(),
@@ -461,32 +403,13 @@ export class BatchFlowService {
 
   /* ----------------------------------------------------------------- writes */
 
-    /** Order-scoped create for cutting/packaging — the batch belongs to the order, not a line. */
-  async createBatchFromOrder(orderId: number | string, stage: BatchStage, input: Omit<CreateBatchInput, "stage">) {
-    const order = await productionOrderRepository.findById(orderId);
-    if (!order) throw new NotFoundError(Messages.notFound("Production order"));
-    const kind: LineKind = order.productType === "woven" ? "woven" : "printed";
-    if (!kindOwnsStage(kind, stage)) {
-      throw new BadRequestError(
-        `${STAGE_TITLE[stage]} is not a stage of the ${kind} workflow`
-      );
-    }
-    if (order.status === "complete") {
-      throw new BadRequestError("Cannot add batches to a completed production order");
-    }
-
-    const actorUserId = await userService.assertActor(input.actorUserId ?? undefined);
-    const batch = await batchFlowRepository.createBatch(
-      {
-        productionOrderId: Number(orderId),
-        kind,
-        line: null, // cutting and packaging are order-scoped — no line
-      },
-      { ...input, stage, actorUserId }
-    );
-    return this.getBatch(batch.id);
-  }
-
+  /**
+   * Creates a batch of any stage, against its production line.
+   *
+   * There is one create path for all four stages now: `lineId` names the label type the batch
+   * runs, and the server derives the order from it. Cutting and packaging used to need an
+   * order-scoped route because they carried no line; they carry one now, so they use this one.
+   */
   async createBatch(lineId: number | string, stage: BatchStage, input: Omit<CreateBatchInput, "stage">) {
     const line = await this.resolveLine(lineId, this.kindForStage(stage));
     if (!kindOwnsStage(line.kind, stage)) {
@@ -523,11 +446,7 @@ export class BatchFlowService {
         : (await productionOrderRepository.findLineById(line.id))?.productionOrderId;
     if (!orderId) throw new NotFoundError(Messages.notFound("Production order"));
     const batch = await batchFlowRepository.createBatch(
-      {
-        productionOrderId: orderId,
-        kind: line.kind,
-        line: isFirstStage(line.kind, stage) ? line : null,
-      },
+      { productionOrderId: orderId, kind: line.kind, line },
       { ...input, stage, actorUserId }
     );
     return this.getBatch(batch.id);

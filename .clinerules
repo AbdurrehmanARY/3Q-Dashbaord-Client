@@ -66,17 +66,22 @@
 # One order runs exactly ONE workflow, selected by productType: "printed"|"woven".
 # PRINTED: Planning -> Printing -> Cutting -> Packaging -> Dispatch  (units: rolls)
 # WOVEN:   Planning -> Weaving  -> Cutting -> Packaging -> Dispatch  (units: pieces)
-# Cutting and packaging are ORDER-SCOPED on the live DB (a batch spans label types,
-# so BOTH line columns are NULL and numbering restarts per order + stage). Enforced
-# by CHECK production_batches_first_stage_one_line (first stages: num_nonulls(...) = 1;
-# cutting/packaging: num_nonulls(...) = 0) and the unique index
-# production_batches_order_stage_no_uq.
-# CORRECTED 2026-09-26: migration 0023_revert_cutting_packaging_line_scope.sql AND the
-# schema.ts production_batches_one_line check (num_nonulls(...) = 1 for every stage)
-# describe a LINE-SCOPED variant that was recorded as applied but NEVER executed, and
-# matches neither the live schema nor the running code. Keep-order-scoped vs
-# move-to-line-scoped is an open product decision — read
-# memory-bank/migration-reconciliation.md before touching either.
+# EVERY stage is LINE-SCOPED: a batch belongs to exactly one label type / production line,
+# cutting and packaging included, so each batch has EXACTLY ONE non-NULL line column
+# (production_order_line_id for printed, woven_production_line_id for woven) and numbering
+# restarts per (line, stage). Enforced by CHECK production_batches_one_line
+# (num_nonnulls(...) = 1 at every stage) plus the partial unique indexes
+# production_batches_printed_no_uq / production_batches_woven_no_uq.
+# SETTLED 2026-09-29 (it was order-scoped before): migration
+# 0025_line_scoped_cutting_packaging.sql drops the old CHECK
+# production_batches_first_stage_one_line, backfills line-less cutting/packaging rows
+# (largest contributor -> packaging inherits its cutting line -> order's first line),
+# RAISEs if any batch still has no line, then adds production_batches_one_line and drops
+# production_batches_order_stage_no_uq. Validated end-to-end on a scratch DB by
+# server/scripts/verify-0025-line-scoped.mjs. 0025 is journalled (idx 25) but NOT yet
+# applied to live Supabase — run `node scripts/verify-batch-constraints.mjs` to see which
+# state a given database is in. 0023_revert_cutting_packaging_line_scope.sql is the
+# never-executed order-scoped counterpart and stays an audit artifact only.
 # production_stage_tx_type (append-only, ordered):
 #   print_credit -> cut_consume_print/cut_credit -> package_consume_cut/package_credit
 # - Printing/Weaving only CREDIT their stage.
@@ -121,7 +126,7 @@
 #   psql "$URL" -f scripts/baseline/live-schema.sql
 #   node --env-file <env> scripts/reconcile-migrations.mjs --fresh
 #   npx drizzle-kit migrate      # applies ONLY genuinely-new migrations
-# Replaying 0000–0024 is an audit path only, never the provisioning path.
+# Replaying 0000–0025 is an audit path only, never the provisioning path.
 
 # 6. KNOWLEDGE GRAPH / TOOLING
 # - Prefer `graphify query|path|explain` over raw grep. Report lives at

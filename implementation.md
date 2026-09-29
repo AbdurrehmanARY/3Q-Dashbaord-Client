@@ -719,6 +719,12 @@ and rows only. **No writes were performed against the live database during this 
 
 ## 12. Execution record (2026-09-26)
 
+> **⚠ SUPERSEDED 2026-09-29.** This section records the *interim* order-scoped design (D1 "keep
+> order-scoped", D2 mix chips). The decision was reversed and shipped as migration
+> `0025_line_scoped_cutting_packaging.sql` + a server/client rewrite — see **§15** for the current
+> state. The diagnosis (§4) and the read-path defects R1–R3 remain valid history; the fix shapes
+> described here do not.
+
 **Status: executed.** The user said "proceed with implementation", which was read as accepting
 the recommended options — **D1 = keep cutting/packaging order-scoped** (no migration, no schema
 change) and **D2 = (a) order-wide row + mix chips now** (the order-level board stays deferred).
@@ -785,6 +791,10 @@ output). The observable fix is `batchCounts.cutting = 2` and the two rows in the
 ---
 
 ## 13. Execution record — the client half of the order-scoped create (2026-09-28)
+
+> **⚠ SUPERSEDED 2026-09-29.** `utils/batch-scope.ts`, `batchCreateTarget`,
+> `getSourcesFromOrder`/`getResourcesFromOrder`/`createFromOrder` and the `useOrder*` hooks no
+> longer exist — every stage POSTs and reads against its line. See **§15**.
 
 **Status: executed.** §12 fixed the *read* path and left **D3** on the follow-up list as
 "order-level create route" — the server half of it (routes + service) landed with §12, but nothing
@@ -899,3 +909,113 @@ order-scoped batch that no line-scoped read can ever see.
   D5 (creation-time `assigned_rolls > 0`).
 - `3Q-Dashbaord/` stays in place pending an explicit go-ahead: deleting it destroys its own
   unrelated `.git` history.
+
+---
+
+## 15. Execution record — the LINE-scoped rewrite (2026-09-29)
+
+**Decision:** the D1/D2 design of §12–§14 was reversed. Cutting and packaging batches are now
+**line-scoped** like every other stage: one batch, one label type, one production line — which is
+what §4's root cause R1 actually wanted, since a line-scoped read can now answer for every stage.
+
+### Migration `server/drizzle/0025_line_scoped_cutting_packaging.sql` (journal idx 25)
+
+Operation order matters and was corrected during validation:
+
+| Step | Statement | Why in this position |
+|---|---|---|
+| 0 | `DROP CONSTRAINT production_batches_first_stage_one_line` | the old CHECK demands `num_nonnulls = 0` for cutting/packaging — it **forbids the rows the backfill is about to write**, so backfilling first fails with a CHECK violation (observed on the scratch DB) |
+| 1 | backfill line-less **cutting** from its largest contributor | `batch_consumptions` edges into printing/weaving batches, `ROW_NUMBER() OVER (PARTITION BY batch ORDER BY rolls DESC)` |
+| 2 | backfill line-less **packaging** from its largest contributor | must follow 1: its contributor is a cutting batch that step 1 just gave a line |
+| 3 | fallback: the order's first line (`MIN(id)` of the workflow's line table) | covers batches with no readable edges |
+| 4 | `DO $$ … RAISE EXCEPTION $$` if any line-less batch remains | a clear error beats a CHECK violation deep inside `ADD CONSTRAINT` |
+| 5 | `DROP INDEX production_batches_order_stage_no_uq`; `ADD CONSTRAINT production_batches_one_line (num_nonnulls(...) = 1)`; `CREATE UNIQUE INDEX IF NOT EXISTS …_printed_no_uq / …_woven_no_uq` | the target shape `production-batches.table.ts` already declared |
+
+No renumbering is needed: `batch_number` was unique per (order, stage) and a line belongs to one
+order, so the per-line subsets stay unique; the two partial indexes then cover
+(line, stage, batch_number) for all four stages.
+
+**Validation — `server/scripts/verify-0025-line-scoped.mjs`** (LOCAL-only: refuses any URL that
+is not `localhost`; drops its scratch DB afterwards) provisions `q3_0025_scratch` from
+`scripts/baseline/live-schema.sql`, seeds one order with **two** label types and line-less
+cutting + packaging batches fed by both, then runs four phases:
+
+```
+phase 1  new CHECK exists · old CHECK gone · order-stage index gone · both per-line indexes exist
+         P-CARE -> Care Label · P-SIZE -> Size Label
+         C-TEST (cutting)    -> Size Label   ← largest contributor (70 > 30)
+         PK-TEST (packaging) -> Size Label   ← inherited from its cutting batch
+         no line-less batch survived
+phase 2  orphan batch present -> "Cannot make cutting/packaging line-scoped: 1 batch(es) still
+         carry no line…" (RAISED; transaction rolled back)
+phase 3  cutting batch WITH a line accepted; line-less one rejected by production_batches_one_line
+phase 4  next batch_number on that (line, stage) accepted; a repeat refused by
+         production_batches_printed_no_uq
+ALL SCRATCH CHECKS PASSED
+```
+
+### Server code
+
+- `batch-flow.repository.ts` — attribution machinery **deleted** (`lineMixCte`,
+  `attributedForLineTx`, `contributingLineRefsTx`, `lineageLineIdsTx`, `linesOfOrderFromMix`,
+  `contributingLinesTx`, `lineRefsOfOrderTx`, `orderKindTx`, `attachLabelMix`,
+  `labelMixForOrder`). `BatchScope.line` is now a non-null `LineRef` resolved by the throwing
+  `lineRefOfBatch`; `createBatch` is a single path for **all** stages (lock order → line →
+  sources); `lockSourcesTx` refuses a source from another line with an explicit message;
+  `insertBatchTx` always numbers per (line, stage); `flowInTx` sums the line's own batches;
+  `findByLine` / `findByOrder` filter without a line-table join (both line tables are LEFT joined
+  only to resolve `labelType` for display).
+- `batch-flow.service.ts` — `getOrderFlow` sums each line's own cutting/packaging batches (no
+  pro-rata split); `getAvailableSources` returns `findByLine` (same-line only);
+  `createBatchFromOrder` / `getAvailableSourcesFromOrder` / `getStageResourcesFromOrder` deleted;
+  `createBatch` always passes `line`.
+- `batch-flow.controller.ts` / `.routes.ts` / `.schema.ts` — `createFromOrder`,
+  `getSourcesFromOrder`, `getResourcesFromOrder`, `orderStageRouter`,
+  `/orders/{cutting,packaging}-batches` mounts and `createOrderScopedBatchSchema` removed.
+- `batch-flow.helpers.ts` — attribution helpers deleted; `LineRef` docs updated.
+- Tests: `batch-flow.repository.test.ts` (12) and `batch-flow.service.test.ts` (8) rewritten —
+  line-scoped reads, same-line source picker, "each cutting batch lands on exactly one label
+  type", cancelled batches moving nothing.
+
+### Client code
+
+- `utils/batch-scope.ts` + `batch-scope.test.ts` **deleted** — with every stage line-scoped there
+  is no scope decision left to make; `useCreateBatch` simply requires a `lineId`.
+- `services/batch-service.ts` — `getSourcesFromOrder`, `getResourcesFromOrder`, `createFromOrder`,
+  `listByOrder` removed; `create` is the one create route for all stages.
+- `hooks/use-batches.ts` — `orderSources` / `orderResources` / `orderBatches` keys and
+  `useOrderBatchSources` / `useOrderStageResources` / `useOrderBatches` / `useStageBatches` /
+  `useStageSources` / `useStageScopedResources` removed; callers use `useLineBatches`,
+  `useBatchSources`, `useStageResources` directly.
+- `BatchStageBoard.tsx` — always passes `flow.lineId`; reads batches/sources from the line; the
+  "· order-wide" header and the order-scoped empty-state suffix are gone.
+- `CreateBatchDialog.tsx` — `canSubmit` needs a line for **every** stage; the description no
+  longer says "Order-wide".
+- `batch-types.ts` — `BatchLabelMix` and `ProductionBatch.labelMix` removed (the server stopped
+  sending it; rendering `.length` would have thrown).
+- **New test** `services/batch-service.test.ts` — mocks `@/lib/api` and pins the URLs: sources,
+  resources, list and create for **all four stages** hit `…/{stage}-batches/lines/{id}`, and no
+  method can produce a `/production/orders/…-batches` path again.
+
+### Gates (2026-09-29)
+
+| Gate | Result |
+|---|---|
+| `server`: `npm run typecheck` | 0 errors |
+| `server`: `npm test` | 9 files / **122** tests pass |
+| `server`: `npm run build` | tsup OK, `api/index.js` regenerated |
+| `client`: `npm run typecheck` | 0 errors |
+| `client`: `npm test` | 7 files / **67** tests pass |
+| `node scripts/verify-0025-line-scoped.mjs` (local scratch DB) | **ALL SCRATCH CHECKS PASSED** |
+| `node scripts/verify-batch-constraints.mjs` (live, read-only) | live is **pre-0025**: `first_stage_one_line` + `order_stage_no_uq` present, 3 line-less cutting batches |
+
+### Follow-ups
+
+1. **Apply 0025 to live Supabase** (dev machine, `DIRECT_URL`), then re-run
+   `verify:batch-constraints` (must show `production_batches_one_line`, no
+   `production_batches_order_stage_no_uq`, 0 line-less rows) and `verify:batch-visibility` — its
+   assertions were rewritten for the line-scoped world (every batch carries a line; the order's
+   lines account for all of its cutting batches; per-line figures are a plain sum, no `labelMix`).
+2. Until 0025 has run, do **not** `drizzle-kit push`/`generate` against live
+   (`migration-reconciliation.md` F5).
+3. D5 (creation-time `assigned_rolls > 0`) and §9.4/§9.5 remain open exactly as before.

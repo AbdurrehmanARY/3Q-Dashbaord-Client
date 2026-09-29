@@ -30,14 +30,13 @@ import {
 } from "@/components/ui/alert-dialog";
 import { formatNumber } from "@/lib/format";
 import {
+  useBatchSources,
   useCancelBatch,
   useCompleteBatch,
   useDeleteBatch,
-  useStageBatches,
-  useStageSources,
+  useLineBatches,
   useStartBatch,
 } from "../hooks/use-batches";
-import { isOrderScopedStage } from "../utils/batch-scope";
 import { CreateBatchDialog } from "./CreateBatchDialog";
 import { BatchOutputDialog } from "./BatchOutputDialog";
 import { BatchTraceDialog } from "./BatchTraceDialog";
@@ -94,16 +93,16 @@ interface BatchStageBoardProps {
 }
 
 /**
- * One label type's three stages, each with its own batch CRUD.
+ * One label type's stages, each with its own batch CRUD.
  *
  * The stages are shown side by side because that is how the material moves: what printing makes
  * available is exactly what cutting can take. Each panel's header states its own position, so the
  * operator never has to compute availability themselves.
  *
- * The three panels do NOT ask the same question: printing (or weaving) is per label type, while
- * cutting and packaging batches belong to the whole ORDER and carry no line at all. Each panel
- * therefore reads the scope that owns its stage — see `useStageBatches` — and the order-scoped
- * ones say so in their header, since the same `C-001` legitimately appears on every board.
+ * Since migration 0025 all of these panels read the same scope — this label type's LINE. Cutting
+ * and packaging batches used to belong to the whole order and had to be read from an order
+ * endpoint; they now carry this line's id like every other batch, so the same `C-001` never
+ * appears on a neighbouring board.
  */
 export function BatchStageBoard({ orderId, flow, readOnly, defaultOpen = true }: BatchStageBoardProps) {
   const [createStage, setCreateStage] = React.useState<BatchStage | null>(null);
@@ -157,7 +156,7 @@ export function BatchStageBoard({ orderId, flow, readOnly, defaultOpen = true }:
         <CreateBatchDialog
           open
           stage={createStage}
-          lineId={isOrderScopedStage(flow.kind, createStage) ? undefined : flow.lineId}
+          lineId={flow.lineId}
           kind={flow.kind}
           labelType={flow.labelType}
           orderId={orderId}
@@ -197,17 +196,15 @@ function StagePanel({
   onRecordOutput: (b: ProductionBatch) => void;
   onTrace: (b: ProductionBatch) => void;
 }) {
-  /** Cutting and packaging belong to the order, so this panel must not filter by a line. */
-  const orderScoped = isOrderScopedStage(flow.kind, stage);
-  /** The batches of this stage, read from the scope that owns it. */
-  const batches = useStageBatches(orderId, stage, flow.lineId, flow.kind);
+  /** The batches of this stage — every one of them carries this line's id. */
+  const batches = useLineBatches(stage, flow.lineId);
   /**
-   * Whether a batch can be started at all, asked of the SOURCES rather than of this line's own
-   * figures: for cutting and packaging the server accepts upstream output from ANY label type of
-   * the order, so the line's own number would disable a button that should work.
+   * Whether a batch can be started at all, asked of the SOURCES rather than of this panel's own
+   * figures: cutting may only consume what this line printed, packaging only what this line cut,
+   * and the sources query is what knows how much of that is still unallocated.
    * The dialog reads the same query key, so this costs no extra request.
    */
-  const sourcesQuery = useStageSources(orderId, stage, flow.lineId, flow.kind, !readOnly);
+  const sourcesQuery = useBatchSources(stage, flow.lineId, !readOnly);
   /** Until the sources answer, the button stays enabled — the dialog guards the submission. */
   const sourcesData = sourcesQuery.data;
   const canCreate = !sourcesData
@@ -233,6 +230,8 @@ function StagePanel({
       : { label: "Packaged", value: flow.packagedProduced };
 
   const rows = batches.data ?? [];
+  console.log("rows",rows)
+  // console.log("flow",flow)
   /** Stages open by default — the batch rows inside them are what collapse. */
   const [open, setOpen] = React.useState(true);
   const liveCount = rows.filter((b) => b.status !== "CANCELLED").length;
@@ -250,11 +249,6 @@ function StagePanel({
             <ChevronRight className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-90" : ""}`} />
             <Icon className="h-3.5 w-3.5" />
             {STAGE_LABEL[stage]}
-            {orderScoped && (
-              <span className="font-normal normal-case tracking-normal text-muted-foreground">
-                · order-wide
-              </span>
-            )}
             {liveCount > 0 && (
               <span className="rounded bg-muted px-1 font-mono text-[10px] text-muted-foreground">
                 {liveCount}
@@ -331,8 +325,7 @@ function StagePanel({
         )}
         {!batches.isPending && rows.length === 0 && (
           <p className="px-3 py-6 text-center text-xs text-muted-foreground">
-            No {STAGE_LABEL[stage].toLowerCase()} batches yet
-            {orderScoped ? " for this order" : ""}.
+            No {STAGE_LABEL[stage].toLowerCase()} batches yet.
           </p>
         )}
         {rows.map((batch) => (
@@ -369,6 +362,8 @@ function BatchRow({
   const cancelBatch = useCancelBatch(orderId);
   const deleteBatch = useDeleteBatch(orderId);
   const [confirm, setConfirm] = React.useState<null | "cancel" | "delete">(null);
+
+  
   /**
    * Batches collapse by default. The header line carries what is asked most often — code,
    * status, produced/assigned — so a stage with a dozen batches stays scannable, and the
@@ -408,17 +403,6 @@ function BatchRow({
         <Badge variant={STATUS_VARIANT[batch.status]} className="h-4 px-1.5 text-[10px]">
           {STATUS_LABEL[batch.status]}
         </Badge>
-        {/* An order-wide batch serves several label types: saying which, and by how much, is
-            what makes the same C-001 on three boards read as design rather than duplication. */}
-        {batch.labelMix.length > 0 && (
-          <span className="flex flex-wrap items-center gap-1">
-            {batch.labelMix.map((m) => (
-              <Badge key={m.lineId} variant="outline" className="h-4 px-1.5 text-[10px] font-normal">
-                {m.labelType ?? `Line ${m.lineId}`} {Math.round(m.share * 100)}%
-              </Badge>
-            ))}
-          </span>
-        )}
         <span className="ml-auto flex items-center gap-2">
           {available > 0 && (
             <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">

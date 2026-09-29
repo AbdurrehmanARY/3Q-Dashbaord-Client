@@ -25,6 +25,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "verify:batch-visibility": "node scripts/verify-batch-visibility.mjs",
+    "verify:batch-constraints": "node scripts/verify-batch-constraints.mjs",
+    "verify:0025": "node scripts/verify-0025-line-scoped.mjs",
     "db:baseline": "node --env-file .env scripts/dump-baseline.mjs",
     "db:provision:fresh": "node --env-file .env scripts/reconcile-migrations.mjs --fresh",
     "db:reset:production": "tsx --env-file .env src/shared/db/reset-production.ts"

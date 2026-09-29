@@ -9,20 +9,69 @@ but it is a **work-in-progress branch** (`chore/ci`) with a **clean working tree
 the large dirty change set was committed as atomic commits on 2026-09-26 (see
 "Working-tree state" below).
 
-### Verified gate state right now (re-verified 2026-09-28, **committed as `0a3ef12`**)
-- `client/`: `npm run typecheck` → 0 errors; `npm run lint` → 0 errors (184 warnings); `npm test` → 7 files / 71 tests pass (`utils/batch-scope.test.ts` 9 → 17); `npm run build` → vite build OK.
-- `server/`: `npm run typecheck` → **0 errors**; `npm test` → **9 files / 120 tests pass**
-  (`vitest.config.ts` injects a dummy `DATABASE_URL` when none is set, so suites no
-  longer die on env import-time validation locally or in CI);
-  `npm run build` → tsup OK (`dist/index.js` + `api/index.js`), and a rebuild leaves
-  `server/api/` **byte-identical** to the committed bundle (so it is in sync);
-  `npm run verify:batch-visibility` → all checks PASS against the live DB.
-- ⚠ **The live DB was reset since the bug report.** Order `22` no longer exists — the database
-  now holds one order, **`#24`** (`PRD-00001`, woven, 60 000), with 2 weaving + 1 cutting batch.
-  The T5 script therefore **defaults to the newest order** instead of a hard-coded `22` (the old
-  default made the documented no-argument command die with "No production order 22"). Re-run on
-  `#24`: `findByOrder(24,'woven','cutting') = 1` (the S1 check that read 0 before the fix),
-  `findByLine(woven 20,'weaving') = 1`, `findByLine(…,'cutting') = 0` → **All checks PASS**.
+### Verified gate state right now (re-verified 2026-09-29, line-scoped pass)
+- `client/`: `npm run typecheck` → 0 errors; `npm test` → **7 files / 67 tests**
+  (`utils/batch-scope.test.ts` deleted with the scope decision;
+  `services/batch-service.test.ts` added — it pins the line-scoped URLs).
+- `server/`: `npm run typecheck` → **0 errors**; `npm test` → **9 files / 122 tests**;
+  `npm run build` → tsup OK and `server/api/index.js` regenerated; migration 0025 validated
+  end-to-end on a scratch DB by `scripts/verify-0025-line-scoped.mjs` (**all checks pass**).
+- ⚠ **Live is still pre-0025** (verified 2026-09-29): `production_batches_first_stage_one_line`
+  and `production_batches_order_stage_no_uq` are still there and 3 cutting batches still carry no
+  line. Until 0025 runs on Supabase, the line-scoped code will reject any cutting/packaging create
+  (the old CHECK forbids a line) — see "Immediate next steps" #1.
+- ⚠ **Nested `.git` repositories** exist in `server/` and `client/` (stale, from before the
+  monorepo consolidation; their HEADs are old feature commits and they do not track the current
+  layout). Always run `git status` / `git add` / `git commit` from the **repo root**, never from
+  inside a package — otherwise you commit to the wrong repository.
+
+## Cutting/packaging batches → LINE-SCOPED — SHIPPED (2026-09-29)
+
+The 2026-09-26 open product decision (D1: "keep order-scoped") has been **decided the other way
+and executed**: every batch now belongs to exactly one production line, cutting and packaging
+included. What landed:
+
+- **Migration `server/drizzle/0025_line_scoped_cutting_packaging.sql`** (+ `_journal.json` idx 25,
+  `when 1787250000000`): drops the order-scoped CHECK *first* (it forbids the rows the backfill is
+  about to write — validated: applying the backfill under `first_stage_one_line` fails with a CHECK
+  violation), backfills cutting from its largest contributor, packaging from its cutting line, then
+  falls back to the order's first line, RAISEs if any line-less batch survives, and only then swaps
+  in `production_batches_one_line` (`num_nonnulls(...) = 1` for **every** stage) and drops
+  `production_batches_order_stage_no_uq`. `production_batches_printed_no_uq` /
+  `_woven_no_uq` are `CREATE IF NOT EXISTS`d, so per-(line, stage) numbering now covers all four
+  stages without any renumbering (batch numbers were unique per order; a line lives in one order).
+- **Migration VALIDATED end-to-end on a scratch database** — `server/scripts/verify-0025-line-scoped.mjs`
+  (LOCAL-only; refuses anything but `localhost`) rebuilds `q3_0025_scratch` from
+  `scripts/baseline/live-schema.sql`, seeds a two-label-type order with line-less cutting +
+  packaging batches and runs 4 phases. **ALL SCRATCH CHECKS PASSED**: DDL swap, largest-contributor
+  backfill (cutting → Size Label because 70 > 30), packaging inheriting its cutting line, orphan
+  guard raising, the new CHECK accepting/rejecting the right rows, and per-line numbering
+  rejecting a duplicate `batch_number`. The scratch DB is dropped afterwards.
+- **Server**: attribution machinery deleted (`labelMixForOrder` / `lineMixCte` /
+  `attributedForLine` / `contributingLines` / `linesOfOrderFromMix` / `attributedFlowOf` /
+  `orderKindTx` / `attachLabelMix`); `createBatch` is now one path for all stages (lock order →
+  line → sources, same-line source enforcement with a clear error); `insertBatchTx` numbers per
+  (line, stage) always; `flowInTx` sums the line's own batches; `getOrderFlow` no longer
+  pro-rata-splits anything; `getAvailableSources` is line-scoped. Order-scoped routes removed:
+  `orderStageRouter`, `POST/GET /production/orders/:stage-batches/:id{,/sources,/resources}`,
+  `createOrderScopedBatchSchema`, `createFromOrder` / `getSourcesFromOrder` /
+  `getResourcesFromOrder` controller+schema helpers, `createBatchFromOrder` /
+  `getAvailableSourcesFromOrder` / `getStageResourcesFromOrder` service methods.
+- **Client**: `utils/batch-scope.ts` + its test deleted (there is no scope decision left to make);
+  `getSourcesFromOrder` / `getResourcesFromOrder` / `createFromOrder` / `listByOrder` and the
+  `useOrder*` / `useStage*` scope-picking hooks and query keys removed; the board and dialog always
+  pass `flow.lineId`; `canSubmit` needs a line for **every** stage; `ProductionBatch.labelMix` and
+  its mix chips removed (the server no longer sends it — rendering it would have thrown).
+  New `services/batch-service.test.ts` pins the line URLs for all four stages and asserts no
+  method can reach a `/production/orders/:stage-batches/…` route again.
+- **Gates (2026-09-29)**: server typecheck **0 errors** · `npm test` **9 files / 122 tests** ·
+  `npm run build` OK (`api/index.js` regenerated); client typecheck **0 errors** · `npm test`
+  **7 files / 67 tests**.
+- **NOT yet done:** 0025 has **not** been applied to the live Supabase database (verified 2026-09-29
+  with `scripts/verify-batch-constraints.mjs`: live still carries
+  `production_batches_first_stage_one_line` + `production_batches_order_stage_no_uq` and 3 line-less
+  cutting batches, i.e. it is still pre-0025). Applying it to live is a separate, explicit step —
+  see `memory-bank/migration-reconciliation.md`.
 
 ## Estimated weaving time (woven work orders) — DONE (2026-09-23)
 - New persisted column `woven_work_order_details.estimated_weaving_hours` (numeric 12,2,
@@ -80,28 +129,29 @@ status code, payload shape, or SQL query changed. Evidence gathered at the time:
   `resolvePlanningDefaultQuantity`) so the workflow dispatch is a pure, tested
   invariant. `WovenProductionPanel` was refactored onto this dialog pattern;
   `components/unified/` was abandoned and deleted.
-- **Cutting/packaging scope — CORRECTED 2026-09-26 (verified against the live DB).**
-  The running system is **ORDER-SCOPED**, not line-scoped. `production_batches` carries a
-  CHECK named `production_batches_first_stage_one_line`:
-  `(stage IN ('weaving','printing') AND num_nonnulls(production_order_line_id,
-  woven_production_line_id) = 1) OR (stage IN ('cutting','packaging') AND
-  num_nonnulls(...) = 0)` — so cutting/packaging batches MUST have **both** line columns
-  NULL, and their numbering is per ORDER + stage (`production_batches_order_stage_no_uq`
-  exists; `production_batches_one_line` does NOT exist on the live table). Repository,
-  service and tests all implement exactly that, so the deployed code is self-consistent.
-  **The documentation was wrong:** migration file
-  `0023_revert_cutting_packaging_line_scope.sql`, `.clinerules` §3, `projectbrief.md` and
-  `progress.md` all claim line-scoped. Keep-order-scoped vs move-to-line-scoped is an
-  **open product decision** — see "Known defects (2026-09-26)". Do NOT "fix" the code to
-  line-scoped without also making that migration actually runnable.
+- **Cutting/packaging scope — SETTLED LINE-SCOPED 2026-09-29** (history: it was
+  **order-scoped** on the live DB from 2026-09-26 until 0025 — `production_batches_first_stage_one_line`
+  required `num_nonnulls(...) = 0` for cutting/packaging and `production_batches_order_stage_no_uq`
+  numbered them per order, which made every line-scoped read structurally empty and left the
+  dashboard panels blank). The product decision that was recorded as open went the other way and
+  **was executed as migration `0025_line_scoped_cutting_packaging.sql`**: the order-scoped CHECK is
+  dropped first, the line-less rows are backfilled (largest contributor → packaging inherits its
+  cutting line → order's first line as a fallback), an orphan guard refuses to continue if any
+  batch still has no line, and `production_batches_one_line` (`num_nonnulls(...) = 1` for every
+  stage) replaces it. `production-batches.table.ts` already declared that shape, so the database
+  was moved **to** the schema — `.clinerules` §3, `projectbrief.md` and `progress.md`, which had
+  claimed line-scoped all along, are now right. Validated on a scratch DB by
+  `server/scripts/verify-0025-line-scoped.mjs`; **live is still pre-0025** until someone applies it.
 - **Two-project Vercel deployment.** Server builds via tsup from
   `src/api-entry.ts` (NOT `src/index.ts`) and renames the output to
   `api/index.js`; `server/vercel.json` exposes it as the only serverless
   function (maxDuration 30, region bom1). Runtime DB = Supabase transaction
   pooler (`:6543`, `prepare:false`); `DIRECT_URL` session pooler (`:5432`) is
   dev-only.
-- **Drizzle ORM + Supabase.** Migration files `0000`–`0024` are all applied to live
-  (the journal holds 24 entries — `0019`'s entry was lost, leaving an orphaned
+- **Drizzle ORM + Supabase.** Migration files `0000`–`0024` are applied to live; **`0025`
+  (`0025_line_scoped_cutting_packaging`, 2026-09-29) is journalled but NOT yet applied there** —
+  the journal holds 26 entries
+  (`0019`'s entry was lost, leaving an orphaned
   tracker row; see `memory-bank/migration-reconciliation.md`); `relations/` holds the
   only wired-up Drizzle `relations()`. Decimal columns are strings over the
   wire throughout.
@@ -150,7 +200,7 @@ Outstanding non-code state:
   `errors/`, `middleware/`, `validation/`, `constants/`, `services/` (mail), `utils/` (formulas).
 - `server/src/shared/__tests__/architecture.test.ts` — architecture guard (acyclic graph,
   repositories-are-leaves). Not a behaviour test; it fails CI on structural regressions.
-- `server/drizzle/` — migration files `0000`–`0024` (journal has 24 entries; `0019`'s
+- `server/drizzle/` — migration files `0000`–`0025` (journal has 26 entries; `0019`'s
   entry was lost — see `migration-reconciliation.md`).
 - `server/src/config/env.ts` — Zod-validated environment (env vars list).
 - Knowledge graph at `.graphify/` (report: `.graphify/GRAPH_REPORT.md`).
@@ -170,6 +220,9 @@ R3 `getOrderFlow` summed only line-owned batches. The write path
 
 **Decisions taken by proceeding:** D1 = keep cutting/packaging **order-scoped** (no migration, no
 schema change); D2 = order-wide row + mix chips now (the order-level board stays deferred).
+**⚠ Both superseded 2026-09-29** — D1 was reversed and executed as migration 0025, and everything
+below this line describes the *interim* order-scoped system (D2's `labelMix` machinery is deleted).
+See "Cutting/packaging batches → LINE-SCOPED — SHIPPED (2026-09-29)" at the top for the current state.
 
 **What landed** — server: `findByOrder` anchored on `production_batches.production_order_id` with
 both line tables LEFT joined + an explicit `STAGES_OF[kind]` workflow filter; new
@@ -216,11 +269,14 @@ CHECK forbids those batches to have (`implementation.md` §13).
 
 
 ## Immediate next steps
-1. ~~**DECIDE the cutting/packaging scope**~~ — **DECIDED 2026-09-26 (D1: keep
-   order-scoped)**: the read path was fixed to match in the same pass, the client create path
-   followed on 2026-09-28, and **both are now committed as `0a3ef12`** — item closed.
-   Provisioning (`memory-bank/migration-reconciliation.md`) is unaffected — no migration and
-   no `schema.ts` change were made.
+1. ~~**DECIDE the cutting/packaging scope**~~ — **DECIDED 2026-09-29, the other way: LINE-SCOPED.**
+   Migration `0025_line_scoped_cutting_packaging.sql` was written, journalled (idx 25) and
+   **validated end-to-end on a scratch DB** (`server/scripts/verify-0025-line-scoped.mjs`, all
+   checks pass); server and client were rewritten to the line-scoped model and both packages are
+   green. **Outstanding: apply 0025 to live Supabase** (D1/DIRECT_URL, dev machine only) and then
+   re-run `npm run verify:batch-constraints` + `npm run verify:batch-visibility` against it.
+   Provisioning is unaffected: a fresh DB gets 0025 through `drizzle-kit migrate` like any other
+   genuinely-new migration (it is already in the journal).
 2. ~~**Execute `memory-bank/migration-reconciliation.md`.**~~ — **Phases 1, 2 and 4
    EXECUTED 2026-09-28**: the lost `0019` journal entry is restored (journal is now a complete
    0–24 sequence), and fresh-DB provisioning now runs off a **pg_dump baseline** instead of
@@ -230,10 +286,14 @@ CHECK forbids those batches to have (`implementation.md` §13).
    refuses on a non-empty tracker) alongside the existing live `--write` path. Validated
    end-to-end on scratch DB `q3_provision_scratch`: baseline clean → `--fresh` records 25 →
    `drizzle-kit migrate` = nothing to apply → `pg_dump` diff vs live empty → a throwaway
-   `0025` probe applied *only* that migration. **Still outstanding: Phase 3 / D4**
-   (`schema.ts` still declares the non-existent `production_batches_one_line` check and omits
-   `first_stage_one_line` / `order_stage_no_uq`) — decision-gated, needs explicit go-ahead.
-3. **Re-affirm client gates**: `typecheck` 0 errors, `lint` 0 errors (184 warnings), `test` 7 files / 71 tests, `build` green — all re-verified 2026-09-28.
+   `0025` probe applied *only* that migration.
+   **Phase 3 / D4 is now largely self-resolving**: 0025 is what makes live match
+   `schema.ts` (which declares `production_batches_one_line`, not the old pair), so applying it
+   closes the check/index mismatch the phase was about — **still gated on the go-ahead to touch
+   live.**
+3. **Re-affirm client gates**: `typecheck` 0 errors, `test` 7 files / 67 tests (the scope-matrix
+   suite `batch-scope.test.ts` was deleted with the scope decision; `batch-service.test.ts` added),
+   `build` green — re-verified 2026-09-29.
 4. ~~**Decide on the committed `server/api/index.js` build artifact**~~ — **DECIDED
    2026-09-28: keep it committed and in sync** (`.clinerules` §5 — `vercel.json` serves
    `functions["api/index.js"]`, and the file is tracked). Verified by rebuilding: `server/api/`

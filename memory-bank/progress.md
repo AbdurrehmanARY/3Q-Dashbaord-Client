@@ -35,18 +35,27 @@
 - Material issuance (`production_roll_issuances`) — the only stock debit path;
   `SELECT … FOR UPDATE` on the ledger row; `issuedRolls` maintained
   transactionally as a fast-read cache.
-- Cutting and packaging are **ORDER-SCOPED** in the running system (both line columns NULL;
-  numbering per order + stage via `production_batches_order_stage_no_uq`).
-  CORRECTED 2026-09-26: a previous note here claimed line-scoped via migration `0023` +
-  `production_batches_one_line`, but that constraint does not exist on the live DB and the
-  migration never executed (it was recorded as applied with a placeholder hash).
-  **The read path now matches (2026-09-26):** `findByOrder` anchors on
-  `production_batches.production_order_id` with both line tables LEFT joined;
-  `labelMixForOrder` reuses the write path's `lineMixCte` to report which label types fed each
-  order-scoped batch; `getOrderFlow` uses a pure `attributedFlowOf()` for per-label-type
-  cut/packaging figures and counts; the client reads each stage through `useStageBatches`
-  (line scope for the first stage, order scope for cutting/packaging). See
-  `implementation.md` §12 for the execution record.
+- Cutting and packaging are **LINE-SCOPED since 2026-09-29** — every batch carries exactly one
+  line column (`production_order_line_id` for printed, `woven_production_line_id` for woven) and
+  numbering restarts per (line, stage), enforced by `production_batches_one_line`
+  (`num_nonnulls(...) = 1` at every stage) plus the partial `production_batches_printed_no_uq` /
+  `production_batches_woven_no_uq` indexes. Delivered by migration
+  `0025_line_scoped_cutting_packaging.sql`: drop `first_stage_one_line` first (the backfill
+  violates it otherwise), backfill line-less rows (largest contributor → packaging inherits its
+  cutting line → the order's first line as fallback), RAISE if any orphan remains, add
+  `one_line`, drop `order_stage_no_uq`. **Validated end-to-end on a scratch DB** by
+  `server/scripts/verify-0025-line-scoped.mjs` (all 4 phases pass). Server side: the attribution
+  machinery (`labelMixForOrder` / `lineMixCte` / `attributedFlowOf`) is deleted, `createBatch`
+  is one line-scoped path for all four stages with same-line source enforcement, and the
+  order-scoped routes/schema/controller/service helpers are gone. Client side:
+  `utils/batch-scope.ts`, `createFromOrder`/`getSourcesFromOrder`/`getResourcesFromOrder` and the
+  scope-picking hooks are deleted; the board and dialog always use `flow.lineId`;
+  `services/batch-service.test.ts` pins the line URLs. ⚠ **Live is still pre-0025** — the
+  migration is journalled (idx 25) but has not been run against Supabase yet.
+  HISTORY (2026-09-26 → 2026-09-29): live was briefly order-scoped (0023's content had never
+  executed, so `first_stage_one_line` + `order_stage_no_uq` were live), and the interim read-path
+  and create-path fixes recorded below — and in `implementation.md` §12–§13 — described that
+  design. **They are superseded by this entry.**
 - **The create path matches (2026-09-28).** The client no longer POSTs cutting/packaging batches to
   `/cutting-batches/lines/:lineId`: `batchService.createFromOrder` / `getSourcesFromOrder` /
   `getResourcesFromOrder` serve both stages, `useStageSources` / `useStageScopedResources` pick the

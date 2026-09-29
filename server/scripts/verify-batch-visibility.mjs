@@ -5,13 +5,16 @@
  * It answers, against the LIVE database, the questions the client and the API ask — and prints
  * PASS/FAIL for each, so a regression shows up here instead of on the floor.
  *
- *   1. batch counts per (order, stage)      -> is there anything to see at all?
- *   2. findByLine(<line>, 'weaving')        -> the line-scoped read: first stage only
- *   3. findByOrder(<order>, 'cutting')      -> the order-scoped read (0 BEFORE the S1 fix)
- *   4. attribution of that line's cut output -> the per-label-type share the flow read reports
- *
- * The `findByLine(...,'cutting')` check is FAIL-BY-DESIGN: an order-scoped batch carries no
- * line, so a line-scoped URL must never report one.
+ *   1. batch counts per (order, stage)  -> anything to see at all, and does EVERY batch carry a
+ *                                          line? Since 0025 all four stages are line-scoped, so
+ *                                          a line-less cutting batch is a defect, not a design.
+ *   2. findByLine(<line>, 'weaving')    -> the line-scoped read of a first stage
+ *   3. findByOrder(<order>, 'cutting')  -> the order-wide read that feeds the flow endpoint
+ *   4. findByLine(<line>, 'cutting')    -> the line-scoped read of a SHARED stage. Before 0025
+ *                                          this was FAIL-BY-DESIGN (an order-scoped batch carries
+ *                                          no line); now it must answer, which is the point.
+ *   5. per-line cut/packaged figures    -> a plain SUM over the line's own batches. The pro-rata
+ *                                          `labelMix` attribution went away with 0025.
  *
  * Usage (from server/):  npm run verify:batch-visibility [orderId]
  *                         (no argument = the newest production order)
@@ -95,17 +98,15 @@ try {
     GROUP BY stage
     ORDER BY stage
   `;
-  console.log("--- batches per stage (line_less must equal the whole stage) ---");
+  console.log("--- batches per stage (line_less must be 0 for every stage) ---");
   for (const row of perStage) {
     console.log(`${row.stage.padEnd(10)} ${row.batches} batches, ${row.line_less} with NO line`);
   }
-  for (const stage of ["cutting", "packaging"]) {
-    const row = perStage.find((r) => r.stage === stage);
-    if (!row) continue;
+  for (const row of perStage) {
     report(
-      row.line_less === row.batches,
-      `${stage}: every batch is order-scoped`,
-      `${row.line_less}/${row.batches}`
+      row.line_less === 0,
+      `${row.stage}: every batch carries a line`,
+      `${row.batches - row.line_less}/${row.batches}`
     );
   }
 
@@ -136,55 +137,47 @@ try {
     `;
     report(cuttingByOrder[0].n > 0, `findByOrder(${orderId},'${kind}','cutting')`, cuttingByOrder[0].n);
 
-    // FAIL-BY-DESIGN: cutting is never reachable through a line-scoped read.
+    // Before 0025 this read was FAIL-BY-DESIGN — an order-scoped batch carries no line. Now every
+    // cutting batch carries one, so (a) the order's lines must account for every cutting batch on
+    // the order (no batch falls outside all of them), and (b) this line's own cutting batches are
+    // simply reported: another line of the order may legitimately own all of them.
+    const cuttingOwned = await sql`
+      SELECT COUNT(*)::int AS n
+      FROM production_batches b
+      WHERE b.production_order_id = ${orderId} AND b.stage = 'cutting'
+        AND COALESCE(b.production_order_line_id, b.woven_production_line_id) IN (
+          SELECT id FROM ${sql(lineTable)} WHERE production_order_id = ${orderId}
+        )
+    `;
+    report(
+      cuttingOwned[0].n === cuttingByOrder[0].n,
+      `every cutting batch belongs to one of the order's lines`,
+      `${cuttingOwned[0].n}/${cuttingByOrder[0].n}`
+    );
+
     const cuttingByLine = await sql`
       SELECT COUNT(*)::int AS n FROM production_batches
       WHERE ${sql(column)} = ${lineId} AND stage = 'cutting'
     `;
-    report(
-      cuttingByLine[0].n === 0,
-      `findByLine(${lineTable} ${lineId},'cutting') = 0 (by design)`,
-      cuttingByLine[0].n
+    console.log(
+      `findByLine(${lineTable} ${lineId},'cutting') = ${cuttingByLine[0].n}` +
+        `  (reported, not asserted: another line may own the cutting)`
     );
 
-    /* --- 4. the attribution the flow read reports for that label type --- */
-    const attributed = await sql`
-      WITH l1 AS (
-        SELECT e.destination_batch_id AS batch_id,
-               COALESCE(s.production_order_line_id, s.woven_production_line_id) AS line_id,
-               SUM(e.rolls) AS rolls
-        FROM batch_consumptions e
-        JOIN production_batches s ON s.id = e.source_batch_id
-        WHERE s.stage IN ('printing','weaving')
-        GROUP BY 1, 2
-      ),
-      mix AS (
-        SELECT batch_id, line_id, rolls FROM l1
-        UNION ALL
-        SELECT e.destination_batch_id,
-               l1.line_id,
-               SUM(e.rolls * l1.rolls / NULLIF(t.total, 0))
-        FROM batch_consumptions e
-        JOIN production_batches s ON s.id = e.source_batch_id AND s.stage = 'cutting'
-        JOIN l1 ON l1.batch_id = s.id
-        JOIN (SELECT batch_id, SUM(rolls) AS total FROM l1 GROUP BY 1) t ON t.batch_id = s.id
-        GROUP BY 1, 2
-      )
+    /* --- 5. the flow figures for that label type: a plain sum over ITS OWN batches --- */
+    const ownFigures = await sql`
       SELECT
-        COALESCE(SUM(b.produced_rolls * m.rolls / NULLIF(b.assigned_rolls, 0))
-          FILTER (WHERE b.stage = 'cutting'), 0)   AS cut_produced,
-        COALESCE(SUM(b.produced_rolls * m.rolls / NULLIF(b.assigned_rolls, 0))
-          FILTER (WHERE b.stage = 'packaging'), 0) AS packaged_produced
+        COALESCE(SUM(b.produced_rolls) FILTER (WHERE b.stage = 'cutting'), 0)   AS cut_produced,
+        COALESCE(SUM(b.produced_rolls) FILTER (WHERE b.stage = 'packaging'), 0) AS packaged_produced
       FROM production_batches b
-      JOIN mix m ON m.batch_id = b.id
       WHERE b.production_order_id = ${orderId}
         AND b.status <> 'CANCELLED'
-        AND m.line_id = ${lineId}
+        AND COALESCE(b.production_order_line_id, b.woven_production_line_id) = ${lineId}
     `;
-    console.log("\n--- attributed figures for that label type ---");
+    console.log("\n--- figures for that label type (sum over its own batches) ---");
     console.log(
-      `cutProduced      = ${attributed[0].cut_produced}\n` +
-        `packagedProduced = ${attributed[0].packaged_produced}`
+      `cutProduced      = ${ownFigures[0].cut_produced}\n` +
+        `packagedProduced = ${ownFigures[0].packaged_produced}`
     );
   }
 } finally {

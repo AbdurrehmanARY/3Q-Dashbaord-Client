@@ -3,7 +3,9 @@
 *Drafted 2026-09-26 from live-DB verification (`server/scripts/verify-batch-constraints.mjs`,
 `server/scripts/reconcile-migrations.mjs` dry-run) and a migration-file audit. **Phases 1, 2 and 4
 were executed 2026-09-28** (journal repaired; baseline provisioning implemented and validated
-end-to-end on a scratch database). **Phase 3 / Step 0 remains an open product decision.***
+end-to-end on a scratch database). **Step 0 was DECIDED and EXECUTED 2026-09-29 — LINE-scoped, as
+migration `0025_line_scoped_cutting_packaging.sql`** (validated end-to-end on a scratch database by
+`server/scripts/verify-0025-line-scoped.mjs`); what remains is applying it to **live**.*
 
 ## TL;DR
 - Live DB and the migration chain disagree in three independent ways: a **lost journal entry**
@@ -12,10 +14,19 @@ end-to-end on a scratch database). **Phase 3 / Step 0 remains an open product de
 - `drizzle-kit migrate` from an empty database **fails first at 0018** and could not reproduce
   live even if it didn't.
 - Recommended path: repair the journal (safe immediately), then provision fresh databases from a
-  **pg_dump baseline of live + "mark all applied"** instead of replaying 0000–0024.
+  **pg_dump baseline of live + "mark all applied"** instead of replaying 0000–0025.
   ✅ **Done 2026-09-28** — see "What was executed" below.
-- **Step 0 is a product decision**: keep cutting/packaging ORDER-scoped (recommended — live, code
-  and tests already agree) or move to LINE-scoped (needs a data migration + code rewrite).
+- ~~**Step 0 is a product decision**: keep cutting/packaging ORDER-scoped (recommended — live, code
+  and tests already agree) or move to LINE-scoped (needs a data migration + code rewrite).~~
+  ✅ **RESOLVED 2026-09-29: LINE-scoped.** `0025_line_scoped_cutting_packaging.sql` performs the
+  data migration (drop the old CHECK first — validated: backfilling under it fails — backfill
+  cutting from its largest contributor, packaging from its cutting line, fallback to the order's
+  first line, RAISE on orphans, then swap in `production_batches_one_line` and drop
+  `production_batches_order_stage_no_uq`), and the server/client code was rewritten to match.
+  Scratch-DB proof: `node scripts/verify-0025-line-scoped.mjs` → **ALL SCRATCH CHECKS PASSED**.
+  **Remaining: run 0025 against live Supabase** (`npx drizzle-kit migrate` with `DIRECT_URL`
+  pointing at live, from a dev machine), then re-run `scripts/verify-batch-constraints.mjs` —
+  it currently reports live as still pre-0025.
 
 ## Verified findings
 
@@ -74,16 +85,26 @@ exist on live.
 
 → `drizzle-kit push` against live today would try to ADD `one_line` (would fail on existing
 rows) and DROP the two live objects. Fix this (Phase 3) **before anyone runs push/generate**.
+**RESOLVED by 0025 (2026-09-29):** the migration backfills the line-less rows *first* and only
+then brings the database to what `schema.ts` already declares (`production_batches_one_line`
+present, `first_stage_one_line` and `order_stage_no_uq` gone). Until it has run on live, keep
+avoiding `push`/`generate` against that database.
 
 ## The plan
 
-### Step 0 — product decision (blocker)
-- **Option A (recommended): keep ORDER-scoped.** Live DB, repository/service/tests and the
-  running system all agree today; the work shrinks to making the repo files tell the truth.
-- **Option B: move to LINE-scoped.** Requires a *new forward* migration (0025) with a data
-  backfill — existing line-less cutting/packaging batches span label types, so assigning each
-  one line is a real business mapping — plus rewrites of repository/service/tests and of the
-  schema check. Migration 0023 stays obsolete either way (its content was never executed).
+### Step 0 — product decision (blocker) — ✅ DECIDED + EXECUTED 2026-09-29 (Option B)
+- ~~**Option A (recommended): keep ORDER-scoped.**~~ Not taken: the dashboard's empty cutting /
+  packaging panels are the bug this whole document exists for, and a batch is executed by one
+  line regardless of how many label types an order spans.
+- **Option B (taken): move to LINE-scoped.** Delivered as the forward migration **0025** with a
+  data backfill (largest contributing line → packaging inherits its cutting line → the order's
+  first line as fallback, RAISE if anything is still orphaned), plus rewrites of
+  repository/service/controller/routes/schema/tests on the server and of the scope machinery on
+  the client. Migration 0023 stays obsolete (its content was never executed).
+  **Validated on a scratch database**: `node scripts/verify-0025-line-scoped.mjs` provisions
+  `q3_0025_scratch` from the baseline, seeds a two-label-type order, runs 0025 and asserts the
+  DDL swap, the backfill (largest contributor wins), the orphan guard, the new CHECK's
+  accept/reject behaviour and per-(line, stage) numbering → **ALL SCRATCH CHECKS PASSED**.
 
 ### Phase 1 — journal repair — ✅ EXECUTED 2026-09-28
 1. Inserted into `server/drizzle/meta/_journal.json` between idx 18 and idx 20:

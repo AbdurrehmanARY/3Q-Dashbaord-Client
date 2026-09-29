@@ -4,13 +4,15 @@
  * READ-ONLY diagnostic. Prints the live `production_batches` constraints and indexes so we
  * can tell which line-scoping rule the database actually enforces:
  *
- *   production_batches_one_line              -> exactly ONE line per batch (line-scoped)
+ *   production_batches_one_line              -> exactly ONE line per batch (line-scoped)  ← target
  *   production_batches_first_stage_one_line  -> line only for the first stage (order-scoped)
  *
- * The migration chain is not self-consistent here: `production_batches_one_line` was added by
- * 0021, while 0023 drops `production_batches_first_stage_one_line` and re-adds
- * `production_batches_one_line` — a name 0023 never creates. So the file on disk cannot tell
- * us the live state; only this query can.
+ * Migration `0025_line_scoped_cutting_packaging.sql` is the one that swaps the second for the
+ * first and drops the order-scoped numbering index, so this script answers the only question
+ * that matters after a deploy: HAS 0025 BEEN APPLIED YET? (The chain was already not
+ * self-consistent before it — 0023 drops `production_batches_first_stage_one_line` and
+ * re-adds `production_batches_one_line`, a name 0023 never creates — so files on disk cannot
+ * tell us the live state; only this query can.)
  *
  * Usage:  node scripts/verify-batch-constraints.mjs
  */

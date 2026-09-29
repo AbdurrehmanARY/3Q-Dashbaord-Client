@@ -1,12 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { batchService } from "../services/batch-service";
-import { batchCreateTarget, batchScopeOf } from "../utils/batch-scope";
 import type {
   BatchStage,
   CreateConsumingBatchInput,
   CreatePrintingBatchInput,
-  LineKind,
   RecordOutputInput,
   UpdateBatchInput,
 } from "../batch-types";
@@ -15,13 +13,10 @@ export const BATCH_KEYS = {
   all: ["batches"] as const,
   line: (stage: BatchStage, lineId: number) => ["batches", stage, "line", lineId] as const,
   sources: (stage: BatchStage, lineId: number) => ["batches", stage, "sources", lineId] as const,
-  orderSources: (stage: BatchStage, orderId: string) => ["batches", stage, "order-sources", orderId] as const,
   resources: (stage: BatchStage, lineId: number) => ["batches", stage, "resources", lineId] as const,
-  orderResources: (stage: BatchStage, orderId: string) => ["batches", stage, "order-resources", orderId] as const,
   detail: (stage: BatchStage, batchId: number) => ["batches", stage, "detail", batchId] as const,
   trace: (stage: BatchStage, batchId: number) => ["batches", stage, "trace", batchId] as const,
   orderFlow: (orderId: string) => ["batches", "order-flow", orderId] as const,
-  orderBatches: (orderId: string) => ["batches", "order", orderId] as const,
 };
 
 /**
@@ -60,23 +55,19 @@ export function useLineBatches(stage: BatchStage, lineId: number | undefined) {
   });
 }
 
-/** The upstream batches a new batch could consume, with what each has left. */
+/**
+ * The upstream batches a new batch could consume, with what each has left — from this LINE.
+ *
+ * Every stage is line-scoped since migration 0025, so cutting asks for its own line's printed
+ * output and packaging for its own line's cut output; there is no order-wide variant to fall
+ * back to. For a first stage the same endpoint answers `fromPlan: true` instead of sources.
+ */
 export function useBatchSources(stage: BatchStage, lineId: number | undefined, enabled = true) {
   return useQuery({
     queryKey: BATCH_KEYS.sources(stage, lineId ?? 0),
     queryFn: () => batchService.getSources(stage, lineId!),
     select: (res) => res.data,
     enabled: !!lineId && enabled,
-  });
-}
-
-/** The upstream batches an order-scoped batch (cutting/packaging) could consume. */
-export function useOrderBatchSources(stage: BatchStage, orderId: string | undefined, enabled = true) {
-  return useQuery({
-    queryKey: BATCH_KEYS.orderSources(stage, orderId ?? ""),
-    queryFn: () => batchService.getSourcesFromOrder(stage, orderId!),
-    select: (res) => res.data,
-    enabled: !!orderId && enabled,
   });
 }
 
@@ -93,50 +84,6 @@ export function useStageResources(stage: BatchStage, lineId: number | undefined,
   });
 }
 
-/** Stage-appropriate machines and operators for order-scoped stages (cutting/packaging). */
-export function useOrderStageResources(stage: BatchStage, orderId: string | undefined, batchId?: number) {
-  return useQuery({
-    queryKey: [...BATCH_KEYS.orderResources(stage, orderId ?? ""), batchId ?? null],
-    queryFn: () => batchService.getResourcesFromOrder(stage, orderId!, batchId),
-    select: (res) => res.data,
-    enabled: !!orderId,
-  });
-}
-
-/**
- * Resolves available sources for either a line-scoped first stage (Printing/Weaving)
- * or an order-scoped subsequent stage (Cutting/Packaging).
- */
-export function useStageSources(
-  orderId: string | undefined,
-  stage: BatchStage,
-  lineId: number | undefined,
-  kind: LineKind,
-  enabled = true
-) {
-  const lineScoped = batchScopeOf(kind, stage) === "line";
-  const byLine = useBatchSources(stage, lineScoped ? lineId : undefined, lineScoped && enabled);
-  const byOrder = useOrderBatchSources(stage, !lineScoped ? orderId : undefined, !lineScoped && enabled);
-  return lineScoped ? byLine : byOrder;
-}
-
-/**
- * Resolves machines and operators for either a line-scoped first stage
- * or an order-scoped subsequent stage.
- */
-export function useStageScopedResources(
-  orderId: string | undefined,
-  stage: BatchStage,
-  lineId: number | undefined,
-  kind: LineKind,
-  batchId?: number
-) {
-  const lineScoped = batchScopeOf(kind, stage) === "line";
-  const byLine = useStageResources(stage, lineScoped ? lineId : undefined, batchId);
-  const byOrder = useOrderStageResources(stage, !lineScoped ? orderId : undefined, batchId);
-  return lineScoped ? byLine : byOrder;
-}
-
 export function useOrderFlow(orderId: string | undefined) {
   return useQuery({
     queryKey: BATCH_KEYS.orderFlow(orderId ?? ""),
@@ -144,42 +91,6 @@ export function useOrderFlow(orderId: string | undefined) {
     select: (res) => res.data,
     enabled: !!orderId,
   });
-}
-
-/**
- * Every batch on an order — cutting and packaging included, since those stages belong to the
- * order rather than to a label type. Pass a `stage` to narrow it to one stage of the order.
- */
-export function useOrderBatches(orderId: string | undefined, stage?: BatchStage, enabled = true) {
-  return useQuery({
-    queryKey: [...BATCH_KEYS.orderBatches(orderId ?? ""), stage ?? "all"],
-    queryFn: () => batchService.listByOrder(orderId!, stage),
-    select: (res) => res.data,
-    enabled: !!orderId && enabled,
-  });
-}
-
-/**
- * Batches of one stage, asked of the scope that owns it.
- *
- * The first stage of a workflow is per label type, so it is read from the line endpoint; cutting
- * and packaging belong to the ORDER — their batches carry no line at all — so they are read from
- * the order endpoint. Asking the line endpoint for an order-scoped stage can only ever answer
- * `[]`, which is what left those panels empty while the floor showed batches.
- *
- * Both hooks are always called (hook order stays stable); exactly one is enabled. Both resolve to
- * `ProductionBatch[]`, so callers do not care which answered.
- */
-export function useStageBatches(
-  orderId: string,
-  stage: BatchStage,
-  lineId: number,
-  kind: LineKind
-) {
-  const lineScoped = batchScopeOf(kind, stage) === "line";
-  const byLine = useLineBatches(stage, lineScoped ? lineId : undefined);
-  const byOrder = useOrderBatches(orderId, lineScoped ? undefined : stage, !lineScoped);
-  return lineScoped ? byLine : byOrder;
 }
 
 export function useBatchTrace(stage: BatchStage, batchId: number | undefined) {
@@ -196,12 +107,11 @@ export function useBatchTrace(stage: BatchStage, batchId: number | undefined) {
 /**
  * Create a batch — of ANY stage.
  *
- * The stage decides the endpoint, and {@link batchCreateTarget} makes that call: printing and
- * weaving are created against their production line, while cutting and packaging are created
- * against the ORDER (`/production/orders/:stage-batches/:orderId`), because their batches carry no
- * line at all. Callers therefore hand over the ids they have (`lineId` from the board they render,
- * `orderId` from the page) rather than the URL — passing a line id for a cutting batch is a mistake
- * this function absorbs, not one it forwards into a request that would be refused.
+ * Since migration 0025 every stage belongs to exactly one production line, so every batch is
+ * POSTed against that line (`/production/:stage-batches/lines/:lineId`) — cutting and packaging
+ * included. An order id is still accepted: callers hold one and the mutation needs it to know
+ * which order's flow to invalidate. It can never stand in for the line, though — without a line
+ * id this refuses to fire rather than posting to an order-scoped route the server no longer has.
  */
 export function useCreateBatch(orderId?: string) {
   return useBatchMutation(
@@ -211,16 +121,10 @@ export function useCreateBatch(orderId?: string) {
       orderId?: string;
       body: CreatePrintingBatchInput | CreateConsumingBatchInput;
     }) => {
-      const target = batchCreateTarget(args.stage, { lineId: args.lineId, orderId: args.orderId ?? orderId });
-      if (!target) {
-        throw new Error("Cannot create a batch: a production line or an order is required");
+      if (args.lineId === undefined) {
+        throw new Error("Cannot create a batch: a production line is required");
       }
-      if (target.scope === "order") {
-        return batchService
-          .createFromOrder(args.stage, target.orderId, args.body as CreateConsumingBatchInput)
-          .then((r) => r.data);
-      }
-      return batchService.create(args.stage, target.lineId, args.body).then((r) => r.data);
+      return batchService.create(args.stage, args.lineId, args.body).then((r) => r.data);
     },
     (_args, batch) => `${batch.batchCode} created`,
     orderId

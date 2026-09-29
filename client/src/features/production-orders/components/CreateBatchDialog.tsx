@@ -5,8 +5,7 @@ import { AppButton } from "@/components/forms/AppButton";
 import { AppInput } from "@/components/forms/AppInput";
 import { AppSelect } from "@/components/forms/AppSelect";
 import { formatNumber } from "@/lib/format";
-import { useCreateBatch, useStageScopedResources, useStageSources } from "../hooks/use-batches";
-import { isOrderScopedStage } from "../utils/batch-scope";
+import { useBatchSources, useCreateBatch, useStageResources } from "../hooks/use-batches";
 import {
   STAGE_LABEL,
   UNIT_LABEL,
@@ -37,9 +36,10 @@ interface CreateBatchDialogProps {
  * Creating a batch means answering one question: where does its input come from?
  *
  * Printing draws from the plan, so it asks for a roll count bounded by what is still
- * unassigned. Cutting and packaging draw from named upstream batches, so they show every
- * batch with output left and let the user split across them — which is what makes
- * "many sources feed one batch" expressible in the UI as well as the schema.
+ * unassigned. Cutting and packaging draw from named upstream batches of the SAME line — this
+ * line's printed rolls, this line's cut output — so they show every such batch with output left
+ * and let the user split across them, which is what makes "many sources feed one batch"
+ * expressible in the UI as well as in the schema.
  */
 export function CreateBatchDialog({
   open,
@@ -52,9 +52,10 @@ export function CreateBatchDialog({
 }: CreateBatchDialogProps) {
   const upstream = UPSTREAM_STAGE[kind][stage];
   const unit = UNIT_LABEL[kind];
-  const sourcesQuery = useStageSources(orderId, stage, lineId, kind);
+  // Every stage is line-scoped: sources, machines and operators all come from this line.
+  const sourcesQuery = useBatchSources(stage, lineId);
   // Already filtered by stage and by live holds — the UI never applies those rules itself.
-  const resources = useStageScopedResources(orderId, stage, lineId, kind);
+  const resources = useStageResources(stage, lineId);
   const createBatch = useCreateBatch(orderId);
 
   const [assignedRolls, setAssignedRolls] = React.useState("");
@@ -194,7 +195,8 @@ export function CreateBatchDialog({
    */
   const resourcesReady = (!needsMachine || !!machineId) && !!operatorId;
   const inputReady = fromPlan ? Number(assignedRolls) > 0 : allocated > 0;
-  const canSubmit = inputReady && resourcesReady && !error && (!fromPlan || !!lineId);
+  /** A batch is created against its line, so no line id means no submit — for any stage. */
+  const canSubmit = inputReady && resourcesReady && !error && !!lineId;
 
   async function handleSubmit() {
     const shared = {
@@ -216,9 +218,8 @@ export function CreateBatchDialog({
         };
 
     /**
-     * Both ids are handed over as facts; `useCreateBatch` picks the endpoint from the stage. A
-     * cutting batch belongs to the ORDER even though this board renders it under one label type,
-     * and the hook is where that rule lives — stated once, and unit-tested.
+     * The line decides the endpoint — every stage POSTs against its own line — while the order id
+     * travels along only so the mutation knows which order's flow to invalidate afterwards.
      */
     await createBatch.mutateAsync({ stage, lineId, orderId, body });
     onClose();
@@ -230,9 +231,9 @@ export function CreateBatchDialog({
       onOpenChange={(v) => !v && onClose()}
       title={`New ${STAGE_LABEL[stage]} Batch`}
       description={
-        isOrderScopedStage(kind, stage) || !labelType
-          ? `Order-wide — consumes ${stageInputLabel(kind, stage)} from every label type`
-          : `${labelType} — consumes ${stageInputLabel(kind, stage)}`
+        labelType
+          ? `${labelType} — consumes ${stageInputLabel(kind, stage)} from this line`
+          : `Consumes ${stageInputLabel(kind, stage)} from this line`
       }
       className="sm:max-w-[560px]"
       footer={
