@@ -22,6 +22,7 @@ export const Entity = {
   STICKER_MATERIAL: "Sticker material",
   LOCAL_SHEET: "Local sheet",
   LABEL_SHEET: "Label sheet",
+  LABEL_TYPE: "Label type",
   THREAD_SERVICE_PROVIDER: "Thread service provider",
   THREAD_DYEING_SEND: "Thread dyeing send",
   INK_PURCHASE: "Ink purchase",

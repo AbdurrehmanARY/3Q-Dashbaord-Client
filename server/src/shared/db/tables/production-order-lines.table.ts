@@ -5,6 +5,7 @@ import { machines } from "./machines.table";
 import { operators } from "./operators.table";
 import { materials } from "./materials.table";
 import { type SizePlan } from "../size-plans";
+import { labelTypes } from "./label-types.table"; // NEW: import labelTypes
 
 /**
  * One row = one label type planned within a production order.
@@ -26,6 +27,7 @@ export const productionOrderLines = pgTable(
       .notNull()
       .references(() => productionOrders.id, { onDelete: "cascade" }),
     labelType: varchar("label_type", { length: 255 }).notNull(),
+    labelTypeId: integer("label_type_id").references(() => labelTypes.id), // NEW: FK to label_types
 
     /* --- Planning (Phase 2) --- */
     quantity: decimal("quantity", { precision: 12, scale: 2 }).notNull(),
@@ -104,5 +106,6 @@ export const productionOrderLines = pgTable(
     cuttingMachineIdx: index("production_order_lines_cutting_machine_idx").on(table.cuttingMachineId),
     cuttingOperatorIdx: index("production_order_lines_cutting_operator_idx").on(table.cuttingOperatorId),
     packagingOperatorIdx: index("production_order_lines_packaging_operator_idx").on(table.packagingOperatorId),
+    labelTypeIdIdx: index("production_order_lines_label_type_idx").on(table.labelTypeId), // NEW: index for FK
   })
 );

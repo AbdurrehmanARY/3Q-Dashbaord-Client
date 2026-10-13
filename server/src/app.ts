@@ -29,6 +29,7 @@ import threadServiceProviderRoutes from "@modules/thread/thread-service-provider
 import threadDyeingRoutes from "@modules/thread/thread-dyeing/thread-dyeing.routes";
 import inkRoutes from "@modules/ink/ink.routes";
 import analyticsRoutes from "@modules/analytics/analytics.routes";
+import labelTypesRoutes from "@modules/label-types/label-types.routes";
 
 export const app = express();
 
@@ -101,6 +102,8 @@ apiRouter.use("/thread-service-providers", threadServiceProviderRoutes);
 apiRouter.use("/thread-dyeing", threadDyeingRoutes);
 /** Ink purchasing, derived stock and consumption. */
 apiRouter.use("/ink", inkRoutes);
+/** Label Types master data */
+apiRouter.use("/label-types", labelTypesRoutes);
 apiRouter.use("/analytics", analyticsRoutes);
 
 app.use("/api", apiRateLimiter, apiRouter);

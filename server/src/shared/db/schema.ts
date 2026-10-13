@@ -28,6 +28,8 @@ export * from "./tables/production-runs.table";
 export * from "./tables/sticker-materials.table";
 export * from "./tables/local-sheets.table";
 export * from "./tables/label-sheets.table";
+/* ---------- Label Types (Master Data) ---------- */
+export * from "./tables/label-types.table";
 /* ---------- Woven Labels workflow ---------- */
 export * from "./tables/product-type.enum";
 export * from "./tables/woven-work-order-details.table";
@@ -74,6 +76,7 @@ import { productionRuns } from "./tables/production-runs.table";
 import { stickerMaterials } from "./tables/sticker-materials.table";
 import { localSheets } from "./tables/local-sheets.table";
 import { labelSheets } from "./tables/label-sheets.table";
+import { labelTypes } from "./tables/label-types.table";
 import { threadServiceProviders } from "./tables/thread-service-providers.table";
 import {
   threadDyeingSends,
@@ -159,3 +162,7 @@ export type ThreadDyeingAllocation = typeof threadDyeingAllocations.$inferSelect
 export type NewThreadDyeingAllocation = typeof threadDyeingAllocations.$inferInsert;
 export type ThreadDyeingReceive = typeof threadDyeingReceives.$inferSelect;
 export type NewThreadDyeingReceive = typeof threadDyeingReceives.$inferInsert;
+
+/* ---------- Label Types (Master Data) ---------- */
+export type LabelType = typeof labelTypes.$inferSelect;
+export type NewLabelType = typeof labelTypes.$inferInsert;

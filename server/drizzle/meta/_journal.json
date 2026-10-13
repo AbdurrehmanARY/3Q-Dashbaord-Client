@@ -183,6 +183,13 @@
       "when": 1787250000000,
       "tag": "0025_line_scoped_cutting_packaging",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1787300000000,
+      "tag": "0026_label_types",
+      "breakpoints": true
     }
   ]
 }
