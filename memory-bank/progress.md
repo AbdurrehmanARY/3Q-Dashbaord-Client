@@ -266,3 +266,31 @@
   `isReadyForCompletion`) and client (`StageProgressBars`, `roll-columns`, `line-draft` patch)
   mirrors updated; assignment capacity/inventory counters remain on `totalRolls`. Woven untouched.
   Server 139/139, client 92/92, server build OK (bundle rebuilt).
+
+## GitHub sync — two repos (2026-10-20)
+Pushed the two packages as separate GitHub repositories, preserving each
+repo's existing history as a fast-forward (no force, nothing lost on GitHub):
+- Client -> https://github.com/AbdurrehmanARY/3Q-Dashbaord-Client main
+  (0cdf79f -> 12acd8e, fast-forward) - content = monorepo client/ tree.
+- Server -> https://github.com/AbdurrehmanARY/3Q-Dashbaord-Server main
+  (e428327 -> f5222b9, fast-forward) - content = monorepo server/ tree.
+
+Method: local monorepo was committed on chore/ci; each push used a git
+commit-tree whose tree is the package subtree (HEAD:client / HEAD:server)
+and whose parent is the target repo's current main, then git push <sha>:main.
+Auth succeeded via a cached Windows Credential Manager entry for github.com
+(no interactive prompt, no PAT).
+
+Validation before push: client typecheck OK, server typecheck OK, client
+tests 92/92, server tests 148/148, server build (api/index.js bundle) OK.
+
+Local repo status: chore/ci is 3 commits ahead of original main (afb13d7
+feat(client), eaaeae6 feat(server), 1a9098e chore(gui)). The monorepo
+itself has no GitHub remote (only named client/server remotes to the two
+package repos). Stray helper artifacts left untracked: temp_status.txt,
+create_navigation.ps1, fix-block.py, fix_dialog.ps1, fix_dispatch_dialog.py,
+and a misplaced root vite.config.ts.
+
+Note: pushing triggers Vercel redeploy of client-jet-omega-25.vercel.app
+and server-jade-gamma-86.vercel.app (both repos have the Vercel GitHub
+integration).
