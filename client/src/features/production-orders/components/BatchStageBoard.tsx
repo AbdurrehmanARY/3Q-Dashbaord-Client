@@ -13,6 +13,7 @@ import {
   Scissors,
   Package,
   Trash2,
+  Pencil,
   PencilLine,
 } from "lucide-react";
 import { AppCard } from "@/components/cards/AppCard";
@@ -39,6 +40,7 @@ import {
 } from "../hooks/use-batches";
 import { CreateBatchDialog } from "./CreateBatchDialog";
 import { BatchOutputDialog } from "./BatchOutputDialog";
+import { EditBatchDialog } from "./EditBatchDialog";
 import { BatchTraceDialog } from "./BatchTraceDialog";
 import {
   STAGE_LABEL,
@@ -108,6 +110,7 @@ export function BatchStageBoard({ orderId, flow, readOnly, defaultOpen = true }:
   const [createStage, setCreateStage] = React.useState<BatchStage | null>(null);
   const [outputBatch, setOutputBatch] = React.useState<ProductionBatch | null>(null);
   const [traceBatch, setTraceBatch] = React.useState<ProductionBatch | null>(null);
+  const [editBatch, setEditBatch] = React.useState<ProductionBatch | null>(null);
   /** A whole label type folds away, so an order with many stays navigable. */
   const [open, setOpen] = React.useState(defaultOpen);
 
@@ -147,6 +150,7 @@ export function BatchStageBoard({ orderId, flow, readOnly, defaultOpen = true }:
             onCreate={() => setCreateStage(stage)}
             onRecordOutput={setOutputBatch}
             onTrace={setTraceBatch}
+            onEdit={setEditBatch}
           />
         ))}
       </div>
@@ -175,6 +179,17 @@ export function BatchStageBoard({ orderId, flow, readOnly, defaultOpen = true }:
       {traceBatch && (
         <BatchTraceDialog open batch={traceBatch} onClose={() => setTraceBatch(null)} />
       )}
+      {editBatch && (
+        <EditBatchDialog
+          open
+          batch={editBatch}
+          lineId={flow.lineId}
+          kind={flow.kind}
+          labelType={flow.labelType}
+          orderId={orderId}
+          onClose={() => setEditBatch(null)}
+        />
+      )}
     </AppCard>
   );
 }
@@ -187,6 +202,7 @@ function StagePanel({
   onCreate,
   onRecordOutput,
   onTrace,
+  onEdit,
 }: {
   stage: BatchStage;
   orderId: string;
@@ -195,6 +211,7 @@ function StagePanel({
   onCreate: () => void;
   onRecordOutput: (b: ProductionBatch) => void;
   onTrace: (b: ProductionBatch) => void;
+  onEdit: (b: ProductionBatch) => void;
 }) {
   /** The batches of this stage — every one of them carries this line's id. */
   const batches = useLineBatches(stage, flow.lineId);
@@ -336,6 +353,7 @@ function StagePanel({
             readOnly={readOnly}
             onRecordOutput={() => onRecordOutput(batch)}
             onTrace={() => onTrace(batch)}
+            onEdit={() => onEdit(batch)}
           />
         ))}
       </div>
@@ -350,12 +368,14 @@ function BatchRow({
   readOnly,
   onRecordOutput,
   onTrace,
+  onEdit,
 }: {
   batch: ProductionBatch;
   orderId: string;
   readOnly?: boolean;
   onRecordOutput: () => void;
   onTrace: () => void;
+  onEdit: () => void;
 }) {
   const startBatch = useStartBatch(orderId);
   const completeBatch = useCompleteBatch(orderId);
@@ -371,15 +391,37 @@ function BatchRow({
    */
   const [expanded, setExpanded] = React.useState(false);
 
-  const assigned = Number(batch.assignedRolls);
+  /**
+   * Derived values for batch actions
+   */
+  const open = isBatchOpen(batch.status);
   const produced = Number(batch.producedRolls);
+  const assigned = Number(batch.assignedRolls);
   const available = Number(batch.availableRolls);
   const wasted = Number(batch.wastedRolls);
-  const open = isBatchOpen(batch.status);
-  const canStart = batch.status === "PLANNED" || batch.status === "ASSIGNED";
-  const canDelete = canStart && produced === 0 && Number(batch.consumedRolls) === 0;
+    const canDelete = open && batch.sources.length === 0;
+  // settled = good output made so far, plus waste scrapped at any stage.
+  const settled = produced + wasted;
+  const EPS = 0.01;
+  // Start: allowed while not yet running — the server accepts PLANNED or ASSIGNED.
+  const canStart = open && (batch.status === "PLANNED" || batch.status === "ASSIGNED");
+  const pct = assigned > 0 ? Math.min(100, Math.round((produced / assigned) * 100)) : 0;
 
-  const pct = assigned > 0 ? Math.min(100, (produced / assigned) * 100) : 0;
+  // Output and Complete are mutually exclusive on the settled/assigned threshold,
+  // giving the clean Start -> Output -> Complete hand-off you want.
+  const started = batch.status === "IN_PROGRESS";
+  // Output appears only after Start, while quantities remain to record.
+  const canOutput = started && settled < assigned - EPS;
+  // Complete appears once everything assigned is produced (+wasted) — matches the
+  // server's completeBatch precondition (produced > 0 && settled >= assigned).
+  const canComplete = started && produced > 0 && settled >= assigned - EPS;
+
+  const canCancel = (batch.status === "PLANNED" || batch.status === "IN_PROGRESS") && 
+    !canDelete;
+
+  // Hide Cancel/Delete buttons for COMPLETED batches
+  const canTakeAction = (batch.status === "PLANNED" || batch.status === "ASSIGNED" || 
+    batch.status === "IN_PROGRESS");
 
   return (
     <div className="px-3 py-2">
@@ -462,8 +504,9 @@ function BatchRow({
         </span>
       </div>
 
-      {!readOnly && (
+      {!readOnly && canTakeAction && (
         <div className="mt-2 flex flex-wrap gap-1">
+          <RowAction icon={Pencil} label="Edit" onClick={onEdit} />
           {canStart && (
             <RowAction
               icon={Play}
@@ -472,10 +515,10 @@ function BatchRow({
               onClick={() => startBatch.mutate({ stage: batch.stage, batchId: batch.id })}
             />
           )}
-          {open && (
+          {canOutput && (
             <RowAction icon={PencilLine} label="Output" onClick={onRecordOutput} />
           )}
-          {open && produced > 0 && produced >= assigned && (
+          {canComplete && (
             <RowAction
               icon={CheckCircle2}
               label="Complete"
@@ -484,7 +527,7 @@ function BatchRow({
             />
           )}
           {batch.sources.length > 0 && <RowAction icon={GitBranch} label="Trace" onClick={onTrace} />}
-          {open && !canDelete && (
+          {canCancel && (
             <RowAction icon={Ban} label="Cancel" onClick={() => setConfirm("cancel")} />
           )}
           {canDelete && <RowAction icon={Trash2} label="Delete" onClick={() => setConfirm("delete")} />}

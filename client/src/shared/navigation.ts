@@ -10,6 +10,7 @@ import {
   Users,
   Settings,
   Droplet,
+  Tag,
   type LucideIcon,
 } from "lucide-react";
 
@@ -65,6 +66,11 @@ export const navigation: NavItem[] = [
         title: "Label Sheets",
         url: "/materials/label-sheets",
         icon: Boxes,
+      },
+      {
+        title: "Label Types",
+        url: "/label-types",
+        icon: Tag,
       },
       {
         title: "Machines",

@@ -7,7 +7,6 @@ import { useRecordOutput } from "../hooks/use-batches";
 import {
   STAGE_LABEL,
   UNIT_LABEL,
-  isFirstStage,
   type LineKind,
   type ProductionBatch,
 } from "../batch-types";
@@ -25,24 +24,24 @@ interface BatchOutputDialogProps {
  * 6 rolls" — which is what makes correcting a mistyped figure a re-entry rather than a
  * compensating adjustment.
  *
- * Waste is printing-only: at cutting and packaging the unused input is handed back to the
- * upstream batch when this one completes, so there is nothing to scrap.
+ * Waste is recordable at every stage. Unused reusable input at cutting/packaging is still
+ * released upstream; destroyed input is recorded as waste and creates make-up headroom.
  */
 export function BatchOutputDialog({ open, onClose, batch, kind, orderId }: BatchOutputDialogProps) {
   const recordOutput = useRecordOutput(orderId);
   const assigned = Number(batch.assignedRolls);
   const consumed = Number(batch.consumedRolls);
   const unit = UNIT_LABEL[kind];
-  // Scrap belongs to the opening stage of each workflow: printing, or weaving.
-  const isPrinting = isFirstStage(kind, batch.stage);
+  // Waste is allowed at all stages now. No first-stage gate.
   const isPackaging = batch.stage === "packaging";
 
   const [produced, setProduced] = React.useState(String(Number(batch.producedRolls)));
   const [wasted, setWasted] = React.useState(String(Number(batch.wastedRolls)));
+  const [wasteReason, setWasteReason] = React.useState(batch.wasteReason ?? "");
   const [packagedQty, setPackagedQty] = React.useState(String(Number(batch.packagedQty)));
 
   const producedNum = Number(produced) || 0;
-  const wastedNum = isPrinting ? Number(wasted) || 0 : 0;
+  const wastedNum = Number(wasted) || 0;
 
   const error = React.useMemo(() => {
     if (producedNum < 0 || wastedNum < 0) return "Output cannot be negative";
@@ -61,7 +60,8 @@ export function BatchOutputDialog({ open, onClose, batch, kind, orderId }: Batch
       batchId: batch.id,
       body: {
         producedRolls: producedNum,
-        ...(isPrinting ? { wastedRolls: wastedNum } : {}),
+        wastedRolls: wastedNum,
+        wasteReason: wasteReason || undefined,
         ...(isPackaging ? { packagedQty: Number(packagedQty) || 0 } : {}),
       },
     });
@@ -101,15 +101,21 @@ export function BatchOutputDialog({ open, onClose, batch, kind, orderId }: Batch
           autoFocus
         />
 
-        {isPrinting && (
+        <AppInput
+          label={`${unit === "pcs" ? "Pieces" : "Rolls"} wasted`}
+          type="number"
+          min={0}
+          step="1"
+          value={wasted}
+          onChange={(e) => setWasted(e.target.value)}
+        />
+        {wastedNum > 0 && (
           <AppInput
-            label={`${unit === "pcs" ? "Pieces" : "Rolls"} wasted`}
-            type="number"
-            min={0}
-            step="1"
-            value={wasted}
-            onChange={(e) => setWasted(e.target.value)}
-          />
+            label="Waste reason (optional)"
+            value={wasteReason}
+            onChange={(e) => setWasteReason(e.target.value)}
+            maxLength={40}
+        />
         )}
 
         {isPackaging && (
@@ -137,17 +143,7 @@ export function BatchOutputDialog({ open, onClose, batch, kind, orderId }: Batch
             <dd className="font-mono text-sm font-semibold tabular-nums">
               {formatNumber(pending, 0)}
             </dd>
-          </div>
-                {!isFirstStage(kind, batch.stage) && (
-        <div>
-          <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">
-            Available next
-          </dt>
-          <dd className="font-mono text-sm font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
-            {formatNumber(Math.max(0, producedNum - consumed), 0)}
-          </dd>
-        </div>
-      )}
+                    </div>
     </dl>
 
         <p className="text-[11px] text-muted-foreground">

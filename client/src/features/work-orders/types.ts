@@ -73,6 +73,8 @@ export interface WorkOrder {
   orderType: WorkOrderType;
   /** Artwork / reference image URL, previewed on the detail page. */
   imageUrl: string | null;
+  /** DC-copy image captured alongside the artwork during dispatch (0028). */
+  dcImageUrl: string | null;
   status: WorkOrderStatus;
   productType: ProductType;
   /** Dispatch paperwork — recorded once production has completed the order. */
@@ -130,6 +132,7 @@ export interface WorkOrderInput {
   priority?: WorkOrderPriority;
   orderType?: WorkOrderType;
   imageUrl?: string;
+  dcImageUrl?: string;
   productType?: ProductType;
   /** Required when `productType` is "woven". */
   wovenDetail?: WovenDetailInput;
@@ -152,4 +155,5 @@ export interface DispatchInput {
   dispatchedDate: string;
   dispatchedQty: number;
   imageUrl?: string;
+  dcImageUrl?: string;
 }

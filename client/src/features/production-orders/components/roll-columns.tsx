@@ -111,7 +111,11 @@ export const rollColumns: ColumnDef<ProductionLineOverview>[] = [
     cell: ({ row }) => (
       <ProgressBar
         value={row.original.packaging.packagedRolls}
-        max={row.original.planning.totalRolls}
+        max={
+          row.original.planning.requiredRolls > 0
+            ? row.original.planning.requiredRolls
+            : row.original.planning.totalRolls
+        }
         unit="rolls"
       />
     ),

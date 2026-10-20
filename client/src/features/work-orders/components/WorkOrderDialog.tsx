@@ -59,6 +59,7 @@ function defaultsFor(
       priority: wo.priority ?? "normal",
       orderType: childOrderType,
       imageUrl: wo.imageUrl ?? "",
+      dcImageUrl: "",
       productType: wo.productType ?? "printed",
       designCode: baseDesignCode ? `${baseDesignCode}-${suffix}` : "",
       pick: wo.pick ?? "",
@@ -86,6 +87,7 @@ function defaultsFor(
     priority: wo?.priority ?? "normal",
     orderType: wo?.orderType ?? "normal order",
     imageUrl: wo?.imageUrl ?? "",
+    dcImageUrl: wo?.dcImageUrl ?? "",
     productType: wo?.productType ?? "printed",
     designCode: wo?.designCode ?? "",
     pick: wo?.pick ?? "",
@@ -154,6 +156,7 @@ export function WorkOrderDialog({ open, workOrder, childOrderType, onClose }: Wo
       priority: data.priority,
       orderType: data.orderType,
       imageUrl: data.imageUrl || undefined,
+      dcImageUrl: data.dcImageUrl || undefined,
     };
 
     const wovenDetail = isWoven

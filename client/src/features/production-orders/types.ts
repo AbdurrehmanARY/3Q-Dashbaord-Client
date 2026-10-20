@@ -433,3 +433,51 @@ export interface UpdateLineFullInput {
   note?: string;
   actorUserId?: number;
 }
+
+/* ---------- Completion Report (order-wide totals + per-operator waste) ---------- */
+
+export interface CompletionStageDetail {
+  stage: string;
+  label: string;
+  batchCount: number;
+  issued: number;
+  produced: number;
+  wasted: number;
+}
+
+export interface WasteBreakdownEntry {
+  stage: string;
+  labelType: string;
+  reason: string;
+  wasted: number;
+}
+
+export interface OperatorWasteEntry {
+  operatorName: string;
+  totalWasted: number;
+  breakdown: WasteBreakdownEntry[];
+}
+
+export interface LabelTypeWaste {
+  labelType: string;
+  totalWasted: number;
+  byOperator: { operatorName: string; totalWasted: number }[];
+}
+
+export interface CompletionReportTotals {
+  issued: number;
+  produced: number;
+  wasted: number;
+  remaining: number;
+  yieldPct: number;
+  wastePct: number;
+}
+
+export interface CompletionReport {
+  productType: "printed" | "woven";
+  unit: "rolls" | "pcs";
+  totals: CompletionReportTotals;
+  stageDetail: CompletionStageDetail[];
+  wasteByOperator: OperatorWasteEntry[];
+  wasteByLabelType: LabelTypeWaste[];
+}

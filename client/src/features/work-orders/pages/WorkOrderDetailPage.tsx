@@ -17,6 +17,7 @@ import {
   StageProgressBars,
   BatchStageBoard,
   ProductionSummary,
+  ProductionCompletionReport,
 } from "@/features/production-orders";
 import { Skeleton } from "@/components/ui/skeleton";
 import { WORK_ORDER_STATUS_META } from "../types";
@@ -239,6 +240,11 @@ export function WorkOrderDetailPage() {
             title="Production Completion Summary"
             description="Who completed each stage, and when."
           />
+        )}
+
+        {/* Unified completion report (issued/wasted totals + per-operator waste) for both pipelines. */}
+        {isComplete && productionOrder && (
+          <ProductionCompletionReport orderId={String(productionOrder.id)} />
         )}
 
         {/* ---------------- Woven vs Printed Production View ---------------- */}

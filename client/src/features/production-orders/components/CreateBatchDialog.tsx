@@ -377,7 +377,7 @@ export function CreateBatchDialog({
                 value: o.id,
                 disabled: o.isHeld,
               }))}
-            />
+            />``
         </div>
 
         {!resources.isLoading && (needsMachine ? machines.length === 0 : false) && (
@@ -412,7 +412,7 @@ export function CreateBatchDialog({
 }
 
 /** Splits a batch's input across the upstream batches that still have output left. */
-function SourcePicker({
+export function SourcePicker({
   stage,
   kind,
   upstreamLabel,
@@ -422,6 +422,7 @@ function SourcePicker({
   allocated,
   loading,
   error,
+  ownAllocations,
 }: {
   stage: BatchStage;
   kind: LineKind;
@@ -437,7 +438,7 @@ function SourcePicker({
   onChange: (id: number, value: string) => void;
   allocated: number;
   loading: boolean;
-  error: string | null;
+  error: string | null; ownAllocations?: Record<number, number>;
 }) {
   if (loading) {
     return <p className="py-6 text-center text-sm text-muted-foreground">Loading available batches…</p>;
@@ -468,14 +469,14 @@ function SourcePicker({
       <div className="divide-y rounded-md border">
         {sources.map((s) => {
           const value = allocations[s.sourceBatchId] ?? "";
-          const over = Number(value) > s.availableRolls;
+          const own = ownAllocations?.[s.sourceBatchId] ?? 0; const cap = s.availableRolls + own; const over = Number(value) > cap;
           return (
             <div key={s.sourceBatchId} className="flex items-center gap-3 px-3 py-2">
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-sm font-semibold">{s.batchCode}</span>
                   <span className="text-[11px] text-muted-foreground">
-                    {formatNumber(s.availableRolls, 0)} available of {formatNumber(s.producedRolls, 0)} made
+                    {own > 0 ? `${formatNumber(cap, 0)} assignable — ${formatNumber(own, 0)} held` : `${formatNumber(s.availableRolls, 0)} available of ${formatNumber(s.producedRolls, 0)} made`}
                   </span>
                 </div>
                 {s.machineName && (
@@ -486,7 +487,7 @@ function SourcePicker({
                 <input
                   type="number"
                   min={0}
-                  max={s.availableRolls}
+                  max={cap}
                   step="1"
                   value={value}
                   onChange={(e) => onChange(s.sourceBatchId, e.target.value)}
@@ -498,7 +499,7 @@ function SourcePicker({
                 />
                 <button
                   type="button"
-                  onClick={() => onChange(s.sourceBatchId, String(s.availableRolls))}
+                  onClick={() => onChange(s.sourceBatchId, String(cap))}
                   className="rounded px-1.5 py-1 text-[11px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
                 >
                   All

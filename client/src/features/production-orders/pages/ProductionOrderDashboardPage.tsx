@@ -14,6 +14,7 @@ import { ProductionOrderStatusBadge } from "../components/ProductionStatusBadge"
 import { PlannedLabelTypesTable } from "../components/PlannedLabelTypesTable";
 import { WovenProductionPanel } from "../components/WovenProductionPanel";
 import { ProductionSummary } from "../components/ProductionSummary";
+import { ProductionCompletionReport } from "../components/ProductionCompletionReport";
 import { StockReconciliationCard } from "../components/StockReconciliationCard";
 import { UnifiedPlanningDialog } from "../components/PlanLabelTypeDialog";
 import { BatchStageBoard } from "../components/BatchStageBoard";
@@ -122,7 +123,7 @@ export function ProductionOrderDashboardPage() {
               </DropdownMenuContent>
             </DropdownMenu> */}
 
-            {order.status === "complete" && (
+            {order.status !== "complete" && (
               <AppButton
                 className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium shadow-sm"
                 leftIcon={<CheckCircle2 className="h-4 w-4" />}
@@ -220,6 +221,9 @@ export function ProductionOrderDashboardPage() {
           onEditPlan={handleOpenPlanForLine}
         />
       )}
+
+      {/* Order-wide completion report — shown once the order is complete, for both pipelines. */}
+      {order.status === "complete" && <ProductionCompletionReport orderId={id} />}
 
       {planDialogOpen && (
         <UnifiedPlanningDialog

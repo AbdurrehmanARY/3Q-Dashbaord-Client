@@ -30,6 +30,8 @@ const STAGE_STYLE: Record<BatchStage, { icon: React.ElementType; bar: string; te
 
 export interface StageTotals {
   planned: number;
+  /** Required rolls (plan minus extra) — the progress target; falls back to planned when 0. */
+  required?: number;
   printedProduced: number;
   cutProduced: number;
   packagedProduced: number;
@@ -48,9 +50,10 @@ interface StageProgressBarsProps {
 /**
  * How far each stage has worked through the plan, as a bar and a percentage.
  *
- * All three are measured against the same denominator — the planned rolls — so the bars
- * read as one pipeline filling left to right rather than three unrelated gauges. Printing
- * is always at or ahead of cutting, which is at or ahead of packaging.
+ * All three stages are measured against the same denominator — the REQUIRED roll
+ * count (the plan minus the extra buffer). Producing beyond that target is allowed
+ * and simply reads as 100%: the stage is already complete. Printing is always at
+ * or ahead of cutting, which is at or ahead of packaging.
  */
 export function StageProgressBars({
   totals,
@@ -88,13 +91,15 @@ export function StageProgressBars({
 }
 
 function stageRowsOf(t: StageTotals, kind: LineKind) {
+  const required = Number(t.required);
   const planned = Number(t.planned) || 0;
-  const pct = (done: number) => (planned > 0 ? Math.min(100, (done / planned) * 100) : 0);
+  const target = required > 0 ? required : planned;
+  const pct = (done: number) => (target > 0 ? Math.min(100, (done / target) * 100) : 0);
   const [first] = STAGES_OF[kind];
   return [
-    { stage: first, done: t.printedProduced, planned, percent: pct(t.printedProduced) },
-    { stage: "cutting" as const, done: t.cutProduced, planned, percent: pct(t.cutProduced) },
-    { stage: "packaging" as const, done: t.packagedProduced, planned, percent: pct(t.packagedProduced) },
+    { stage: first, done: t.printedProduced, planned: target, percent: pct(t.printedProduced) },
+    { stage: "cutting" as const, done: t.cutProduced, planned: target, percent: pct(t.cutProduced) },
+    { stage: "packaging" as const, done: t.packagedProduced, planned: target, percent: pct(t.packagedProduced) },
   ];
 }
 

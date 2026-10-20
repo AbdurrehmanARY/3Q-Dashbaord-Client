@@ -141,7 +141,7 @@ export function validateLineDraft(
 
 function completionPct(packaged: number, total: number): number {
   if (!(total > 0)) return 0;
-  return Math.round((packaged / total) * 10000) / 100;
+  return Math.min(100, Math.round((packaged / total) * 10000) / 100);
 }
 
 /**
@@ -159,6 +159,8 @@ export function patchOverviewLine(
     if (line.id !== lineId) return line;
 
     const totalRolls = line.planning.totalRolls;
+    const requiredRolls = line.planning.requiredRolls;
+    const target = requiredRolls > 0 ? requiredRolls : totalRolls;
     const printedRolls = body.printedRolls ?? line.printing.printedRolls;
     const sentToCuttingRolls = body.sentToCuttingRolls ?? line.cutting.sentToCuttingRolls;
     const cutRolls = body.cutRolls ?? line.cutting.cutRolls;
@@ -171,7 +173,7 @@ export function patchOverviewLine(
       printing: {
         ...line.printing,
         printedRolls,
-        progressPct: completionPct(printedRolls, totalRolls),
+        progressPct: completionPct(printedRolls, target),
         machineId: body.printingMachineId !== undefined ? body.printingMachineId : line.printing.machineId,
         operatorId: body.printingOperatorId !== undefined ? body.printingOperatorId : line.printing.operatorId,
       },
@@ -179,7 +181,7 @@ export function patchOverviewLine(
         ...line.cutting,
         sentToCuttingRolls,
         cutRolls,
-        progressPct: completionPct(cutRolls, totalRolls),
+        progressPct: completionPct(cutRolls, target),
         machineId: body.cuttingMachineId !== undefined ? body.cuttingMachineId : line.cutting.machineId,
         operatorId: body.cuttingOperatorId !== undefined ? body.cuttingOperatorId : line.cutting.operatorId,
       },
@@ -188,7 +190,7 @@ export function patchOverviewLine(
         sentToPackagingRolls,
         packagedRolls,
         packagedQty,
-        progressPct: completionPct(packagedRolls, totalRolls),
+        progressPct: completionPct(packagedRolls, target),
         operatorId:
           body.packagingOperatorId !== undefined ? body.packagingOperatorId : line.packaging.operatorId,
       },
@@ -204,7 +206,7 @@ export function patchOverviewLine(
         sentToPackagingRolls,
         packagedRolls,
         inPackagingProcess: Math.max(sentToPackagingRolls - packagedRolls, 0),
-        completionPct: completionPct(packagedRolls, totalRolls),
+        completionPct: completionPct(packagedRolls, target),
       },
     };
   });

@@ -35,6 +35,7 @@ export const routes: AppRoute[] = [
   { path: "/materials/stickers", component: page(() => import("@/features/materials/pages/StickerMaterialsPage"), "StickerMaterialsPage") },
   { path: "/materials/local-sheets", component: page(() => import("@/features/materials/pages/LocalSheetsPage"), "LocalSheetsPage") },
   { path: "/materials/label-sheets", component: page(() => import("@/features/materials/pages/LabelSheetsPage"), "LabelSheetsPage") },
+  { path: "/label-types", component: page(() => import("@/features/label-types/pages/LabelTypeMasterPage"), "LabelTypeMasterPage") },
 
   { path: "/purchases/rolls", component: page(() => import("@/features/purchases/pages/RollPurchasesPage"), "RollPurchasesPage") },
   { path: "/purchases/threads", component: page(() => import("@/features/purchases/pages/ThreadPurchasesPage"), "ThreadPurchasesPage") },
