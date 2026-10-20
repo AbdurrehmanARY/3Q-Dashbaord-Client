@@ -110,6 +110,8 @@ export const recordOutputSchema = z.object({
   body: z.object({
     producedRolls: optionalRolls.optional(),
     wastedRolls: optionalRolls.optional(),
+    /** Optional reason the wasted rolls were scrapped — for yield reporting. */
+    wasteReason: z.string().trim().max(200).nullish(),
     packagedQty: labelQty.optional(),
     actorUserId,
   }),

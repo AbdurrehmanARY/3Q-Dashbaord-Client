@@ -44,8 +44,25 @@ export function calculateTotalWeight(weightPerRoll: number, totalRolls: number):
   return weightPerRoll * totalRolls;
 }
 
-/** Percentage of a line that has been packaged, rounded to two decimals. */
-export function completionPct(packagedRolls: number, totalRolls: number): number {
-  if (!(totalRolls > 0)) return 0;
-  return Math.round((packagedRolls / totalRolls) * 10000) / 100;
+/** Percentage of a line that has been packaged, rounded to two decimals.
+ * Clamped to 100 — over-producing past the target does not exceed "complete". */
+export function completionPct(packagedRolls: number, targetRolls: number): number {
+  if (!(targetRolls > 0)) return 0;
+  return Math.min(100, Math.round((packagedRolls / targetRolls) * 10000) / 100);
+}
+
+/**
+ * Roll target stages are measured against for progress and completion.
+ *
+ * This is the `requiredRolls` figure (required rolls, excluding the manual
+ * extra/buffer). When a line has no required breakdown (legacy rows with
+ * requiredRolls = 0) the target falls back to `totalRolls`, so the old
+ * total-issued semantics keep working. Over-producing *beyond* the target is
+ * allowed — a stage simply stays Complete once it meets it.
+ */
+export function progressTargetOf(
+  requiredRolls: number,
+  totalRolls: number
+): number {
+  return requiredRolls > 0 ? requiredRolls : totalRolls;
 }

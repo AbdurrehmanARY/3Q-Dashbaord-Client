@@ -51,13 +51,18 @@ export interface UpdateBatchInput {
   /** Weaving only — which planned size this batch weaves (a Size Label line). */
   labelSize?: string | null;
   notes?: string | null;
+  wasteReason?: string | null;
   actorUserId?: number | null;
 }
 
 export interface RecordOutputInput {
   producedRolls?: number;
-  /** Printing only. Cutting and packaging release unused input instead of scrapping it. */
+  /**
+   * Input destroyed — accepted at EVERY stage now (printing, weaving, cutting,
+   * packaging). The first-stage-only restriction was dropped in 0027.
+   */
   wastedRolls?: number;
+  wasteReason?: string | null;
   packagedQty?: number;
   actorUserId?: number | null;
 }
@@ -80,6 +85,7 @@ const batchSelect = {
   assignedRolls: productionBatches.assignedRolls,
   producedRolls: productionBatches.producedRolls,
   wastedRolls: productionBatches.wastedRolls,
+  wasteReason: productionBatches.wasteReason,
   consumedRolls: productionBatches.consumedRolls,
   availableRolls: productionBatches.availableRolls,
   packagedQty: productionBatches.packagedQty,
@@ -506,6 +512,7 @@ export class BatchFlowRepository {
           operatorId: input.operatorId !== undefined ? input.operatorId : batch.operatorId,
           labelSize: input.labelSize !== undefined ? input.labelSize ?? null : batch.labelSize,
           notes: input.notes !== undefined ? input.notes : batch.notes,
+          wasteReason: input.wasteReason !== undefined ? input.wasteReason : batch.wasteReason,
           updatedAt: new Date(),
         })
         .where(eq(productionBatches.id, batchId))
@@ -560,12 +567,6 @@ export class BatchFlowRepository {
       const wasted = input.wastedRolls !== undefined ? round2(input.wastedRolls) : Number(batch.wastedRolls);
 
       if (produced < 0 || wasted < 0) throw new BadRequestError("Output cannot be negative");
-      if (wasted > 0 && !isFirstStage(scope.kind, batch.stage)) {
-        throw new BadRequestError(
-          `Waste is only recorded at ${scope.kind === "woven" ? "weaving" : "printing"} — ` +
-            "unused input at cutting and packaging is released back to the previous stage"
-        );
-      }
       if (produced + wasted > assigned + EPS) {
         throw new BadRequestError(
           `${batch.batchCode} was assigned ${assigned} rolls: cannot record ${produced} produced` +
@@ -584,6 +585,8 @@ export class BatchFlowRepository {
         .set({
           producedRolls: String(produced),
           wastedRolls: String(wasted),
+          wasteReason:
+            input.wasteReason !== undefined ? input.wasteReason : batch.wasteReason,
           packagedQty:
             input.packagedQty !== undefined ? String(round2(input.packagedQty)) : batch.packagedQty,
           // Recording output implies the batch is running; completed and cancelled
@@ -859,6 +862,9 @@ export class BatchFlowRepository {
         ${excludeBatchId ? sql`AND b.id <> ${excludeBatchId}` : sql``}
     ), 0)`;
 
+    /** Waste is TRACKED but does NOT create headroom: the user must edit the plan
+     * (increase totalRolls) to add more assignment capacity. See lineFlowOf. */
+
     const [row] =
       line.kind === "woven"
         ? await tx
@@ -872,9 +878,10 @@ export class BatchFlowRepository {
             .where(eq(productionOrderLines.id, line.id))
             .limit(1);
 
-    return round2(Number(row?.planned ?? 0) - Number(row?.assigned ?? 0));
+    const planned = Number(row?.planned ?? 0);
+    const totalAssigned = Number(row?.assigned ?? 0);
+    return round2(planned - totalAssigned);
   }
-
   /**
    * For a woven Size Label line: how many pieces of `size` are still unassigned.
    *
@@ -887,6 +894,9 @@ export class BatchFlowRepository {
     // `s->>'quantity'` yields text; it must be cast before COALESCE against a numeric
     // literal, otherwise Postgres rejects the whole statement (42804). Size comparison is
     // trimmed and case-insensitive so a stray space or casing can never zero the plan out.
+    /** Waste is TRACKED but does NOT create headroom: the user must edit the plan
+     * (increase totalRolls) to add more assignment capacity. See lineFlowOf. */
+
     const [row] = await tx
       .select({
         total: sql<string>`COALESCE((
@@ -905,9 +915,10 @@ export class BatchFlowRepository {
       .where(eq(wovenProductionLines.id, line.id))
       .limit(1);
 
-    return round2(Number(row?.total ?? 0) - Number(row?.assigned ?? 0));
+    const planned = Number(row?.total ?? 0);
+    const totalAssigned = Number(row?.assigned ?? 0);
+    return round2(planned - totalAssigned);
   }
-
   /**
    * Locks the requested source batches in ascending id order and validates every
    * allocation against freshly-read availability.

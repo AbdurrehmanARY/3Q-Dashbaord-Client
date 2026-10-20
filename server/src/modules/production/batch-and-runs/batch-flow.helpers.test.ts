@@ -193,18 +193,62 @@ describe("validation guards", () => {
 
 describe("isReadyForCompletion", () => {
   it("needs every line to have packaged its full plan", () => {
-    expect(isReadyForCompletion([{ planned: 20, packagedProduced: 20 }])).toBe(true);
-    expect(isReadyForCompletion([{ planned: 20, packagedProduced: 19 }])).toBe(false);
+    expect(isReadyForCompletion([{ planned: 20, packagedProduced: 20, wastedTotal: 0 }])).toBe(true);
+    expect(isReadyForCompletion([{ planned: 20, packagedProduced: 19, wastedTotal: 0 }])).toBe(false);
     expect(
       isReadyForCompletion([
-        { planned: 20, packagedProduced: 20 },
-        { planned: 10, packagedProduced: 4 },
+        { planned: 20, packagedProduced: 20, wastedTotal: 0 },
+        { planned: 10, packagedProduced: 4, wastedTotal: 0 },
       ])
     ).toBe(false);
   });
 
   it("an order with no lines is never ready", () => {
     expect(isReadyForCompletion([])).toBe(false);
+  });
+
+  it("counts waste toward completion but not toward assignment capacity", () => {
+    expect(
+      isReadyForCompletion([{ planned: 20, packagedProduced: 15, wastedTotal: 5 }])
+    ).toBe(true);
+    expect(
+      isReadyForCompletion([{ planned: 20, packagedProduced: 10, wastedTotal: 5 }])
+    ).toBe(false);
+    expect(
+      isReadyForCompletion([
+        { planned: 20, packagedProduced: 18, wastedTotal: 2 },
+        { planned: 10, packagedProduced: 5, wastedTotal: 0 },
+      ])
+    ).toBe(false);
+  });
+
+  it("measures readiness against required rolls, not the full plan", () => {
+    // 5 required of 20 planned: ready once 5 packaged even though 15 buffer rolls are not.
+    expect(isReadyForCompletion([{ planned: 20, required: 5, packagedProduced: 5, wastedTotal: 0 }])).toBe(true);
+    expect(isReadyForCompletion([{ planned: 20, required: 5, packagedProduced: 4, wastedTotal: 0 }])).toBe(false);
+  });
+
+  it("counts waste toward the required target", () => {
+    expect(
+      isReadyForCompletion([{ planned: 20, required: 10, packagedProduced: 7, wastedTotal: 3 }])
+    ).toBe(true);
+    expect(
+      isReadyForCompletion([{ planned: 20, required: 10, packagedProduced: 4, wastedTotal: 3 }])
+    ).toBe(false);
+  });
+
+  it("falls back to planned when required is omitted or 0", () => {
+    expect(isReadyForCompletion([{ planned: 20, packagedProduced: 20, wastedTotal: 0 }])).toBe(true);
+    expect(isReadyForCompletion([{ planned: 20, required: 0, packagedProduced: 19, wastedTotal: 0 }])).toBe(false);
+  });
+
+  it("completes the order once every line meets its required target", () => {
+    expect(
+      isReadyForCompletion([
+        { planned: 20, required: 5, packagedProduced: 7, wastedTotal: 0 },
+        { planned: 10, required: 8, packagedProduced: 6, wastedTotal: 2 },
+      ])
+    ).toBe(true);
   });
 });
 

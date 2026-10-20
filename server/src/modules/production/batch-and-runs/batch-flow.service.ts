@@ -174,6 +174,7 @@ export class BatchFlowService {
             labelType: l.labelType,
             planned: Number(l.quantity),
             quantity: Number(l.quantity),
+            required: 0,
             materialCode: null as string | null,
             sizes: (l.sizes ?? []) as SizePlan[],
           }))
@@ -181,6 +182,7 @@ export class BatchFlowService {
             id: l.id,
             labelType: l.labelType,
             planned: Number(l.totalRolls),
+            required: Number(l.requiredRolls ?? 0),
             quantity: Number(l.quantity),
             materialCode: l.materialCode,
             sizes: (l.sizes ?? []) as SizePlan[],
@@ -217,6 +219,7 @@ export class BatchFlowService {
         materialCode: line.materialCode,
         kind,
         unit: UNIT_OF[kind],
+        required: line.required,
         stages,
         ...flow,
         cutProduced,
@@ -238,6 +241,7 @@ export class BatchFlowService {
     const totals = perLine.reduce(
       (acc, l) => ({
         planned: acc.planned + l.planned,
+        required: acc.required + l.required,
         assignedToPrinting: acc.assignedToPrinting + l.assignedToPrinting,
         remainingPlanned: acc.remainingPlanned + l.remainingPlanned,
         printedProduced: acc.printedProduced + l.printedProduced,
@@ -248,12 +252,15 @@ export class BatchFlowService {
         packagedProduced: acc.packagedProduced + l.packagedProduced,
         packagedLabels: acc.packagedLabels + l.packagedLabels,
         remainingRolls: acc.remainingRolls + l.remainingRolls,
+        wastedTotal: acc.wastedTotal + l.wastedTotal,
       }),
       {
         planned: 0, assignedToPrinting: 0, remainingPlanned: 0,
+        required: 0,
         printedProduced: 0, printedAvailable: 0, printedWasted: 0,
         cutProduced: 0, cutAvailable: 0,
         packagedProduced: 0, packagedLabels: 0, remainingRolls: 0,
+        wastedTotal: 0,
       }
     );
 

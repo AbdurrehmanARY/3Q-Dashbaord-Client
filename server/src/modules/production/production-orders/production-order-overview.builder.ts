@@ -1,6 +1,6 @@
 import type { Machine, Material, Operator, ProductionOrderLine } from "@db/schema";
 import type { SizePlan } from "@db/size-plans";
-import { completionPct } from "@shared/formulas/production-formula";
+import { completionPct, progressTargetOf } from "@shared/formulas/production-formula";
 import { missingStartRequirements, toNumbers } from "./production-order.helpers";
 
 function nameOf<T extends { name: string }>(map: Map<number, T>, id: number | null): string | null {
@@ -58,6 +58,8 @@ export function buildProductionOverviewBody(
 
   const lines = rawLines.map((line) => {
     const n = toNumbers(line);
+    /** Required rolls are the progress/completion target; totalRolls is the issued ceiling. */
+    const target = progressTargetOf(n.requiredRolls, n.totalRolls);
     const material = line.materialCode ? materialByCode.get(line.materialCode) : undefined;
     const missing = missingStartRequirements(line);
     const batchRec = inProgressBatchesByLine.get(line.id) ?? { printing: 0, cutting: 0, packaging: 0, activeStages: new Set() };
@@ -108,7 +110,7 @@ export function buildProductionOverviewBody(
         printedRolls: n.printedRolls,
         inPrintingRolls: batchRec.printing,
         isPrintingActive: batchRec.activeStages.has("printing"),
-        progressPct: completionPct(n.printedRolls, n.totalRolls),
+        progressPct: completionPct(n.printedRolls, target),
         completedAt: line.printingCompletedAt,
       },
       cutting: {
@@ -121,7 +123,7 @@ export function buildProductionOverviewBody(
         cutRolls: n.cutRolls,
         inCuttingRolls: batchRec.cutting,
         isCuttingActive: batchRec.activeStages.has("cutting"),
-        progressPct: completionPct(n.cutRolls, n.totalRolls),
+        progressPct: completionPct(n.cutRolls, target),
         completedAt: line.cuttingCompletedAt,
       },
       packaging: {
@@ -133,7 +135,7 @@ export function buildProductionOverviewBody(
         packagedQty: n.packagedQty,
         inPackagingRolls: batchRec.packaging,
         isPackagingActive: batchRec.activeStages.has("packaging"),
-        progressPct: completionPct(n.packagedRolls, n.totalRolls),
+        progressPct: completionPct(n.packagedRolls, target),
         completedAt: line.packagingCompletedAt,
       },
 
@@ -152,7 +154,7 @@ export function buildProductionOverviewBody(
         packagedRolls: n.packagedRolls,
         inPackagingRolls: batchRec.packaging,
         inPackagingProcess: Math.max(n.sentToPackagingRolls - n.packagedRolls, 0),
-        completionPct: completionPct(n.packagedRolls, n.totalRolls),
+        completionPct: completionPct(n.packagedRolls, target),
       },
 
       stageInventory: {
@@ -179,6 +181,7 @@ export function buildProductionOverviewBody(
     rawLines.reduce((acc, l) => acc + pick(toNumbers(l)), 0);
 
   const totalRolls = sum((n) => n.totalRolls);
+  const totalRequired = sum((n) => progressTargetOf(n.requiredRolls, n.totalRolls));
   const printedRolls = sum((n) => n.printedRolls);
   const cutRolls = sum((n) => n.cutRolls);
   const packagedRolls = sum((n) => n.packagedRolls);
@@ -221,7 +224,7 @@ export function buildProductionOverviewBody(
     inPackagingProcess: sum((n) => Math.max(n.sentToPackagingRolls - n.packagedRolls, 0)),
     waitingForCutting: printedAvailable,
     waitingForPackaging: cuttedAvailable,
-    completionPct: completionPct(packagedRolls, totalRolls),
+    completionPct: completionPct(packagedRolls, totalRequired),
     /* --- Explicit Stage Inventory Position --- */
     stageInventory: {
       plannedRolls: totalRolls,
@@ -237,7 +240,7 @@ export function buildProductionOverviewBody(
       cuttable: printedAvailable,
       packagable: cuttedAvailable,
       remainingRolls,
-      isReadyForCompletion: totalRolls > 0 && packagedRolls >= totalRolls,
+      isReadyForCompletion: totalRequired > 0 && packagedRolls >= totalRequired,
     },
   };
 

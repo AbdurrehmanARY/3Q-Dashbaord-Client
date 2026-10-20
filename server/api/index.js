@@ -436,6 +436,11 @@ var workOrders = pgTable7(
      * today; a Cloudinary-hosted URL would drop in here unchanged.
      */
     imageUrl: text3("image_url"),
+    /**
+     * DC-copy image captured alongside the artwork during dispatch (0028).
+     * Same pattern as imageUrl: plain text holding a base64 data URI or URL.
+     */
+    dcImageUrl: text3("dc_image_url"),
     status: workOrderStatusEnum("status").default("initiate_production").notNull(),
     /**
      * Scheduling priority, set by office staff on any order (woven or printed).
@@ -811,7 +816,7 @@ var productionBatches = pgTable14(
      *                  sum of this batch's `batch_consumptions` edges.
      *   producedRolls  good output made so far. Rises while the batch is IN_PROGRESS, so
      *                  partial output reaches the next stage without waiting for completion.
-     *   wastedRolls    input destroyed. PRINTING ONLY — cutting and packaging never scrap;
+     *   wastedRolls    input destroyed, at any stage. NULL means "no reason recorded".
      *                  their unused input is released back upstream instead.
      *   consumedRolls  how much of THIS batch's output downstream batches have taken.
      *                  A transactionally-maintained cache of the edge table.
@@ -819,6 +824,12 @@ var productionBatches = pgTable14(
     assignedRolls: decimal5("assigned_rolls", { precision: 12, scale: 2 }).default("0").notNull(),
     producedRolls: decimal5("produced_rolls", { precision: 12, scale: 2 }).default("0").notNull(),
     wastedRolls: decimal5("wasted_rolls", { precision: 12, scale: 2 }).default("0").notNull(),
+    /**
+     * Optional reason the wasted rolls were scrapped � for yield reporting.
+     * NULL means "no reason recorded". Added in 0027_waste_all_stages when waste
+     * was allowed at every stage, not just printing/weaving.
+     */
+    wasteReason: varchar13("waste_reason", { length: 40 }),
     consumedRolls: decimal5("consumed_rolls", { precision: 12, scale: 2 }).default("0").notNull(),
     /**
      * produced − consumed, computed by Postgres on every write. Never writable, so it
@@ -877,11 +888,11 @@ var productionBatches = pgTable14(
     ),
     /** The over-allocation guarantee: downstream can never take more than exists. */
     check2("production_batches_consumed_within_produced", sql2`consumed_rolls <= produced_rolls`),
-    /** Scrap belongs to the first stage of each workflow: printing, or weaving. */
-    check2(
-      "production_batches_waste_first_stage_only",
-      sql2`stage IN ('printing','weaving') OR wasted_rolls = 0`
-    ),
+    /**
+     * Scrap / waste may be recorded at ANY stage now (printing, weaving, cutting,
+     * packaging). The first-stage-only restriction was dropped in 0027_waste_all_stages.
+     * Output can never exceed input: produced + wasted <= assigned.
+     */
     /**
      * The label-type split lives at the line of each batch — every batch hangs off
      * exactly one line: weaving/printing on `production_order_line_id`, cutting/packaging
@@ -4094,6 +4105,7 @@ var workOrderWithBrandSelect = {
   priority: workOrders.priority,
   orderType: workOrders.orderType,
   imageUrl: workOrders.imageUrl,
+  dcImageUrl: workOrders.dcImageUrl,
   status: workOrders.status,
   productType: workOrders.productType,
   dcNumber: workOrders.dcNumber,
@@ -4372,6 +4384,7 @@ var WorkOrderService = class {
       dispatchedDate: data.dispatchedDate,
       dispatchedQty: data.dispatchedQty,
       ...data.imageUrl !== void 0 ? { imageUrl: data.imageUrl } : {},
+      ...data.dcImageUrl !== void 0 ? { dcImageUrl: data.dcImageUrl } : {},
       // Paperwork complete — this is the only place the status becomes `dispatched`.
       status: "dispatched"
     });
@@ -4713,6 +4726,8 @@ var createWorkOrderSchema = z12.object({
     orderType: orderTypeSchema,
     /** Artwork image — uploaded file (base64 data URI) or external URL. */
     imageUrl: artworkImageSchema,
+    /** DC-copy image — captured alongside artwork during dispatch. */
+    dcImageUrl: artworkImageSchema,
     productType: z12.enum(["printed", "woven"]).default("printed"),
     /** Required when `productType` is `woven`, rejected otherwise (see refine below). */
     wovenDetail: wovenDetailSchema.optional()
@@ -4731,6 +4746,7 @@ var updateWorkOrderSchema = z12.object({
     priority: prioritySchema.optional(),
     orderType: orderTypeSchema.optional(),
     imageUrl: artworkImageSchema,
+    dcImageUrl: artworkImageSchema,
     // `status` and `productType` are deliberately absent: status is derived from the
     // production order, and a sales order cannot change which workflow it runs through.
     dcNumber: z12.string().optional(),
@@ -4749,7 +4765,8 @@ var dispatchWorkOrderSchema = z12.object({
     fbrInvoiceNumber: z12.string().trim().min(1, "FBR Invoice Number is required to dispatch"),
     dispatchedDate: z12.string().min(1, "Dispatch date is required"),
     dispatchedQty: z12.coerce.number().int().positive("Dispatch quantity must be greater than 0"),
-    imageUrl: artworkImageSchema
+    imageUrl: artworkImageSchema,
+    dcImageUrl: artworkImageSchema
   })
 });
 
@@ -4911,14 +4928,25 @@ function lineFlowOf(planned, batches, kind = "printed", sizes = []) {
   );
   const assignedToFirst = sum(first, (p) => p.assigned);
   const packagedProduced = sum("packaging", (p) => p.produced);
+  const sumAll = (pick) => round2(live.reduce((acc, b) => acc + pick(batchPositionOf(b), b), 0));
+  const wastedTotal = sumAll((p) => p.wasted);
   return {
     planned: round2(planned),
     /** Assigned to the first stage: printing on the printed side, weaving on the woven. */
     assignedToPrinting: assignedToFirst,
+    /**
+     * How many first-stage rolls the planner may still assign. Waste at ANY stage
+     * is tracked and displayed, but does NOT create extra headroom: the user must
+     * edit the plan (increase totalRolls) to add more capacity.
+     *   planned - assignedToFirst
+     * A negative figure is clamped to 0.
+     */
     remainingPlanned: round2(Math.max(0, planned - assignedToFirst)),
     printedProduced: sum(first, (p) => p.produced),
     printedAvailable: sum(first, (p) => p.available),
     printedWasted: sum(first, (p) => p.wasted),
+    /** Σ wasted across ALL live stages — drives the make-up ceiling. */
+    wastedTotal: sumAll((p) => p.wasted),
     cutProduced: sum("cutting", (p) => p.produced),
     cutAvailable: sum("cutting", (p) => p.available),
     packagedProduced,
@@ -4930,7 +4958,10 @@ function lineFlowOf(planned, batches, kind = "printed", sizes = []) {
 }
 function isReadyForCompletion(lines) {
   if (lines.length === 0) return false;
-  return lines.every((l) => l.planned > 0 && l.packagedProduced >= l.planned - EPSILON);
+  return lines.every((l) => {
+    const target = l.required && l.required > 0 ? l.required : l.planned;
+    return target > 0 && l.packagedProduced + l.wastedTotal >= target - EPSILON;
+  });
 }
 var STAGE_MACHINE_TYPE = {
   weaving: "Woven",
@@ -4979,6 +5010,7 @@ var batchSelect = {
   assignedRolls: productionBatches.assignedRolls,
   producedRolls: productionBatches.producedRolls,
   wastedRolls: productionBatches.wastedRolls,
+  wasteReason: productionBatches.wasteReason,
   consumedRolls: productionBatches.consumedRolls,
   availableRolls: productionBatches.availableRolls,
   packagedQty: productionBatches.packagedQty,
@@ -5265,6 +5297,7 @@ var BatchFlowRepository = class {
         operatorId: input.operatorId !== void 0 ? input.operatorId : batch.operatorId,
         labelSize: input.labelSize !== void 0 ? input.labelSize ?? null : batch.labelSize,
         notes: input.notes !== void 0 ? input.notes : batch.notes,
+        wasteReason: input.wasteReason !== void 0 ? input.wasteReason : batch.wasteReason,
         updatedAt: /* @__PURE__ */ new Date()
       }).where(eq11(productionBatches.id, batchId)).returning();
       await this.resyncLinesTx(tx, [scope.line]);
@@ -5304,11 +5337,6 @@ var BatchFlowRepository = class {
       const produced = input.producedRolls !== void 0 ? round22(input.producedRolls) : Number(batch.producedRolls);
       const wasted = input.wastedRolls !== void 0 ? round22(input.wastedRolls) : Number(batch.wastedRolls);
       if (produced < 0 || wasted < 0) throw new BadRequestError("Output cannot be negative");
-      if (wasted > 0 && !isFirstStage(scope.kind, batch.stage)) {
-        throw new BadRequestError(
-          `Waste is only recorded at ${scope.kind === "woven" ? "weaving" : "printing"} \u2014 unused input at cutting and packaging is released back to the previous stage`
-        );
-      }
       if (produced + wasted > assigned + EPS) {
         throw new BadRequestError(
           `${batch.batchCode} was assigned ${assigned} rolls: cannot record ${produced} produced` + (wasted > 0 ? ` and ${wasted} wasted` : "")
@@ -5323,6 +5351,7 @@ var BatchFlowRepository = class {
       const [updated] = await tx.update(productionBatches).set({
         producedRolls: String(produced),
         wastedRolls: String(wasted),
+        wasteReason: input.wasteReason !== void 0 ? input.wasteReason : batch.wasteReason,
         packagedQty: input.packagedQty !== void 0 ? String(round22(input.packagedQty)) : batch.packagedQty,
         // Recording output implies the batch is running; completed and cancelled
         // batches were both rejected above.
@@ -5516,7 +5545,9 @@ var BatchFlowRepository = class {
         ${excludeBatchId ? sql9`AND b.id <> ${excludeBatchId}` : sql9``}
     ), 0)`;
     const [row] = line.kind === "woven" ? await tx.select({ planned: wovenProductionLines.quantity, assigned }).from(wovenProductionLines).where(eq11(wovenProductionLines.id, line.id)).limit(1) : await tx.select({ planned: productionOrderLines.totalRolls, assigned }).from(productionOrderLines).where(eq11(productionOrderLines.id, line.id)).limit(1);
-    return round22(Number(row?.planned ?? 0) - Number(row?.assigned ?? 0));
+    const planned = Number(row?.planned ?? 0);
+    const totalAssigned = Number(row?.assigned ?? 0);
+    return round22(planned - totalAssigned);
   }
   /**
    * For a woven Size Label line: how many pieces of `size` are still unassigned.
@@ -5540,7 +5571,9 @@ var BatchFlowRepository = class {
             AND lower(trim(b.label_size)) = lower(trim(${size}))
         ), 0)`
     }).from(wovenProductionLines).where(eq11(wovenProductionLines.id, line.id)).limit(1);
-    return round22(Number(row?.total ?? 0) - Number(row?.assigned ?? 0));
+    const planned = Number(row?.total ?? 0);
+    const totalAssigned = Number(row?.assigned ?? 0);
+    return round22(planned - totalAssigned);
   }
   /**
    * Locks the requested source batches in ascending id order and validates every
@@ -6068,9 +6101,12 @@ function calculateTotalWeight(weightPerRoll, totalRolls) {
   if (!(weightPerRoll > 0) || !(totalRolls > 0)) return 0;
   return weightPerRoll * totalRolls;
 }
-function completionPct(packagedRolls, totalRolls) {
-  if (!(totalRolls > 0)) return 0;
-  return Math.round(packagedRolls / totalRolls * 1e4) / 100;
+function completionPct(packagedRolls, targetRolls) {
+  if (!(targetRolls > 0)) return 0;
+  return Math.min(100, Math.round(packagedRolls / targetRolls * 1e4) / 100);
+}
+function progressTargetOf(requiredRolls, totalRolls) {
+  return requiredRolls > 0 ? requiredRolls : totalRolls;
 }
 
 // src/modules/production/production-orders/production-order.helpers.ts
@@ -6124,7 +6160,8 @@ function cascadeChain(chain) {
 }
 function stageCompletionPatch(merged) {
   const n2 = toNumbers(merged);
-  const done = (value) => n2.totalRolls > 0 && value >= n2.totalRolls;
+  const target = progressTargetOf(n2.requiredRolls, n2.totalRolls);
+  const done = (value) => target > 0 && value >= target;
   const stamp = (isDone, existing) => isDone ? existing ?? /* @__PURE__ */ new Date() : null;
   return {
     printingCompletedAt: stamp(done(n2.printedRolls), merged.printingCompletedAt),
@@ -6138,7 +6175,8 @@ function hasAnyProgress(line) {
 }
 function deriveLineStatus(line) {
   const n2 = toNumbers(line);
-  if (n2.totalRolls > 0 && n2.packagedRolls >= n2.totalRolls) return "completed";
+  const target = progressTargetOf(n2.requiredRolls, n2.totalRolls);
+  if (target > 0 && n2.packagedRolls >= target) return "completed";
   return hasAnyProgress(line) ? "active" : "pending";
 }
 function deriveOrderPatch(lines, current) {
@@ -6188,6 +6226,7 @@ function buildProductionOverviewBody(rawLines, allMachines, allOperators, allMat
   }
   const lines = rawLines.map((line) => {
     const n2 = toNumbers(line);
+    const target = progressTargetOf(n2.requiredRolls, n2.totalRolls);
     const material = line.materialCode ? materialByCode.get(line.materialCode) : void 0;
     const missing = missingStartRequirements(line);
     const batchRec = inProgressBatchesByLine.get(line.id) ?? { printing: 0, cutting: 0, packaging: 0, activeStages: /* @__PURE__ */ new Set() };
@@ -6234,7 +6273,7 @@ function buildProductionOverviewBody(rawLines, allMachines, allOperators, allMat
         printedRolls: n2.printedRolls,
         inPrintingRolls: batchRec.printing,
         isPrintingActive: batchRec.activeStages.has("printing"),
-        progressPct: completionPct(n2.printedRolls, n2.totalRolls),
+        progressPct: completionPct(n2.printedRolls, target),
         completedAt: line.printingCompletedAt
       },
       cutting: {
@@ -6247,7 +6286,7 @@ function buildProductionOverviewBody(rawLines, allMachines, allOperators, allMat
         cutRolls: n2.cutRolls,
         inCuttingRolls: batchRec.cutting,
         isCuttingActive: batchRec.activeStages.has("cutting"),
-        progressPct: completionPct(n2.cutRolls, n2.totalRolls),
+        progressPct: completionPct(n2.cutRolls, target),
         completedAt: line.cuttingCompletedAt
       },
       packaging: {
@@ -6259,7 +6298,7 @@ function buildProductionOverviewBody(rawLines, allMachines, allOperators, allMat
         packagedQty: n2.packagedQty,
         inPackagingRolls: batchRec.packaging,
         isPackagingActive: batchRec.activeStages.has("packaging"),
-        progressPct: completionPct(n2.packagedRolls, n2.totalRolls),
+        progressPct: completionPct(n2.packagedRolls, target),
         completedAt: line.packagingCompletedAt
       },
       liveProgress: {
@@ -6277,7 +6316,7 @@ function buildProductionOverviewBody(rawLines, allMachines, allOperators, allMat
         packagedRolls: n2.packagedRolls,
         inPackagingRolls: batchRec.packaging,
         inPackagingProcess: Math.max(n2.sentToPackagingRolls - n2.packagedRolls, 0),
-        completionPct: completionPct(n2.packagedRolls, n2.totalRolls)
+        completionPct: completionPct(n2.packagedRolls, target)
       },
       stageInventory: {
         plannedRolls: n2.totalRolls,
@@ -6300,6 +6339,7 @@ function buildProductionOverviewBody(rawLines, allMachines, allOperators, allMat
   });
   const sum = (pick) => rawLines.reduce((acc, l) => acc + pick(toNumbers(l)), 0);
   const totalRolls = sum((n2) => n2.totalRolls);
+  const totalRequired = sum((n2) => progressTargetOf(n2.requiredRolls, n2.totalRolls));
   const printedRolls = sum((n2) => n2.printedRolls);
   const cutRolls = sum((n2) => n2.cutRolls);
   const packagedRolls = sum((n2) => n2.packagedRolls);
@@ -6339,7 +6379,7 @@ function buildProductionOverviewBody(rawLines, allMachines, allOperators, allMat
     inPackagingProcess: sum((n2) => Math.max(n2.sentToPackagingRolls - n2.packagedRolls, 0)),
     waitingForCutting: printedAvailable,
     waitingForPackaging: cuttedAvailable,
-    completionPct: completionPct(packagedRolls, totalRolls),
+    completionPct: completionPct(packagedRolls, totalRequired),
     /* --- Explicit Stage Inventory Position --- */
     stageInventory: {
       plannedRolls: totalRolls,
@@ -6355,10 +6395,104 @@ function buildProductionOverviewBody(rawLines, allMachines, allOperators, allMat
       cuttable: printedAvailable,
       packagable: cuttedAvailable,
       remainingRolls,
-      isReadyForCompletion: totalRolls > 0 && packagedRolls >= totalRolls
+      isReadyForCompletion: totalRequired > 0 && packagedRolls >= totalRequired
     }
   };
   return { lines, totals };
+}
+
+// src/modules/production/production-orders/completion-report.builder.ts
+var STAGE_LABELS = {
+  printing: "Printing",
+  weaving: "Weaving",
+  cutting: "Cutting",
+  packaging: "Packaging"
+};
+var round = (n2) => Math.round(n2);
+var pct = (part, whole) => whole > 0 ? Math.min(100, Math.round(part / whole * 1e4) / 100) : 0;
+function num(v) {
+  return Number(v ?? 0) || 0;
+}
+var UNDEFINED_OPERATOR = "Unassigned";
+var UNDEFINED_LABEL_TYPE = "Unassigned";
+var UNDEFINED_REASON = "No reason recorded";
+function buildCompletionReport(batches, kind) {
+  const stages = STAGES_OF[kind];
+  const firstStage = stages[0];
+  const lastStage = stages[stages.length - 1];
+  const counted = batches.filter((b) => b.status === "COMPLETED");
+  const stageDetail = stages.map((stage) => {
+    const inStage = counted.filter((b) => b.stage === stage);
+    return {
+      stage,
+      label: STAGE_LABELS[stage] ?? stage,
+      batchCount: inStage.length,
+      issued: round(inStage.reduce((s, b) => s + num(b.assignedRolls), 0)),
+      produced: round(inStage.reduce((s, b) => s + num(b.producedRolls), 0)),
+      wasted: round(inStage.reduce((s, b) => s + num(b.wastedRolls), 0))
+    };
+  });
+  const issued = stageDetail.find((s) => s.stage === firstStage)?.issued ?? 0;
+  const produced = stageDetail.find((s) => s.stage === lastStage)?.produced ?? 0;
+  const wasted = stageDetail.reduce((s, st) => s + st.wasted, 0);
+  const remaining = Math.max(0, issued - produced - wasted);
+  const totals = {
+    issued,
+    produced,
+    wasted,
+    remaining,
+    yieldPct: pct(produced, issued),
+    wastePct: pct(wasted, issued)
+  };
+  const opMap = /* @__PURE__ */ new Map();
+  for (const b of counted) {
+    const w = num(b.wastedRolls);
+    if (w <= 0) continue;
+    const op = b.operatorName ?? UNDEFINED_OPERATOR;
+    const lt = b.labelType ?? UNDEFINED_LABEL_TYPE;
+    const reason = b.wasteReason ?? UNDEFINED_REASON;
+    const entry = opMap.get(op) ?? { operatorName: op, totalWasted: 0, breakdown: [] };
+    entry.totalWasted += w;
+    const existing = entry.breakdown.find(
+      (x) => x.stage === b.stage && x.labelType === lt && x.reason === reason
+    );
+    if (existing) {
+      existing.wasted += w;
+    } else {
+      entry.breakdown.push({ stage: b.stage, labelType: lt, reason, wasted: w });
+    }
+    opMap.set(op, entry);
+  }
+  const wasteByOperator = [...opMap.values()].map((e) => ({
+    ...e,
+    totalWasted: round(e.totalWasted),
+    breakdown: e.breakdown.map((x) => ({ ...x, wasted: round(x.wasted) }))
+  })).sort((a, b) => b.totalWasted - a.totalWasted || a.operatorName.localeCompare(b.operatorName));
+  const ltMap = /* @__PURE__ */ new Map();
+  for (const b of counted) {
+    const w = num(b.wastedRolls);
+    if (w <= 0) continue;
+    const lt = b.labelType ?? UNDEFINED_LABEL_TYPE;
+    const rec = ltMap.get(lt) ?? { totalWasted: 0, ops: /* @__PURE__ */ new Map() };
+    rec.totalWasted += w;
+    const op = b.operatorName ?? UNDEFINED_OPERATOR;
+    rec.ops.set(op, (rec.ops.get(op) ?? 0) + w);
+    ltMap.set(lt, rec);
+  }
+  const wasteByLabelType = [...ltMap.entries()].map(([labelType, rec]) => ({
+    labelType,
+    totalWasted: round(rec.totalWasted),
+    byOperator: [...rec.ops.entries()].map(([name, total]) => ({ operatorName: name, totalWasted: round(total) })).sort((a, b) => b.totalWasted - a.totalWasted || a.operatorName.localeCompare(b.operatorName))
+  })).sort((a, b) => b.totalWasted - a.totalWasted || a.labelType.localeCompare(b.labelType));
+  const unit = kind === "woven" ? "pcs" : "rolls";
+  return {
+    productType: kind,
+    unit,
+    totals,
+    stageDetail,
+    wasteByOperator,
+    wasteByLabelType
+  };
 }
 
 // src/shared/constants/labels.ts
@@ -7204,6 +7338,21 @@ var ProductionOrderService = class {
       totals
     };
   }
+  /**
+   * Order-wide completion picture: total input issued (first stage), final good output
+   * (packaging), total waste, per-stage detail and a per-operator waste breakdown.
+   *
+   * Unlike the overview, this is genuinely unified across both workflows — it passes the
+   * order's `productType` to `findByOrder` so woven (weaving-first) batches aren't silently
+   * filtered out the way the printed-default overview call would.
+   */
+  async getCompletionReport(id) {
+    const order = await productionOrderRepository.findById(id);
+    if (!order) throw new NotFoundError(Messages.notFound(Entity.PRODUCTION_ORDER));
+    const kind = order.productType === "woven" ? "woven" : "printed";
+    const batches = await batchFlowRepository.findByOrder(Number(id), kind);
+    return buildCompletionReport(batches, kind);
+  }
   async notifyIfOrderCompleted(productionOrderId, previousStatus) {
     if (previousStatus === "complete") return;
     try {
@@ -7247,6 +7396,11 @@ var ProductionOrderController = class {
   getProductionOrderOverview = asyncHandler(async (req, res) => {
     const { id } = req.validatedParams ?? req.params;
     const data = await productionOrderService.getProductionOrderOverview(id);
+    res.json({ data });
+  });
+  getCompletionReport = asyncHandler(async (req, res) => {
+    const { id } = req.validatedParams ?? req.params;
+    const data = await productionOrderService.getCompletionReport(id);
     res.json({ data });
   });
   /**
@@ -7511,6 +7665,7 @@ router9.get("/available-resources", productionOrderController.getAvailableResour
 router9.post("/", validateRequest(createProductionOrderSchema), productionOrderController.createProductionOrder);
 router9.get("/:id", validateParams(idParamsSchema), productionOrderController.getProductionOrder);
 router9.get("/:id/overview", validateParams(idParamsSchema), productionOrderController.getProductionOrderOverview);
+router9.get("/:id/completion-report", validateParams(idParamsSchema), productionOrderController.getCompletionReport);
 router9.get("/:id/events", validateParams(idParamsSchema), validateQuery(paginationQuerySchema), productionOrderController.getOrderEvents);
 router9.post("/:id/complete", validateParams(idParamsSchema), productionOrderController.completeProductionOrder);
 router9.patch("/:id", validateParams(idParamsSchema), validateRequest(updateProductionOrderSchema), productionOrderController.updateProductionOrder);
@@ -8753,12 +8908,14 @@ var BatchFlowService = class {
       labelType: l.labelType,
       planned: Number(l.quantity),
       quantity: Number(l.quantity),
+      required: 0,
       materialCode: null,
       sizes: l.sizes ?? []
     })) : (await productionOrderRepository.findLines(Number(orderId))).map((l) => ({
       id: l.id,
       labelType: l.labelType,
       planned: Number(l.totalRolls),
+      required: Number(l.requiredRolls ?? 0),
       quantity: Number(l.quantity),
       materialCode: l.materialCode,
       sizes: l.sizes ?? []
@@ -8785,6 +8942,7 @@ var BatchFlowService = class {
         materialCode: line.materialCode,
         kind,
         unit: UNIT_OF[kind],
+        required: line.required,
         stages,
         ...flow,
         cutProduced,
@@ -8805,6 +8963,7 @@ var BatchFlowService = class {
     const totals = perLine.reduce(
       (acc, l) => ({
         planned: acc.planned + l.planned,
+        required: acc.required + l.required,
         assignedToPrinting: acc.assignedToPrinting + l.assignedToPrinting,
         remainingPlanned: acc.remainingPlanned + l.remainingPlanned,
         printedProduced: acc.printedProduced + l.printedProduced,
@@ -8814,12 +8973,14 @@ var BatchFlowService = class {
         cutAvailable: acc.cutAvailable + l.cutAvailable,
         packagedProduced: acc.packagedProduced + l.packagedProduced,
         packagedLabels: acc.packagedLabels + l.packagedLabels,
-        remainingRolls: acc.remainingRolls + l.remainingRolls
+        remainingRolls: acc.remainingRolls + l.remainingRolls,
+        wastedTotal: acc.wastedTotal + l.wastedTotal
       }),
       {
         planned: 0,
         assignedToPrinting: 0,
         remainingPlanned: 0,
+        required: 0,
         printedProduced: 0,
         printedAvailable: 0,
         printedWasted: 0,
@@ -8827,7 +8988,8 @@ var BatchFlowService = class {
         cutAvailable: 0,
         packagedProduced: 0,
         packagedLabels: 0,
-        remainingRolls: 0
+        remainingRolls: 0,
+        wastedTotal: 0
       }
     );
     return {
@@ -9198,6 +9360,8 @@ var recordOutputSchema = z17.object({
   body: z17.object({
     producedRolls: optionalRolls.optional(),
     wastedRolls: optionalRolls.optional(),
+    /** Optional reason the wasted rolls were scrapped — for yield reporting. */
+    wasteReason: z17.string().trim().max(200).nullish(),
     packagedQty: labelQty.optional(),
     actorUserId
   }),
@@ -10890,13 +11054,17 @@ var labelTypesController = new LabelTypesController();
 import { z as z24 } from "zod";
 var labelTypeEnum = z24.enum(["woven", "printed"]);
 var createLabelTypeSchema = z24.object({
-  name: z24.string().min(1, "Name is required").max(255, "Name must be 255 characters or less"),
-  category: labelTypeEnum
+  body: z24.object({
+    name: z24.string().min(1, "Name is required").max(255, "Name must be 255 characters or less"),
+    category: labelTypeEnum
+  })
 });
 var updateLabelTypeSchema = z24.object({
-  name: z24.string().min(1, "Name is required").max(255, "Name must be 255 characters or less").optional(),
-  category: labelTypeEnum.optional(),
-  isActive: z24.boolean().optional()
+  body: z24.object({
+    name: z24.string().min(1, "Name is required").max(255, "Name must be 255 characters or less").optional(),
+    category: labelTypeEnum.optional(),
+    isActive: z24.boolean().optional()
+  })
 });
 var labelTypeParamsSchema = z24.object({
   id: z24.coerce.number().int().positive("ID must be a positive integer")

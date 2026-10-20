@@ -133,6 +133,7 @@ export class WorkOrderService {
       dispatchedDate: string;
       dispatchedQty: number;
       imageUrl?: string;
+      dcImageUrl?: string;
     }
   ) {
     const existing = await workOrderRepository.findRawById(id);
@@ -158,6 +159,7 @@ export class WorkOrderService {
       dispatchedDate: data.dispatchedDate,
       dispatchedQty: data.dispatchedQty,
       ...(data.imageUrl !== undefined ? { imageUrl: data.imageUrl } : {}),
+      ...(data.dcImageUrl !== undefined ? { dcImageUrl: data.dcImageUrl } : {}),
       // Paperwork complete — this is the only place the status becomes `dispatched`.
       status: "dispatched",
     });
@@ -195,6 +197,7 @@ export class WorkOrderService {
     priority?: string;
     orderType?: string;
     imageUrl?: string;
+    dcImageUrl?: string;
     dcNumber?: string;
     lcNumber?: string;
     fbrInvoiceNumber?: string;

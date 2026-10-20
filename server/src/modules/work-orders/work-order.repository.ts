@@ -20,6 +20,7 @@ const workOrderWithBrandSelect = {
   priority: workOrders.priority,
   orderType: workOrders.orderType,
   imageUrl: workOrders.imageUrl,
+  dcImageUrl: workOrders.dcImageUrl,
   status: workOrders.status,
   productType: workOrders.productType,
   dcNumber: workOrders.dcNumber,
@@ -122,6 +123,7 @@ export class WorkOrderRepository {
     brandId?: number;
     comment?: string;
     imageUrl?: string | null;
+    dcImageUrl?: string | null;
     productType?: WorkOrder["productType"];
   }) {
     const [workOrder] = await db.insert(workOrders).values(data).returning();
@@ -171,6 +173,7 @@ export class WorkOrderRepository {
     brandId?: number;
     comment?: string;
     imageUrl?: string | null;
+    dcImageUrl?: string | null;
     /** Derived from the production order — see production-order.repository.ts. */
     status?: WorkOrder["status"];
     dcNumber?: string | null;

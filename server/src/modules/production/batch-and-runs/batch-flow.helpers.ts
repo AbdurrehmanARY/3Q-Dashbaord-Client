@@ -163,6 +163,8 @@ export interface LineFlow {
   printedProduced: number;
   printedAvailable: number;
   printedWasted: number;
+  /** Σ wasted across ALL live stages (printing, weaving, cutting, packaging). */
+  wastedTotal: number;
   cutProduced: number;
   cutAvailable: number;
   packagedProduced: number;
@@ -232,15 +234,28 @@ export function lineFlowOf(
 
   const assignedToFirst = sum(first, (p) => p.assigned);
   const packagedProduced = sum("packaging", (p) => p.produced);
+  /** Sum a pick across ALL live stages (not stage-specific like `sum`). */
+  const sumAll = (pick: (p: BatchPosition, b: FlowBatch) => number) =>
+    round2(live.reduce((acc, b) => acc + pick(batchPositionOf(b), b), 0));
+  const wastedTotal = sumAll((p) => p.wasted);
 
   return {
     planned: round2(planned),
     /** Assigned to the first stage: printing on the printed side, weaving on the woven. */
     assignedToPrinting: assignedToFirst,
+    /**
+     * How many first-stage rolls the planner may still assign. Waste at ANY stage
+     * is tracked and displayed, but does NOT create extra headroom: the user must
+     * edit the plan (increase totalRolls) to add more capacity.
+     *   planned - assignedToFirst
+     * A negative figure is clamped to 0.
+     */
     remainingPlanned: round2(Math.max(0, planned - assignedToFirst)),
     printedProduced: sum(first, (p) => p.produced),
     printedAvailable: sum(first, (p) => p.available),
     printedWasted: sum(first, (p) => p.wasted),
+    /** Σ wasted across ALL live stages — drives the make-up ceiling. */
+    wastedTotal: sumAll((p) => p.wasted),
     cutProduced: sum("cutting", (p) => p.produced),
     cutAvailable: sum("cutting", (p) => p.available),
     packagedProduced,
@@ -307,12 +322,22 @@ export function assertOutputWithinInput(
 }
 
 /**
- * Whether every line has packaged its full plan. Reaching this only makes an order READY —
- * completion stays a deliberate user action.
+ * Whether every line has packaged enough to fulfil its REQUIRED roll count
+ * (the plan minus the extra/buffer). Reaching this only makes an order READY —
+ * completing it stays a deliberate user action.
+ * Waste is counted toward completion (produced + wasted >= required) but does NOT
+ * grant extra assignment capacity: the user must edit the plan to add more rolls.
+ * When a line carries no required breakdown (`required` omitted or 0) the target
+ * falls back to `planned`, preserving the historical total-issued semantics.
  */
-export function isReadyForCompletion(lines: { planned: number; packagedProduced: number }[]) {
+export function isReadyForCompletion(
+  lines: { planned: number; packagedProduced: number; wastedTotal: number; required?: number }[]
+) {
   if (lines.length === 0) return false;
-  return lines.every((l) => l.planned > 0 && l.packagedProduced >= l.planned - EPSILON);
+  return lines.every((l) => {
+    const target = l.required && l.required > 0 ? l.required : l.planned;
+    return target > 0 && l.packagedProduced + l.wastedTotal >= target - EPSILON;
+  });
 }
 
 /* --------------------------------------------------------- resource mapping */

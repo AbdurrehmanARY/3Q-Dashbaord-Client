@@ -15,6 +15,8 @@ import {
   DEFAULT_ROLL_LENGTH_M,
 } from "@shared/formulas/production-formula";
 import { buildProductionOverviewBody } from "./production-order-overview.builder";
+import { buildCompletionReport } from "./completion-report.builder";
+import type { CompletionReport } from "./completion-report.builder";
 import { Messages, Entity } from "@shared/constants/messages";
 import { validateSizePlan } from "@shared/constants/labels";
 import type { ProductionOrder, ProductionOrderLine } from "@db/schema";
@@ -1080,6 +1082,23 @@ export class ProductionOrderService {
       lines,
       totals,
     };
+  }
+
+  /**
+   * Order-wide completion picture: total input issued (first stage), final good output
+   * (packaging), total waste, per-stage detail and a per-operator waste breakdown.
+   *
+   * Unlike the overview, this is genuinely unified across both workflows — it passes the
+   * order's `productType` to `findByOrder` so woven (weaving-first) batches aren't silently
+   * filtered out the way the printed-default overview call would.
+   */
+  async getCompletionReport(id: number | string): Promise<CompletionReport> {
+    const order = await productionOrderRepository.findById(id);
+    if (!order) throw new NotFoundError(Messages.notFound(Entity.PRODUCTION_ORDER));
+
+    const kind = order.productType === "woven" ? "woven" : "printed";
+    const batches = await batchFlowRepository.findByOrder(Number(id), kind);
+    return buildCompletionReport(batches, kind);
   }
 
   private async notifyIfOrderCompleted(productionOrderId: number, previousStatus: string) {

@@ -4,6 +4,7 @@ import {
   calculateTotalRolls,
   calculateTotalWeight,
   completionPct,
+  progressTargetOf,
 } from "./production-formula";
 
 describe("calculateRequiredRolls", () => {
@@ -54,5 +55,19 @@ describe("completionPct", () => {
 
   it("is 0 when there is no total", () => {
     expect(completionPct(5, 0)).toBe(0);
+  });
+
+  it("clamps over-production at 100%", () => {
+    expect(completionPct(12, 10)).toBe(100);
+  });
+});
+
+describe("progressTargetOf", () => {
+  it("uses required rolls when present", () => {
+    expect(progressTargetOf(2, 10)).toBe(2);
+  });
+
+  it("falls back to total rolls when required is 0", () => {
+    expect(progressTargetOf(0, 10)).toBe(10);
   });
 });

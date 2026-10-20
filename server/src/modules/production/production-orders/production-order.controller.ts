@@ -38,6 +38,12 @@ class ProductionOrderController {
     res.json({ data });
   });
 
+  getCompletionReport = asyncHandler(async (req: Request, res: Response) => {
+    const { id } = (req.validatedParams ?? req.params) as { id: string };
+    const data = await productionOrderService.getCompletionReport(id);
+    res.json({ data });
+  });
+
   /**
    * Machines and operators not already held by another active job. `excludeLineId` /
    * `excludeOrderId` keep the caller's own current selection in the list, so editing a

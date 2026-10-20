@@ -41,6 +41,11 @@ export const workOrders = pgTable(
      * today; a Cloudinary-hosted URL would drop in here unchanged.
      */
     imageUrl: text("image_url"),
+    /**
+     * DC-copy image captured alongside the artwork during dispatch (0028).
+     * Same pattern as imageUrl: plain text holding a base64 data URI or URL.
+     */
+    dcImageUrl: text("dc_image_url"),
     status: workOrderStatusEnum("status").default("initiate_production").notNull(),
     /**
      * Scheduling priority, set by office staff on any order (woven or printed).

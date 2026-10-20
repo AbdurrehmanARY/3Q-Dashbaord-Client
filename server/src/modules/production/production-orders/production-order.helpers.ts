@@ -1,5 +1,6 @@
 import type { ProductionOrder, ProductionOrderLine } from "@db/schema";
 import type { SizePlan } from "@db/size-plans";
+import { progressTargetOf } from "@shared/formulas/production-formula";
 
 export type ProductionStage = "printing" | "cutting" | "packaging";
 export type TransferTarget = "cutting" | "packaging";
@@ -101,17 +102,19 @@ export function cascadeChain(chain: {
 /**
  * Stamps (or clears) each stage's completion time against the merged line.
  *
- * A stage is complete once its counter reaches the planned roll count. The timestamp is set
- * the first time that happens and preserved thereafter, so a later unrelated edit doesn't
- * keep bumping it. If a count is corrected back below the target the stamp is cleared —
- * leaving a completion time on a stage that is no longer complete would be a lie in the
- * traceability record.
+ * A stage is complete once its counter reaches the roll target (the required
+ * roll count, not the issued total). The timestamp is set the first time that
+ * happens and preserved thereafter, so a later unrelated edit doesn't keep
+ * bumping it. If a count is corrected back below the target the stamp is
+ * cleared — leaving a completion time on a stage that is no longer complete
+ * would be a lie in the traceability record.
  */
 export function stageCompletionPatch(
   merged: ProductionOrderLine
 ): Pick<ProductionOrderLine, "printingCompletedAt" | "cuttingCompletedAt" | "packagingCompletedAt"> {
   const n = toNumbers(merged);
-  const done = (value: number) => n.totalRolls > 0 && value >= n.totalRolls;
+  const target = progressTargetOf(n.requiredRolls, n.totalRolls);
+  const done = (value: number) => target > 0 && value >= target;
   const stamp = (isDone: boolean, existing: Date | null) =>
     isDone ? (existing ?? new Date()) : null;
 
@@ -134,12 +137,14 @@ export function hasAnyProgress(line: ProductionOrderLine): boolean {
 }
 
 /**
- * A line is `completed` once every planned roll is packaged, `active` once any progress
- * exists, else `pending`.
+ * A line is `completed` once every REQUIRED roll is packaged (extra/buffer rolls
+ * are not required for completion). It is `active` once any progress exists,
+ * else `pending`.
  */
 export function deriveLineStatus(line: ProductionOrderLine): ProductionOrderLine["status"] {
   const n = toNumbers(line);
-  if (n.totalRolls > 0 && n.packagedRolls >= n.totalRolls) return "completed";
+  const target = progressTargetOf(n.requiredRolls, n.totalRolls);
+  if (target > 0 && n.packagedRolls >= target) return "completed";
   return hasAnyProgress(line) ? "active" : "pending";
 }
 

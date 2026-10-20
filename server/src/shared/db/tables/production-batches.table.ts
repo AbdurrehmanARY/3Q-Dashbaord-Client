@@ -120,7 +120,7 @@ export const productionBatches = pgTable(
      *                  sum of this batch's `batch_consumptions` edges.
      *   producedRolls  good output made so far. Rises while the batch is IN_PROGRESS, so
      *                  partial output reaches the next stage without waiting for completion.
-     *   wastedRolls    input destroyed. PRINTING ONLY — cutting and packaging never scrap;
+     *   wastedRolls    input destroyed, at any stage. NULL means "no reason recorded".
      *                  their unused input is released back upstream instead.
      *   consumedRolls  how much of THIS batch's output downstream batches have taken.
      *                  A transactionally-maintained cache of the edge table.
@@ -128,6 +128,12 @@ export const productionBatches = pgTable(
     assignedRolls: decimal("assigned_rolls", { precision: 12, scale: 2 }).default("0").notNull(),
     producedRolls: decimal("produced_rolls", { precision: 12, scale: 2 }).default("0").notNull(),
     wastedRolls: decimal("wasted_rolls", { precision: 12, scale: 2 }).default("0").notNull(),
+    /**
+     * Optional reason the wasted rolls were scrapped � for yield reporting.
+     * NULL means "no reason recorded". Added in 0027_waste_all_stages when waste
+     * was allowed at every stage, not just printing/weaving.
+     */
+    wasteReason: varchar("waste_reason", { length: 40 }),
     consumedRolls: decimal("consumed_rolls", { precision: 12, scale: 2 }).default("0").notNull(),
     /**
      * produced − consumed, computed by Postgres on every write. Never writable, so it
@@ -194,11 +200,11 @@ export const productionBatches = pgTable(
     ),
     /** The over-allocation guarantee: downstream can never take more than exists. */
     check("production_batches_consumed_within_produced", sql`consumed_rolls <= produced_rolls`),
-    /** Scrap belongs to the first stage of each workflow: printing, or weaving. */
-    check(
-      "production_batches_waste_first_stage_only",
-      sql`stage IN ('printing','weaving') OR wasted_rolls = 0`
-    ),
+    /**
+     * Scrap / waste may be recorded at ANY stage now (printing, weaving, cutting,
+     * packaging). The first-stage-only restriction was dropped in 0027_waste_all_stages.
+     * Output can never exceed input: produced + wasted <= assigned.
+     */
     /**
      * The label-type split lives at the line of each batch — every batch hangs off
      * exactly one line: weaving/printing on `production_order_line_id`, cutting/packaging

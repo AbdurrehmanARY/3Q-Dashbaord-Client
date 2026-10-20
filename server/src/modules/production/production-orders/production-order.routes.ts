@@ -27,6 +27,7 @@ router.post("/", validateRequest(createProductionOrderSchema), productionOrderCo
 /* --- Order reads --- */
 router.get("/:id", validateParams(idParamsSchema), productionOrderController.getProductionOrder);
 router.get("/:id/overview", validateParams(idParamsSchema), productionOrderController.getProductionOrderOverview);
+router.get("/:id/completion-report", validateParams(idParamsSchema), productionOrderController.getCompletionReport);
 router.get("/:id/events", validateParams(idParamsSchema), validateQuery(paginationQuerySchema), productionOrderController.getOrderEvents);
 router.post("/:id/complete", validateParams(idParamsSchema), productionOrderController.completeProductionOrder);
 router.patch("/:id", validateParams(idParamsSchema), validateRequest(updateProductionOrderSchema), productionOrderController.updateProductionOrder);

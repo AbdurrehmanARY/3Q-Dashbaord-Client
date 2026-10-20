@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { ProductionOrder, ProductionOrderLine } from "@db/schema";
-import { cascadeChain, deriveLineStatus, deriveOrderPatch, toNumbers } from "./production-order.helpers";
+import { cascadeChain, deriveLineStatus, deriveOrderPatch, stageCompletionPatch, toNumbers } from "./production-order.helpers";
 
 /** Minimal line factory — decimals are strings over the wire, so defaults are "0". */
 function makeLine(overrides: Partial<Record<string, unknown>> = {}): ProductionOrderLine {
@@ -89,6 +89,21 @@ describe("deriveLineStatus", () => {
   it("is pending with no progress", () => {
     expect(deriveLineStatus(makeLine())).toBe("pending");
   });
+
+  it("completes against required rolls even when extra rolls remain un-packaged", () => {
+    const line = makeLine({ requiredRolls: "2", totalRolls: "10", packagedRolls: "2" });
+    expect(deriveLineStatus(line)).toBe("completed");
+  });
+
+  it("stays in progress when only the buffer (not required) is packaged", () => {
+    const line = makeLine({ requiredRolls: "2", totalRolls: "10", packagedRolls: "1" });
+    expect(deriveLineStatus(line)).toBe("active");
+  });
+
+  it("falls back to totalRolls when requiredRolls is 0", () => {
+    // makeLine defaults requiredRolls to "0"; completion still keys to totalRolls here.
+    expect(deriveLineStatus(makeLine({ totalRolls: "10", packagedRolls: "10" }))).toBe("completed");
+  });
 });
 
 describe("deriveOrderPatch", () => {
@@ -119,5 +134,61 @@ describe("deriveOrderPatch", () => {
   });
   it("is planned when lines exist but none has progress", () => {
     expect(deriveOrderPatch([makeLine()], order).status).toBe("planned");
+  });
+});
+
+describe("stageCompletionPatch", () => {
+  it("completes printing exactly once printed reaches required rolls", () => {
+    const line = makeLine({ requiredRolls: "2", totalRolls: "10" });
+    expect(stageCompletionPatch(line).printingCompletedAt).toBeNull();
+    expect(stageCompletionPatch(makeLine({ requiredRolls: "2", totalRolls: "10", printedRolls: "2" })).printingCompletedAt).not.toBeNull();
+  });
+
+  it("completes each stage against required rolls, not total", () => {
+    const done = {
+      ...makeLine({ requiredRolls: "3", totalRolls: "10" }),
+      printedRolls: "3",
+      sentToCuttingRolls: "3",
+      cutRolls: "3",
+      sentToPackagingRolls: "3",
+      packagedRolls: "3",
+    } as ProductionOrderLine;
+    const patch = stageCompletionPatch(done);
+    expect(patch.printingCompletedAt).not.toBeNull();
+    expect(patch.cuttingCompletedAt).not.toBeNull();
+    expect(patch.packagingCompletedAt).not.toBeNull();
+  });
+
+  it("clears a stamp when a count drops back below required", () => {
+    const line = makeLine({
+      requiredRolls: "2",
+      totalRolls: "10",
+      printedRolls: "2",
+      printingCompletedAt: new Date("2026-10-01T00:00:00Z"),
+    });
+    expect(stageCompletionPatch(line).printingCompletedAt).toEqual(new Date("2026-10-01T00:00:00Z"));
+    const corrected = { ...line, printedRolls: "1" };
+    expect(stageCompletionPatch(corrected).printingCompletedAt).toBeNull();
+  });
+
+  it("falls back to totalRolls when requiredRolls is 0", () => {
+    expect(stageCompletionPatch(makeLine({ totalRolls: "5", printedRolls: "5" })).printingCompletedAt).not.toBeNull();
+    expect(stageCompletionPatch(makeLine({ totalRolls: "5", printedRolls: "4" })).printingCompletedAt).toBeNull();
+  });
+
+  it("allows over-production past required without clearing the stamp", () => {
+    const line = makeLine({
+      requiredRolls: "2",
+      totalRolls: "10",
+      printedRolls: "2",
+      printingCompletedAt: new Date("2026-10-01T00:00:00Z"),
+    });
+    expect(stageCompletionPatch({ ...line, printedRolls: "4" }).printingCompletedAt).toEqual(
+      new Date("2026-10-01T00:00:00Z")
+    );
+  });
+
+  it("does nothing when no rolls are planned", () => {
+    expect(stageCompletionPatch(makeLine({ totalRolls: "0", requiredRolls: "0" })).printingCompletedAt).toBeNull();
   });
 });

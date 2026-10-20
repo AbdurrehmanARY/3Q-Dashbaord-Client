@@ -52,6 +52,8 @@ export const createWorkOrderSchema = z.object({
       orderType: orderTypeSchema,
       /** Artwork image — uploaded file (base64 data URI) or external URL. */
       imageUrl: artworkImageSchema,
+      /** DC-copy image — captured alongside artwork during dispatch. */
+      dcImageUrl: artworkImageSchema,
       productType: z.enum(["printed", "woven"]).default("printed"),
       /** Required when `productType` is `woven`, rejected otherwise (see refine below). */
       wovenDetail: wovenDetailSchema.optional(),
@@ -72,6 +74,7 @@ export const updateWorkOrderSchema = z.object({
     priority: prioritySchema.optional(),
     orderType: orderTypeSchema.optional(),
     imageUrl: artworkImageSchema,
+    dcImageUrl: artworkImageSchema,
     // `status` and `productType` are deliberately absent: status is derived from the
     // production order, and a sales order cannot change which workflow it runs through.
     dcNumber: z.string().optional(),
@@ -96,6 +99,7 @@ export const dispatchWorkOrderSchema = z.object({
     dispatchedDate: z.string().min(1, "Dispatch date is required"),
     dispatchedQty: z.coerce.number().int().positive("Dispatch quantity must be greater than 0"),
     imageUrl: artworkImageSchema,
+    dcImageUrl: artworkImageSchema,
   }),
 });
 
