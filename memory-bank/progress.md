@@ -200,3 +200,69 @@
   `handleSubmit` and the stale `!showForm` guard are gone. All planning entry points
   (Dashboard, Planning page, Woven panel) open the one dialog.
 - Client gates re-verified: 6 test files / 54 tests pass; typecheck + build clean.
+
+### Bug fixes (2026-10-12)
+- **Fixed `use-label-types.ts` in production-orders hook**:
+  - Corrected import paths: `@lib/api` → `@/lib/api`, `../types` → `@/features/label-types/types`
+  - Fixed `useLabelTypesForPlanning()` to use dynamic `type` parameter instead of hardcoded "woven"
+  - Fixed API call to separate path and query params: `api.get<{ data: LabelType[] }>("/label-types", { category: type, activeOnly: true })`0.
+  - Added `select: (res) => res.data` to unwrap the response envelope
+  - Added `staleTime: 5 * 60 * 1000` for TanStack Query v5
+
+- **Fixed `BatchStageBoard.tsx`**:
+  - Added missing variable definitions in `BatchRow` function: `open`, `produced`, `assigned`, `available`, `wasted`, `pct`, `canDelete`, `canStart`, `canComplete`, `canOutput`, `canCancel`, `canTakeAction`
+  - Removed stray `}` at end of file
+  - File now properly ends with `RowAction` function closure
+
+- **Migration 0026_label_types.sql**:
+  - Created `label_types` master data table with named constraint `label_types_valid_category` check
+  - Added FK column `production_order_lines.label_type_id` referencing `label_types.id`
+  - Created index `production_order_lines_label_type_idx` for efficient lookups
+  - Seeded initial label types (4 woven: Size/Care/Main/Loop Label; 5 printed: Address/Warning/Composition/Import/Poly Import Label)
+
+- **Migration journal (`_journal.json`)**:
+  - Verified idx-26 entry for 0026_label_types with timestamp 1787300000000
+
+- **Validation**:
+  - Server typecheck: ✅ 0 errors
+  - Server tests: ✅ 123/123 tests pass (9 files)
+  - Client typecheck: ✅ 0 errors
+  - Client tests: ✅ 67/67 tests pass (7 files)
+### Waste across all stages + DC copy image (2026-10-14)
+- **Migrations 0027 + 0028 applied to live Supabase** via drizzle-kit migrate (session pooler DIRECT_URL). Verified by erify-new-columns.mjs:
+  - production_batches.waste_reason (varchar, nullable) — present
+  - work_orders.dc_image_url (text, nullable) — present
+  - production_batches_waste_first_stage_only CHECK — dropped
+  - Migration journal idx 27 + 28 recorded in drizzle.__drizzle_migrations
+- **0027_waste_all_stages**: dropped first-stage-only waste CHECK, added waste_reason column. Waste now recordable at all stages (printing, weaving, cutting, packaging). ecordOutput guard removed; emainingPlannedTx ceiling EXCLUDES waste — does NOT create auto-headroom.
+- **0028_dispatch_dc_image**: added dc_image_url text column to work_orders for DC copy images alongside artwork.
+- **Verification**: Server typecheck ✅, Server tests ✅ 123/123, Client typecheck ✅, Client tests ✅ 67/67, Server build ✅ (api/index.js rebuilt), graphify update ✅.
+  - **Client-side fixes (2026-10-14)**: Removed `isPrinting` gate from `BatchOutputDialog.tsx` so waste can be recorded at all stages (cutting, packaging); added `wasteReason` field to `RecordOutputInput` in `batch-types.ts`, added `wastedTotal` to `LineFlow`, and `wasteReason` to `ProductionBatch`. Fixed stale comments in `BatchOutputDialog.tsx` and `BatchStageBoard.tsx`. `isFirstStage` import removed from `BatchOutputDialog.tsx` (still used by other components). Verification: Client typecheck 0 errors, Client tests 67/67, Server typecheck 0 errors, Server tests 123/123, graphify update done.
+
+
+
+
+### Waste tracking without auto-headroom (2026-10-14, logic follow-up)
+- Changed remainingPlannedTx and remainingPlannedSizeTx to return planned - totalAssigned instead of planned + totalWasted - totalAssigned — waste no longer creates assignment headroom
+- Changed lineFlowOf.remainingPlanned formula to planned - assignedToFirst (waste excluded from ceiling)
+- Changed isReadyForCompletion to accept wastedTotal param and check packagedProduced + wastedTotal >= planned — waste counts toward completion but not assignment capacity
+- Updated tests: existing isReadyForCompletion calls include wastedTotal: 0; new test case verifies waste counts toward completion but not headroom
+- wastedTotal added to service totals accumulator and initial value
+- Verification: Server typecheck 0 errors, Server tests 123/123 (9 files), Client typecheck 0 errors, Client tests 67/67 (7 files), Server build OK (api/index.js rebuilt), graphify update done, implementation.md written
+
+## Edit batch dialog + wiring (2026-10-15, follow-up to waste tracking)
+
+- `utils/batch-edit.ts` + `batch-edit.test.ts` (21 tests): extracts the client-side ceiling corrections the server enforces on write (source-own-hold; first-stage plan + own assignment) so the dialog prompts before the server's 409.
+- `EditBatchDialog.tsx`: edit UX prefilled from the batch with edit-aware caps; submits via PATCH /batches/:id through `updateBatch`; machine/operator selects scoped with `batch.id` so this batch's own resources stay selectable.
+- `CreateBatchDialog.tsx`: `SourcePicker` lifted and made edit-aware (`ownAllocations`); create path unchanged.
+- `BatchStageBoard.tsx`: `editBatch` state + `onEdit` threaded `StagePanel` -> `BatchRow`; Edit `RowAction` (Pencil) gated by `!readOnly && canTakeAction`; `<EditBatchDialog/>` rendered alongside the other stage dialogs.
+- Client gate: typecheck 0 errors · 88 tests green (8 files); server unchanged this session.
+
+### Roll progress tracking on required rolls (2026-10-19)
+- Progress % and section-completion for Printing/Cutting/Packaging now target `requiredRolls`
+  (falls back to `totalRolls` when required is 0). Over-production is allowed and clamped to
+  100% on the bars; the section stays Complete once produced >= required. Server
+  (`completionPct`/`progressTargetOf`, `stageCompletionPatch`, `deriveLineStatus`, overview builder,
+  `isReadyForCompletion`) and client (`StageProgressBars`, `roll-columns`, `line-draft` patch)
+  mirrors updated; assignment capacity/inventory counters remain on `totalRolls`. Woven untouched.
+  Server 139/139, client 92/92, server build OK (bundle rebuilt).

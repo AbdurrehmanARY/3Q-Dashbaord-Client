@@ -36,8 +36,8 @@
     "hash": "c77e86b84c15dfd74dee5e4db0229d28"
   },
   "D:/3Q-facility-Dashboard/client/src/app/routes.tsx": {
-    "mtime": 1786012310965.7803,
-    "hash": "c05d9affa28cc3079124acb96f819bfc"
+    "mtime": 1791641879890.0596,
+    "hash": "d7e700c9e6feb7694638047ee7ce2407"
   },
   "D:/3Q-facility-Dashboard/client/src/components/cards/AppCard.tsx": {
     "mtime": 1785573968299.4033,
@@ -612,27 +612,27 @@
     "hash": "c318a7ae10b2651cd9e90c55d85bac4d"
   },
   "D:/3Q-facility-Dashboard/client/src/features/production-orders/batch-types.ts": {
-    "mtime": 1789202244689.605,
-    "hash": "8cc6d0612d1b756450e14daadb63d5dc"
+    "mtime": 1791982186098.031,
+    "hash": "22d346cd957d58bb4e33fd977fa9dfa1"
   },
   "D:/3Q-facility-Dashboard/client/src/features/production-orders/components/BatchOutputDialog.tsx": {
-    "mtime": 1789203110537.087,
-    "hash": "e5c6374e4ca8ec982cb16c46e59c6129"
+    "mtime": 1791986292053.614,
+    "hash": "9cfaca34f39842bbb7d6e34d05580ca2"
   },
   "D:/3Q-facility-Dashboard/client/src/features/production-orders/components/BatchStageBoard.tsx": {
-    "mtime": 1789208647284.352,
-    "hash": "9557e7d17eb5c52ba5fce5fea36fd051"
+    "mtime": 1791984210917.4683,
+    "hash": "0d8d9b6dc2182edebe6440b8889c4d55"
   },
   "D:/3Q-facility-Dashboard/client/src/features/production-orders/components/BatchTraceDialog.tsx": {
     "mtime": 1786532072310.2026,
     "hash": "0d2d9c6fb3da5771a7b3b62157f7ed3a"
   },
   "D:/3Q-facility-Dashboard/client/src/features/production-orders/components/CreateBatchDialog.tsx": {
-    "mtime": 1789208757636.4194,
-    "hash": "8b47e625c691a779a2d8e5f2b5537dfa"
+    "mtime": 1791979872437.8442,
+    "hash": "ecc9ce4174adc1d29a4060e780f3d2cf"
   },
   "D:/3Q-facility-Dashboard/client/src/features/production-orders/components/CreateProductionOrderDialog.tsx": {
-    "mtime": 1786363384295.185,
+    "mtime": 1790329011009.7092,
     "hash": "0ffe506bb3e269bbcd5a9a18d424e392"
   },
   "D:/3Q-facility-Dashboard/client/src/features/production-orders/components/EditableLabelTypeTable.tsx": {
@@ -644,19 +644,19 @@
     "hash": "f7a5e63bfb75f5526f4be0999ed22b1c"
   },
   "D:/3Q-facility-Dashboard/client/src/features/production-orders/components/PlanLabelTypeDialog.tsx": {
-    "mtime": 1790063111847.8157,
-    "hash": "ba99a0fb01dfce67909687fb8581e44a"
+    "mtime": 1790329482002.4253,
+    "hash": "8033c4661e3d8487cce41e4b50ca0082"
   },
   "D:/3Q-facility-Dashboard/client/src/features/production-orders/components/PlanLabelTypeForm.tsx": {
-    "mtime": 1789987970018.6753,
-    "hash": "10225bbbb97ed8f72e6202e21c2b2601"
+    "mtime": 1790329526420.0168,
+    "hash": "2bf90a7f4683ca55c390212e2f1a2f5d"
   },
   "D:/3Q-facility-Dashboard/client/src/features/production-orders/components/PlannedLabelTypesTable.tsx": {
     "mtime": 1786526642172.2393,
     "hash": "81d4b314f795013f6a12be2d559f52df"
   },
   "D:/3Q-facility-Dashboard/client/src/features/production-orders/components/ProductionStatusBadge.tsx": {
-    "mtime": 1784966310624.194,
+    "mtime": 1790232152802.183,
     "hash": "4c591a6ee9b55d5b6a17e633105c8b1f"
   },
   "D:/3Q-facility-Dashboard/client/src/features/production-orders/components/ProductionSummary.tsx": {
@@ -683,13 +683,9 @@
     "mtime": 1786366007361.337,
     "hash": "d9f8af76b09c9baa26633f5ff20bf6e4"
   },
-  "D:/3Q-facility-Dashboard/client/src/features/production-orders/components/WovenPlanningForm.tsx": {
-    "mtime": 1790062045653.1775,
-    "hash": "dff8c6d9133166b105c2c71a8be6bd2d"
-  },
   "D:/3Q-facility-Dashboard/client/src/features/production-orders/components/WovenProductionPanel.tsx": {
-    "mtime": 1790170823394.7107,
-    "hash": "3ca6c53fab4efb9a9563d91aea2cec21"
+    "mtime": 1791556265944.4417,
+    "hash": "4c7f21b8e0a88576c5719c04f39833bc"
   },
   "D:/3Q-facility-Dashboard/client/src/features/production-orders/components/WovenThreadReconciliationCard.tsx": {
     "mtime": 1785848624703.9404,
@@ -732,8 +728,8 @@
     "hash": "2ae4a65e3d89865bebbe366303be820f"
   },
   "D:/3Q-facility-Dashboard/client/src/features/production-orders/hooks/use-batches.ts": {
-    "mtime": 1786531977131.7825,
-    "hash": "46f27e7115f639b67226edba57718c9d"
+    "mtime": 1790681416401.7324,
+    "hash": "656744f1c7a06542b62477b6def29510"
   },
   "D:/3Q-facility-Dashboard/client/src/features/production-orders/hooks/use-completion-celebration.ts": {
     "mtime": 1785303030618.8345,
@@ -748,19 +744,19 @@
     "hash": "84e1765f17e16fc14cc2131ca8f62e0a"
   },
   "D:/3Q-facility-Dashboard/client/src/features/production-orders/index.ts": {
-    "mtime": 1790062051145.8271,
-    "hash": "217abdeb59d6a2556b0c3ea0c4494348"
+    "mtime": 1790681623347.8892,
+    "hash": "d8ea14c0870781e21b733fde35462719"
   },
   "D:/3Q-facility-Dashboard/client/src/features/production-orders/label-types.ts": {
-    "mtime": 1789202260744.4402,
-    "hash": "d82d7f7617c1e9909deba114b4d7b99b"
+    "mtime": 1789989175049.54,
+    "hash": "a744908364ce71ac9478a05b2a732faa"
   },
   "D:/3Q-facility-Dashboard/client/src/features/production-orders/pages/ProductionOrderDashboardPage.tsx": {
-    "mtime": 1790007685237.2993,
-    "hash": "4f2717f656ce9d14c8d77d2ff16ffced"
+    "mtime": 1791903334859.584,
+    "hash": "ad96fae296bd14816e7bf0517cfca2ae"
   },
   "D:/3Q-facility-Dashboard/client/src/features/production-orders/pages/ProductionOrderListPage.tsx": {
-    "mtime": 1786027218132.4915,
+    "mtime": 1790180429162.3848,
     "hash": "255948692af001585077559cd6563f48"
   },
   "D:/3Q-facility-Dashboard/client/src/features/production-orders/pages/ProductionOrderPlanningPage.tsx": {
@@ -768,12 +764,12 @@
     "hash": "4b3edcbffddeb92788d72f588979f5c4"
   },
   "D:/3Q-facility-Dashboard/client/src/features/production-orders/schemas/production-order-schemas.ts": {
-    "mtime": 1789208636869.8198,
-    "hash": "d7a351a7560e89d1752b0fd3f060e43e"
+    "mtime": 1790239928864.4868,
+    "hash": "81621c8377eaf3eb428e7f2d971e6ee5"
   },
   "D:/3Q-facility-Dashboard/client/src/features/production-orders/services/batch-service.ts": {
-    "mtime": 1786531977114.2688,
-    "hash": "f1ff041a5a8263ef4061c40eea369477"
+    "mtime": 1790681233319.2078,
+    "hash": "3a122c273323bac36ad3747a2c8c7986"
   },
   "D:/3Q-facility-Dashboard/client/src/features/production-orders/services/production-order-service.ts": {
     "mtime": 1786526744419.0593,
@@ -948,12 +944,12 @@
     "hash": "58aa8fdb144299828d08fa3fd7e0352d"
   },
   "D:/3Q-facility-Dashboard/client/src/features/work-orders/components/DispatchDialog.tsx": {
-    "mtime": 1786116127294.298,
-    "hash": "438206301f9cd9a08b1e48fcebd6c97f"
+    "mtime": 1791973810229.19,
+    "hash": "1a4e28a76a4a3010ea7acb1cd4b2e211"
   },
   "D:/3Q-facility-Dashboard/client/src/features/work-orders/components/DispatchInfo.tsx": {
-    "mtime": 1786371630889.7703,
-    "hash": "8dc837c74418f9f7c87d252cfba4ff72"
+    "mtime": 1791971441199.139,
+    "hash": "099d0bf58e23bfd0b4e81a51f9e9f611"
   },
   "D:/3Q-facility-Dashboard/client/src/features/work-orders/components/OrderInfo.tsx": {
     "mtime": 1786026512271.969,
@@ -964,8 +960,8 @@
     "hash": "dbb0510bcf317b1a21977eadf19b6c53"
   },
   "D:/3Q-facility-Dashboard/client/src/features/work-orders/components/WorkOrderDialog.tsx": {
-    "mtime": 1790170212930.1785,
-    "hash": "8d36e63d2dc741698976d7cf23399711"
+    "mtime": 1791972893380.249,
+    "hash": "b3137ee01714ac3bfdec2141e109dcee"
   },
   "D:/3Q-facility-Dashboard/client/src/features/work-orders/components/WovenSpecification.tsx": {
     "mtime": 1790173644575.3904,
@@ -1000,16 +996,16 @@
     "hash": "d772825223eab36440027b77ab831cb1"
   },
   "D:/3Q-facility-Dashboard/client/src/features/work-orders/schemas/work-order-schemas.ts": {
-    "mtime": 1786374449604.1475,
-    "hash": "1adc54913166a45fb33a95df99d3433f"
+    "mtime": 1791970080871.4878,
+    "hash": "64a223ac5fe028dc62453a96a9571146"
   },
   "D:/3Q-facility-Dashboard/client/src/features/work-orders/services/work-order-service.ts": {
     "mtime": 1785497620130.215,
     "hash": "29235dfa409697d1ec23b2327d07e853"
   },
   "D:/3Q-facility-Dashboard/client/src/features/work-orders/types.ts": {
-    "mtime": 1790173510044.193,
-    "hash": "26ca4f3baa283b05c78b7444339181f6"
+    "mtime": 1791969875834.7363,
+    "hash": "6e9b4ae7e6296efb6949d0f780fa88bd"
   },
   "D:/3Q-facility-Dashboard/client/src/hooks/use-mobile.ts": {
     "mtime": 1784117253911.8513,
@@ -1156,8 +1152,8 @@
     "hash": "7d173d37a0680b1a4906d02cd608024e"
   },
   "D:/3Q-facility-Dashboard/client/src/shared/navigation.ts": {
-    "mtime": 1786012328182.639,
-    "hash": "a0e4d7efc6eb05b9e5d0511d4c065418"
+    "mtime": 1791634678337.5833,
+    "hash": "3c845abe6d4e04773e42abd70bcac8db"
   },
   "D:/3Q-facility-Dashboard/client/src/store/ui-store.ts": {
     "mtime": 1784195778462.0054,
@@ -1180,28 +1176,12 @@
     "hash": "9fcf75521f4c43fd8b75300e0f63b867"
   },
   "D:/3Q-facility-Dashboard/client/vite.config.js": {
-    "mtime": 1784904206777.114,
-    "hash": "94894c0c8dfcc5f2e9f8544e5cfa6a55"
-  },
-  "D:/3Q-facility-Dashboard/client/vite.config.ts": {
-    "mtime": 1784904022466.7795,
-    "hash": "61e79c4b5bf572ee1c22d57e773119c2"
+    "mtime": 1791887301062.0967,
+    "hash": "e3c411f2b772b1add0b6ee6f459f2d9f"
   },
   "D:/3Q-facility-Dashboard/client/vitest.config.ts": {
     "mtime": 1785152355991.677,
     "hash": "45346c41eb368e44d87fadae49cdadd8"
-  },
-  "D:/3Q-facility-Dashboard/fix-assert-resources.js": {
-    "mtime": 1789203055648.0154,
-    "hash": "a8353b4a669ed3888c1a5070f3d240b3"
-  },
-  "D:/3Q-facility-Dashboard/fix-bb.js": {
-    "mtime": 1789203311471.734,
-    "hash": "1681848e726fcc34ee525575a14af429"
-  },
-  "D:/3Q-facility-Dashboard/fix-bb.py": {
-    "mtime": 1789203470935.9045,
-    "hash": "6e44b39d9528d156831193010286f907"
   },
   "D:/3Q-facility-Dashboard/server/drizzle.config.ts": {
     "mtime": 1790083916548.002,
@@ -1308,8 +1288,8 @@
     "hash": "dd214bfffbde5e6a9e3bccfec122c398"
   },
   "D:/3Q-facility-Dashboard/server/src/app.ts": {
-    "mtime": 1790158771550.467,
-    "hash": "97c956eeb9fab217b1fd76f5e2d6b148"
+    "mtime": 1791894349071.0774,
+    "hash": "cbc279516a0c70fd948c3c16e90fbd86"
   },
   "D:/3Q-facility-Dashboard/server/src/index.ts": {
     "mtime": 1786374336488.5242,
@@ -1324,8 +1304,8 @@
     "hash": "7d34bb7de659f4d96dc49683982f6c8e"
   },
   "D:/3Q-facility-Dashboard/server/vitest.config.ts": {
-    "mtime": 1790086958475.522,
-    "hash": "0b730c116f617bacaffe4bdede187fcf"
+    "mtime": 1790412396223.3054,
+    "hash": "abdb06a2365ee99344c09b1af2a01552"
   },
   "D:/3Q-facility-Dashboard/CLAUDE.md": {
     "mtime": 1790160373792.6514,
@@ -1358,10 +1338,6 @@
   "D:/3Q-facility-Dashboard/server/scripts/verify-migration.mjs": {
     "mtime": 1790091529823.5193,
     "hash": "14f88613438b676460af801ace90d821"
-  },
-  "D:/3Q-facility-Dashboard/server/seed-master.ts": {
-    "mtime": 1789562433798.1758,
-    "hash": "648085a9ac75bd5d99e1d642aa39baed"
   },
   "D:/3Q-facility-Dashboard/server/src/modules/analytics/analytics.controller.ts": {
     "mtime": 1790152464832.644,
@@ -1408,7 +1384,7 @@
     "hash": "9aec872a1a24bb55f7b9dfada49819ba"
   },
   "D:/3Q-facility-Dashboard/server/src/modules/ink/ink.repository.ts": {
-    "mtime": 1786011852583.8882,
+    "mtime": 1791634709960.236,
     "hash": "05c7d7e7e52684c18e7168379f571d06"
   },
   "D:/3Q-facility-Dashboard/server/src/modules/ink/ink.routes.ts": {
@@ -1544,20 +1520,20 @@
     "hash": "13b537855588db2deb6ab94e5cb66735"
   },
   "D:/3Q-facility-Dashboard/server/src/modules/work-orders/work-order.controller.ts": {
-    "mtime": 1790152465532.4397,
+    "mtime": 1790180155502.2056,
     "hash": "eaf606ace6df1a2b8fbf71768e070187"
   },
   "D:/3Q-facility-Dashboard/server/src/modules/work-orders/work-order.repository.ts": {
-    "mtime": 1790173344072.1797,
-    "hash": "75b00bb4c212019643579535f1750262"
+    "mtime": 1791969030028.946,
+    "hash": "fa6c37465f6e432eb906c3b6393f5fa5"
   },
   "D:/3Q-facility-Dashboard/server/src/modules/work-orders/work-order.schema.ts": {
-    "mtime": 1786374349915.5298,
-    "hash": "59b5473aa475eaf992cc5af0ea8486bd"
+    "mtime": 1791969150770.545,
+    "hash": "45af5b074ffa1f6ed5395e8a78f86403"
   },
   "D:/3Q-facility-Dashboard/server/src/modules/work-orders/work-order.service.ts": {
-    "mtime": 1790173459700.83,
-    "hash": "acdb36e6bcf4e80b9b97bd4e9acf388b"
+    "mtime": 1791969177313.262,
+    "hash": "5da6b43f5b602db787c998bc73d99980"
   },
   "D:/3Q-facility-Dashboard/server/src/modules/work-orders/work-orders.routes.ts": {
     "mtime": 1790158771913.3013,
@@ -1584,8 +1560,8 @@
     "hash": "aa6d8f40ac002d6c178c6ec43b76d6c5"
   },
   "D:/3Q-facility-Dashboard/server/src/shared/constants/messages.ts": {
-    "mtime": 1786011810112.6775,
-    "hash": "b2d6c430c1ca4c67734e9b3501df2539"
+    "mtime": 1791627091725.8735,
+    "hash": "f45033181fd543da24a9305feca2656c"
   },
   "D:/3Q-facility-Dashboard/server/src/shared/db/apply-migration.ts": {
     "mtime": 1789745276358.401,
@@ -1640,8 +1616,8 @@
     "hash": "1190568c7b6eb157476c44c232458385"
   },
   "D:/3Q-facility-Dashboard/server/src/shared/db/schema.ts": {
-    "mtime": 1790152465686.1516,
-    "hash": "1266c767f0d5986ac72cb2689b4fc442"
+    "mtime": 1791626439231.915,
+    "hash": "c7eba16ac85e4e5dc796f50c5ca01540"
   },
   "D:/3Q-facility-Dashboard/server/src/shared/db/seed-all.ts": {
     "mtime": 1789477799009.3875,
@@ -1720,12 +1696,12 @@
     "hash": "e1ae2f9f464629cb03627e2d59521bf6"
   },
   "D:/3Q-facility-Dashboard/server/src/shared/db/tables/production-batches.table.ts": {
-    "mtime": 1790152465773.6829,
-    "hash": "8ced80ed21dbc4ff052c9ceb42d4cd62"
+    "mtime": 1791967317301.9832,
+    "hash": "c62049a99d0a730ad62a283c76a9c756"
   },
   "D:/3Q-facility-Dashboard/server/src/shared/db/tables/production-order-lines.table.ts": {
-    "mtime": 1790152465788.679,
-    "hash": "74c007a04fdfdca63e6e49df1a69d2bb"
+    "mtime": 1791627897725.7097,
+    "hash": "0c940876c39d51ac2ad4c6244629cb75"
   },
   "D:/3Q-facility-Dashboard/server/src/shared/db/tables/production-orders.table.ts": {
     "mtime": 1790152465789.6797,
@@ -1796,8 +1772,8 @@
     "hash": "6d012aed078c12b6ff42b9b233b72f84"
   },
   "D:/3Q-facility-Dashboard/server/src/shared/db/tables/work-orders.table.ts": {
-    "mtime": 1790152465925.2043,
-    "hash": "b7267806fce7a8c73f69492c56ebbad4"
+    "mtime": 1791969007211.2646,
+    "hash": "6cf2b33107c9da28b62789f5f5267bcc"
   },
   "D:/3Q-facility-Dashboard/server/src/shared/db/tables/woven-production-lines.table.ts": {
     "mtime": 1790152465934.2383,
@@ -1878,5 +1854,385 @@
   "D:/3Q-facility-Dashboard/.github/workflows/ci.yml": {
     "mtime": 1785304831093.8,
     "hash": "22dda58473ac1a9fdf6b54629c4590e6"
+  },
+  "D:/3Q-facility-Dashboard/client/src/features/production-orders/components/SharedThreadAllocation.tsx": {
+    "mtime": 1790240152559.8037,
+    "hash": "2d843f5ab2598eeaf65c84b071dfd4f2"
+  },
+  "D:/3Q-facility-Dashboard/client/src/features/production-orders/services/batch-service.test.ts": {
+    "mtime": 1790681976318.7197,
+    "hash": "ff4471f9f0b12e7e841af5517084c6e9"
+  },
+  "D:/3Q-facility-Dashboard/client/src/features/production-orders/utils/planning-dialog.test.ts": {
+    "mtime": 1790062968925.321,
+    "hash": "784d5a2dcb64d100ab7b40fa59a31324"
+  },
+  "D:/3Q-facility-Dashboard/client/src/features/production-orders/utils/planning-dialog.ts": {
+    "mtime": 1790062744001.2366,
+    "hash": "c2168bf9bea1c21802f4a5ad757d1c17"
+  },
+  "D:/3Q-facility-Dashboard/client/src/features/production-orders/utils/planning-rows.test.ts": {
+    "mtime": 1790239887960.3406,
+    "hash": "a98ac055ac9b310ab322e6a7b0025f47"
+  },
+  "D:/3Q-facility-Dashboard/client/src/features/production-orders/utils/planning-rows.ts": {
+    "mtime": 1790241406242.0654,
+    "hash": "9552391b14a9f6f5f5d56c2c2aaf0db4"
+  },
+  "D:/3Q-facility-Dashboard/client/src/features/work-orders/utils/weaving-time.test.ts": {
+    "mtime": 1790173592679.6162,
+    "hash": "0b8622dfff0c4a931d561df5dd943db6"
+  },
+  "D:/3Q-facility-Dashboard/client/src/features/work-orders/utils/weaving-time.ts": {
+    "mtime": 1790173552015.248,
+    "hash": "73c5b8c551357a30166c90952428c24b"
+  },
+  "D:/3Q-facility-Dashboard/client/src/lib/healthcheck/client_healthcheck.tsx": {
+    "mtime": 1790161133500.7922,
+    "hash": "f0862baed4eb69d2714531ebd7af99f8"
+  },
+  "D:/3Q-facility-Dashboard/client/src/lib/healthcheck/health-check-shell.tsx": {
+    "mtime": 1790160264673.8496,
+    "hash": "e1da64b83669f45e4c325e4fe11f68f2"
+  },
+  "D:/3Q-facility-Dashboard/client/src/lib/healthcheck/materials-health.ts": {
+    "mtime": 1790160979162.7595,
+    "hash": "8f2cb5e3854d6371dbd704d8a58468ab"
+  },
+  "D:/3Q-facility-Dashboard/client/src/lib/healthcheck/production-health.ts": {
+    "mtime": 1790160982074.4492,
+    "hash": "75e967659a69f09a5ed2fa1b8db20586"
+  },
+  "D:/3Q-facility-Dashboard/client/src/store/table-visibility-store.test.ts": {
+    "mtime": 1789987414682.777,
+    "hash": "504c795171bbfdb48ba1828ffcb2e77b"
+  },
+  "D:/3Q-facility-Dashboard/client/src/store/table-visibility-store.ts": {
+    "mtime": 1789987059125.9985,
+    "hash": "5c168e001db3568e57b07c03df84031e"
+  },
+  "D:/3Q-facility-Dashboard/server/drizzle/0024_woven_estimated_weaving_hours.sql": {
+    "mtime": 1790173304875.7292,
+    "hash": "1bac1f302f98697b6e4e473acb13e3f9"
+  },
+  "D:/3Q-facility-Dashboard/server/drizzle/0025_line_scoped_cutting_packaging.sql": {
+    "mtime": 1790685401981.6555,
+    "hash": "6b19eb0dcfa324d265adb2794a47a0f8"
+  },
+  "D:/3Q-facility-Dashboard/server/scripts/baseline/live-schema.sql": {
+    "mtime": 1790596981317.4387,
+    "hash": "2a959b44bf777e46e19a68587b81a1a1"
+  },
+  "D:/3Q-facility-Dashboard/server/scripts/dump-baseline.mjs": {
+    "mtime": 1790596760406.7278,
+    "hash": "3dc5bca95ca1416a3223f6de50d0093b"
+  },
+  "D:/3Q-facility-Dashboard/server/scripts/reconcile-migrations.mjs": {
+    "mtime": 1790595766279.342,
+    "hash": "8a0cdae87da9264c819313b3b3725745"
+  },
+  "D:/3Q-facility-Dashboard/server/scripts/reorganize-modules.mjs": {
+    "mtime": 1790158651122.838,
+    "hash": "a53730de5b250853fbc96d72ad33fd4f"
+  },
+  "D:/3Q-facility-Dashboard/server/scripts/tree-src.mjs": {
+    "mtime": 1790097161459.1052,
+    "hash": "6174d836c16ee0ad55b1fa7f639fa6cc"
+  },
+  "D:/3Q-facility-Dashboard/server/scripts/verify-0025-line-scoped.mjs": {
+    "mtime": 1790685591436.309,
+    "hash": "00d648fab947ad76cf2a4d8384d95ee0"
+  },
+  "D:/3Q-facility-Dashboard/server/scripts/verify-batch-constraints.mjs": {
+    "mtime": 1790682169910.1128,
+    "hash": "12973a8be495472ae87a5609adb9732e"
+  },
+  "D:/3Q-facility-Dashboard/server/scripts/verify-batch-visibility.mjs": {
+    "mtime": 1790682146123.1013,
+    "hash": "539670b96e26416e68bcb1d5a88040cc"
+  },
+  "D:/3Q-facility-Dashboard/server/scripts/verify-estimated-weaving.mjs": {
+    "mtime": 1790175525885.2866,
+    "hash": "8315a4c4843a258933ccb90f8239a5aa"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/brands/brand.controller.ts": {
+    "mtime": 1790158771618.737,
+    "hash": "409f226ebc4b2444b3a9068de939390e"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/brands/brand.routes.ts": {
+    "mtime": 1790152464901.172,
+    "hash": "9e826211a0869592722c487ac8066f4b"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/brands/brand.schema.ts": {
+    "mtime": 1790152464903.1714,
+    "hash": "226b533a645917d8084ec21f27f79ef5"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/material-receipts/material-receipts.controller.ts": {
+    "mtime": 1790152465039.703,
+    "hash": "3dfef9ad8e81b56bd391ff9b6a3dda2a"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/material-receipts/material-receipts.repository.ts": {
+    "mtime": 1790152465059.228,
+    "hash": "df3747664b9613e2a9962d2bc609fefc"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/material-receipts/material-receipts.routes.ts": {
+    "mtime": 1790152465073.2292,
+    "hash": "7df9ddfeda50080f583eea318f1544c9"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/material-receipts/material-receipts.schema.ts": {
+    "mtime": 1790152465082.2283,
+    "hash": "6fb9b1059848d059526b5e613f56dfe7"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/material-receipts/material-receipts.service.ts": {
+    "mtime": 1790152465083.2285,
+    "hash": "96ac36c61a50b756992607b0479ef55f"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/production/batch-and-runs/batch-flow.controller.ts": {
+    "mtime": 1790679390684.1487,
+    "hash": "20c1fe2d3f2edc5d9003ed7c3c7f0dca"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/production/batch-and-runs/batch-flow.helpers.test.ts": {
+    "mtime": 1790152465141.2375,
+    "hash": "421c36158d11df5630f667b67415dfeb"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/production/batch-and-runs/batch-flow.helpers.ts": {
+    "mtime": 1791968987175.034,
+    "hash": "0c26d00b6832badb983c7b96f2c59ce3"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/production/batch-and-runs/batch-flow.repository.test.ts": {
+    "mtime": 1791549646658.9988,
+    "hash": "9a6543f7a1c21c4ec517c89d415bb8b7"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/production/batch-and-runs/batch-flow.repository.ts": {
+    "mtime": 1791968793523.0696,
+    "hash": "c65e492aaf3b364a2ec38c7736334935"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/production/batch-and-runs/batch-flow.routes.ts": {
+    "mtime": 1790679424354.486,
+    "hash": "4eb8b827641bbd29a565c72f1d1990ad"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/production/batch-and-runs/batch-flow.schema.ts": {
+    "mtime": 1791968894138.5173,
+    "hash": "e4c07deec5aa3b1a17e62f86c3800952"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/production/batch-and-runs/batch-flow.service.test.ts": {
+    "mtime": 1790680285004.593,
+    "hash": "00bb35914e117abbb152381217c2084f"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/production/batch-and-runs/batch-flow.service.ts": {
+    "mtime": 1791544225866.7456,
+    "hash": "43612b1f3c60298e9f9f99c41e9e2c4c"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/production/batch-and-runs/production-run.controller.ts": {
+    "mtime": 1790152465292.3347,
+    "hash": "9ebb1e58af62226b95fec126808b8901"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/production/batch-and-runs/production-run.repository.ts": {
+    "mtime": 1790152465298.3696,
+    "hash": "8f9b3dc8ab85c2c2b48b68e6fbb8c63f"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/production/batch-and-runs/production-run.schema.ts": {
+    "mtime": 1790152465305.336,
+    "hash": "1fe7856e4e904cf85650e6d6174b3786"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/production/batch-and-runs/production-run.service.ts": {
+    "mtime": 1790152465306.3352,
+    "hash": "20977b74ed788106322fa918a98a40c9"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/production/batch-and-runs/resource-availability.service.ts": {
+    "mtime": 1790158771845.8586,
+    "hash": "5916cc2c80e6b448d2dec04591b48af4"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/production/production-orders/production-order-overview.builder.ts": {
+    "mtime": 1790152465193.7554,
+    "hash": "a5aee708d7b1d12ff1df06b07aff8b98"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/production/production-orders/production-order.controller.ts": {
+    "mtime": 1790152465195.7551,
+    "hash": "888c2c372e5170883bd8414aa7e5e39e"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/production/production-orders/production-order.helpers.test.ts": {
+    "mtime": 1790152465212.7559,
+    "hash": "a7158e160cc19ffbc22ec6f04e8f774a"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/production/production-orders/production-order.helpers.ts": {
+    "mtime": 1790152465232.7568,
+    "hash": "5afd1989ded32f41fd387776af9a5cc2"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/production/production-orders/production-order.repository.ts": {
+    "mtime": 1790152465261.3376,
+    "hash": "1bb44d85bc8bc01c8479f63490bc6095"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/production/production-orders/production-order.routes.ts": {
+    "mtime": 1790152465269.367,
+    "hash": "f8e0a3b8d807bc028fc590610a06b37a"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/production/production-orders/production-order.schema.ts": {
+    "mtime": 1790152465280.3337,
+    "hash": "ac58716404501ae9d83d9d75cba3ac3f"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/production/production-orders/production-order.service.ts": {
+    "mtime": 1790158771841.8586,
+    "hash": "f815338680d269598069f69018fcde2e"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/production/woven-production/woven-production.controller.ts": {
+    "mtime": 1790152465319.3352,
+    "hash": "64491719527248911256d0e54162168c"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/production/woven-production/woven-production.helpers.test.ts": {
+    "mtime": 1790152465336.3362,
+    "hash": "cec5ecfb3524cdaf867034aae0cb35cb"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/production/woven-production/woven-production.helpers.ts": {
+    "mtime": 1790152465345.3708,
+    "hash": "7a8fcf90c29c507d6b6a8a0b8cc0e48f"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/production/woven-production/woven-production.repository.ts": {
+    "mtime": 1790158771849.8582,
+    "hash": "f1aeaa93587107faca0ea1172b5c6aab"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/production/woven-production/woven-production.routes.ts": {
+    "mtime": 1790152465347.3726,
+    "hash": "dc233b845e4c94e126f4cfb61e9b9ccf"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/production/woven-production/woven-production.schema.ts": {
+    "mtime": 1790152465353.3718,
+    "hash": "538d26eba4b1d1083076c3d327f8c261"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/production/woven-production/woven-production.service.ts": {
+    "mtime": 1790158771853.8594,
+    "hash": "2189c722e4f8b31011904a24114bf726"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/thread/thread-dyeing/thread-dyeing.controller.ts": {
+    "mtime": 1790152465360.889,
+    "hash": "7a6593dd76189c5d5a58711e947c8d37"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/thread/thread-dyeing/thread-dyeing.repository.ts": {
+    "mtime": 1790158771855.1677,
+    "hash": "206ee677c3d18364338d81b27dfaa1d0"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/thread/thread-dyeing/thread-dyeing.routes.ts": {
+    "mtime": 1790152465392.8877,
+    "hash": "085a6f4da3b2bc8d251ed3db75f80c83"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/thread/thread-dyeing/thread-dyeing.schema.ts": {
+    "mtime": 1790152465399.8865,
+    "hash": "f083d37c563596df0c1dfca5df52e257"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/thread/thread-dyeing/thread-dyeing.service.ts": {
+    "mtime": 1790158771865.1663,
+    "hash": "67bde38e91c3a8fb4b7b91e62e8e9ecf"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/thread/thread-inventory/thread-inventory.controller.ts": {
+    "mtime": 1790152465402.8875,
+    "hash": "148b89821d2360a0d9dad2b2bdd4cb39"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/thread/thread-inventory/thread-inventory.repository.ts": {
+    "mtime": 1790152465424.9177,
+    "hash": "2d70315234b31406f78f8d116040a879"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/thread/thread-inventory/thread-inventory.routes.ts": {
+    "mtime": 1790152465425.8914,
+    "hash": "a056beaa79608073d4da5a3f523ff007"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/thread/thread-inventory/thread-inventory.schema.ts": {
+    "mtime": 1790152465455.4292,
+    "hash": "f809cdb3f2217313048cb94ce597ea90"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/thread/thread-inventory/thread-inventory.service.ts": {
+    "mtime": 1790152465479.4358,
+    "hash": "c496eb28013a1e9920a08909ecdae3e3"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/thread/thread-service-provider/thread-service-provider.controller.ts": {
+    "mtime": 1790152465485.4363,
+    "hash": "9f35adfbfa471b8386bc1c2b4f44a24b"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/thread/thread-service-provider/thread-service-provider.repository.ts": {
+    "mtime": 1790152465485.4363,
+    "hash": "927511ce74fcd29ae0fbc512fd17b061"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/thread/thread-service-provider/thread-service-provider.routes.ts": {
+    "mtime": 1790152465486.4363,
+    "hash": "fb8fe70cc18116eaa94404a1797a2360"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/thread/thread-service-provider/thread-service-provider.schema.ts": {
+    "mtime": 1790152465505.4402,
+    "hash": "0ae84930559724b9a083cc17fe3a3ce0"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/thread/thread-service-provider/thread-service-provider.service.ts": {
+    "mtime": 1790152465506.4397,
+    "hash": "5c29129d0afd0c1ede1eefd4b140fb0f"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/work-orders/work-order.helpers.test.ts": {
+    "mtime": 1790173340237.0205,
+    "hash": "7250d54d272045d83c2fea3eec047e63"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/work-orders/work-order.helpers.ts": {
+    "mtime": 1790173407362.7168,
+    "hash": "955c764ed9c53652639edd16794533b3"
+  },
+  "D:/3Q-facility-Dashboard/tox.mjs": {
+    "mtime": 1790160308345.2058,
+    "hash": "17c3575d532f4bb8faabdbbff29c3b89"
+  },
+  "D:/3Q-facility-Dashboard/.github/copilot-instructions.md": {
+    "mtime": 1789211041105.1897,
+    "hash": "b14087686af7d9a240291457a32b9ae0"
+  },
+  "D:/3Q-facility-Dashboard/implementation.md": {
+    "mtime": 1791984250101.0884,
+    "hash": "68c74e9064c372125eca817ed39372e0"
+  },
+  "D:/3Q-facility-Dashboard/implementation_spec.md": {
+    "mtime": 1790083214936.0515,
+    "hash": "f53f439605f600fc58fe6acc8d941d85"
+  },
+  "D:/3Q-facility-Dashboard/memory-bank/activeContext.md": {
+    "mtime": 1791618380179.5535,
+    "hash": "7a6fbb924e008421687c3242748ec7e3"
+  },
+  "D:/3Q-facility-Dashboard/memory-bank/migration-reconciliation.md": {
+    "mtime": 1790686446227.0508,
+    "hash": "4ea16545870d616c7a8f2b8b769d64f9"
+  },
+  "D:/3Q-facility-Dashboard/memory-bank/progress.md": {
+    "mtime": 1791979679985.624,
+    "hash": "8b8717b5f0d8092db0d78b25dd3c5397"
+  },
+  "D:/3Q-facility-Dashboard/memory-bank/projectbrief.md": {
+    "mtime": 1790686735083.8071,
+    "hash": "c5afb99ddb5dc47d980613827b0099f5"
+  },
+  "D:/3Q-facility-Dashboard/server/scripts/baseline/README.md": {
+    "mtime": 1790596872657.6858,
+    "hash": "4c38e6a49db22f6e4457f300593e398e"
+  },
+  "D:/3Q-facility-Dashboard/server/drizzle/0026_label_types.sql": {
+    "mtime": 1791811507430.6501,
+    "hash": "90d4c5c1cc1a4c55ef5920190a571875"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/label-types/label-types.controller.ts": {
+    "mtime": 1791640494345.7852,
+    "hash": "9d66b7a6f6c136e599d395734406d155"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/label-types/label-types.repository.ts": {
+    "mtime": 1791626913249.762,
+    "hash": "ba856f9d39271be2151de36555333dde"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/label-types/label-types.routes.ts": {
+    "mtime": 1791627197963.6206,
+    "hash": "0211db5e3e58c69eeb1dd73c009189ec"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/label-types/label-types.schema.ts": {
+    "mtime": 1791896454543.0557,
+    "hash": "977caabef0fe075c1e09fb5cc1198c26"
+  },
+  "D:/3Q-facility-Dashboard/server/src/modules/label-types/label-types.service.ts": {
+    "mtime": 1791627307055.8506,
+    "hash": "21e01b8f96f8a3eaa0d25a2cb168243d"
+  },
+  "D:/3Q-facility-Dashboard/server/src/shared/db/tables/label-types.table.ts": {
+    "mtime": 1791626384292.972,
+    "hash": "771bd8a24d113327615a7dfef584d91a"
   }
 }

@@ -9,11 +9,17 @@ but it is a **work-in-progress branch** (`chore/ci`) with a **clean working tree
 the large dirty change set was committed as atomic commits on 2026-09-26 (see
 "Working-tree state" below).
 
-### Verified gate state right now (re-verified 2026-09-29, line-scoped pass)
+### Verified gate state right now (re-verified 2026-10-14, with client-side waste fixes)
+
+Post-change verification (client-side edits to BatchOutputDialog.tsx, batch-types.ts, BatchStageBoard.tsx):
+- `client/`: `npm run typecheck` -> 0 errors; `npm test` -> **7 files / 67 tests**
+- `server/`: `npm run typecheck` -> **0 errors**; `npm test` -> **9 files / 123 tests**;
+- `graphify update .` -> 2943 nodes, 7009 edges, 155 communities rebuilt
+
 - `client/`: `npm run typecheck` → 0 errors; `npm test` → **7 files / 67 tests**
   (`utils/batch-scope.test.ts` deleted with the scope decision;
   `services/batch-service.test.ts` added — it pins the line-scoped URLs).
-- `server/`: `npm run typecheck` → **0 errors**; `npm test` → **9 files / 122 tests**;
+- `server/`: `npm run typecheck` → **0 errors**; `npm test` → **9 files / 123 tests**;
   `npm run build` → tsup OK and `server/api/index.js` regenerated; migration 0025 validated
   end-to-end on a scratch DB by `scripts/verify-0025-line-scoped.mjs` (**all checks pass**).
 - ⚠ **Live is still pre-0025** (verified 2026-09-29): `production_batches_first_stage_one_line`
@@ -64,7 +70,7 @@ included. What landed:
   its mix chips removed (the server no longer sends it — rendering it would have thrown).
   New `services/batch-service.test.ts` pins the line URLs for all four stages and asserts no
   method can reach a `/production/orders/:stage-batches/…` route again.
-- **Gates (2026-09-29)**: server typecheck **0 errors** · `npm test` **9 files / 122 tests** ·
+- **Gates (2026-09-29)**: server typecheck **0 errors** · `npm test` **9 files / 123 tests** ·
   `npm run build` OK (`api/index.js` regenerated); client typecheck **0 errors** · `npm test`
   **7 files / 67 tests**.
 - **NOT yet done:** 0025 has **not** been applied to the live Supabase database (verified 2026-09-29
@@ -310,6 +316,8 @@ CHECK forbids those batches to have (`implementation.md` §13).
    the deferred follow-ups below.
 
 ## Deferred follow-ups from the refactor
+- Vite dev server proxy errors: `localhost` DNS resolution fails (ECONNREFUSED for A/AAAA queries), causing ENOBUFS/EADDRINUSE errors. **FIXED**: Replaced Vite's built-in proxy with a custom plugin using `http-proxy-middleware` and a singleton keep-alive HTTP agent (`maxSockets: 100`). The built-in http-proxy closure captured options before agent could be set. Also changed proxy target to `127.0.0.1`. Added `http-proxy-middleware` dev dependency (`client/vite.config.ts`).
+- Migration 0025 (`production_batches_line_scoped_cutting_packaging.sql`): Applied to live database via `npx drizzle-kit migrate`. Database now has `production_batches_one_line` CHECK constraint, replacing the old `production_batches_first_stage_one_line`. Cutting/packaging batches now support line-scoped configuration.
 - `batch-flow.repository.ts#assertResourcesFreeTx` builds SQL by string concatenation
   — parameterise with `sql.join`/bound values (also fixes an `IN (null)` no-op edge case).
 - Repository-level `throw new NotFoundError/ConflictError` across ~10 repositories
@@ -336,3 +344,41 @@ CHECK forbids those batches to have (`implementation.md` §13).
   RULES: never hand an array to `Set-Content -NoNewline`; write files with
   `[System.IO.File]::WriteAllText($path,$text,(New-Object System.Text.UTF8Encoding($false)))`;
   repo source files use CRLF.
+
+
+### Waste tracking without auto-headroom (follow-up 2026-10-14)
+- changed remainingPlannedTx/remainingPlannedSizeTx to return planned - totalAssigned (waste excluded from ceiling)
+- changed isReadyForCompletion to check packagedProduced + wastedTotal >= planned
+- verification: Server 123/123 OK, Client 67/67 OK, build OK, graphify OK, implementation.md written
+
+## Edit batch flow — wired (2026-10-15)
+
+- `client/src/features/production-orders/utils/batch-edit.ts` — pure, side-effect-free edit-rule module with 21 unit tests covering the three client/server ceiling mismatches: `editFloor` (produced + wasted), `editSourceCap` (live availability + the batch's own hold re-added), `firstStageCap` (remainingPlanned + the batch's own first-stage assignment), `mergeEditSources` (re-adds held sources the live query filtered out), `validateBatchEdit`, `buildBatchUpdateBody`.
+- `EditBatchDialog.tsx` (new) — standalone editor mirroring CreateBatchDialog: prefilled state, plan ceiling banner, plan select with the edit-aware `SourcePicker` (`ownAllocations`), machine/operator selects via `useStageResources(stage, lineId, batch.id)` so the batch's own resources stay selectable, notes, floor line, inline server-style validation; submits via `updateBatch.mutateAsync`.
+- `CreateBatchDialog.tsx` — `SourcePicker` exported with an optional `ownAllocations` prop so its cap/label/max-All logic is edit-aware while staying byte-identical for create-mode.
+- `BatchStageBoard.tsx` — `editBatch` state threaded through `StagePanel` -> `BatchRow`; Edit `RowAction` (Pencil icon, first position, gated by `!readOnly && canTakeAction`); renders `<EditBatchDialog/>` alongside the existing create/output/trace dialogs.
+- **Client gate (2026-10-15):** `npm run typecheck` -> 0 errors; `npm test` -> **8 files / 88 tests** (added `batch-edit.test.ts`, 21 tests; server unchanged this session).
+- graphify CLI unavailable in this environment (see activeContext line 328) — `GRAPH_REPORT.md` not refreshed.
+
+## Roll progress tracking → required rolls (2026-10-19, act)
+- Progress % for Printing/Cutting/Packaging and order readiness is now measured against
+  `requiredRolls` (required, excludes extra/buffer) instead of `totalRolls`. When
+  `requiredRolls` is 0 (legacy), behaviour falls back to `totalRolls`.
+- Over-producing past required is allowed: progress % is clamped at 100 and the stage
+  stays Complete. Completion stamps (`printingCompletedAt`/`cuttingCompletedAt`/
+  `packagingCompletedAt`), line `status = completed`, Production Summary stage badges,
+  the batch-board "ready to complete" banner, and dashboard bars all flip Complete once
+  produced >= required. Inventory-position counters (unprinted/printable/remaining) and
+  assignment capacity (`remainingPlanned`, output ≤ assigned, printed ≤ totalRolls,
+  assertWithinPlan) stay on `totalRolls` so extra rolls remain assignable and producible.
+- Server: `production-formula.ts` (new `progressTargetOf`, `completionPct` clamped),
+  `production-order.helpers.ts` (`stageCompletionPatch`, `deriveLineStatus`),
+  `production-order-overview.builder.ts` (per-stage + totals progress, isReadyForCompletion),
+  `batch-flow.helpers.ts` (`isReadyForCompletion` target), `batch-flow.service.ts`
+  (exposes `required` per line + totals). Woven path untouched (quantity-based).
+- Client mirrors: `line-draft.ts` optimistic `patchOverviewLine` + local `completionPct`,
+  `StageProgressBars.tsx`, `roll-columns.tsx`; `LineFlow.required?`.
+- Tests: helpers + batch-flow + formula server suites extended; client `line-draft.test.ts`
+  gains `patchOverviewLine` cases.
+- Gate: server typecheck OK, server tests 139/139; client typecheck OK, client tests 92/92;
+  server build OK (`server/api/index.js` rebuilt). graphify unavailable.

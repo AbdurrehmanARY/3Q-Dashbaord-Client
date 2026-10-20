@@ -1,4 +1,4 @@
-# Node Description Batch 17 of 53
+# Node Description Batch 17 of 74
 
 Graphify is running in assistant/skill mode (no API key). You are the host
 assistant (Claude Code / Codex / Gemini CLI). Read the prompt below and write
@@ -12,51 +12,60 @@ describing what it is or does. Use only the provided context.
 For a code symbol (kind=code-symbol — a function, class, or constant),
 describe what the function/symbol does based on its name, source location
 and neighbors — e.g. "Resolves the configured ontology profile from graphify.yaml.".
-Write every description in English (en). Do not switch languages.
+For an entity node (any other kind — e.g. a person, place, event, object),
+describe what the entity is and its role, grounded in its type, its
+relations (neighbors) and the provided citations/evidence — e.g.
+"Lady Carfax, a wealthy heiress who disappears en route to Lausanne.".
+Ground entity descriptions in the citations/evidence when present; do not
+speculate beyond the context, so a node with no supporting context may be
+left out of the reply.
+LANGUAGE: each entry has a `lang=` marker giving the language of its source.
+Write that entry's description in EXACTLY that language. Do not translate to
+a single common language — match each node's source language individually.
 No marketing language.
 Respond ONLY with a JSON object mapping each node id (as a string) to its
 one-sentence description — no prose, no markdown fences.
 
-- "formulas_production_formula_calculaterequiredrolls": "calculateRequiredRolls()" | kind=code-symbol | source=server/src/shared/formulas/production-formula.ts:L20 | neighbors=[seed.ts, production-formula.ts, production-formula.test.ts]
-- "formulas_production_formula_calculatetotalrolls": "calculateTotalRolls()" | kind=code-symbol | source=server/src/shared/formulas/production-formula.ts:L36 | neighbors=[seed.ts, production-formula.ts, production-formula.test.ts]
-- "hooks_use_companies_usecompanybrands": "useCompanyBrands()" | kind=code-symbol | source=client/src/features/companies/hooks/use-companies.ts:L18 | neighbors=[index.ts, BrandTable.tsx, use-companies.ts]
-- "hooks_use_ink_useinkstock": "useInkStock()" | kind=code-symbol | source=client/src/features/ink/hooks/use-ink.ts:L18 | neighbors=[InkConsumptionDialog.tsx, InkStockPanel.tsx, use-ink.ts]
-- "hooks_use_inventory_useinventorystock": "useInventoryStock()" | kind=code-symbol | source=client/src/features/inventory/hooks/use-inventory.ts:L11 | neighbors=[inventory-stock-table.tsx, use-inventory.ts, index.ts]
-- "hooks_use_mobile": "use-mobile.ts" | kind=code-symbol | source=client/src/hooks/use-mobile.ts:L1 | neighbors=[c0c79ec Initial commit: Label Manufactu…, useIsMobile(), sidebar.tsx]
-- "hooks_use_production_orders_useavailableresources": "useAvailableResources()" | kind=code-symbol | source=client/src/features/production-orders/hooks/use-production-orders.ts:L35 | neighbors=[EditableLabelTypeTable.tsx, PlanLabelTypeForm.tsx, use-production-orders.ts]
-- "hooks_use_production_orders_useproductionorders": "useProductionOrders()" | kind=code-symbol | source=client/src/features/production-orders/hooks/use-production-orders.ts:L48 | neighbors=[production-order-table.tsx, use-production-orders.ts, index.ts]
-- "hooks_use_thread_dyeing_useproviders": "useProviders()" | kind=code-symbol | source=client/src/features/thread-dyeing/hooks/use-thread-dyeing.ts:L12 | neighbors=[SendDyeingDialog.tsx, use-thread-dyeing.ts, ThreadDyeingPage.tsx]
-- "hooks_use_thread_usethreadpurchases": "useThreadPurchases()" | kind=code-symbol | source=client/src/features/thread/hooks/use-thread.ts:L39 | neighbors=[ThreadPurchasePanel.tsx, use-thread.ts, index.ts]
-- "hooks_use_thread_usethreadstocks": "useThreadStocks()" | kind=code-symbol | source=client/src/features/thread/hooks/use-thread.ts:L15 | neighbors=[DyeThreadDialog.tsx, use-thread.ts, index.ts]
-- "hooks_use_thread_usethreadstocksummary": "useThreadStockSummary()" | kind=code-symbol | source=client/src/features/thread/hooks/use-thread.ts:L23 | neighbors=[ThreadStockPanel.tsx, use-thread.ts, index.ts]
-- "hooks_use_work_orders_useworkorders": "useWorkOrders()" | kind=code-symbol | source=client/src/features/work-orders/hooks/use-work-orders.ts:L12 | neighbors=[work-order-table.tsx, use-work-orders.ts, index.ts]
-- "hooks_use_woven_production_useplanwovenline": "usePlanWovenLine()" | kind=code-symbol | source=client/src/features/production-orders/hooks/use-woven-production.ts:L36 | neighbors=[PlanLabelTypeDialog.tsx, WovenProductionPanel.tsx, use-woven-production.ts]
-- "hooks_use_woven_production_usewovenoverview": "useWovenOverview()" | kind=code-symbol | source=client/src/features/production-orders/hooks/use-woven-production.ts:L16 | neighbors=[WovenProductionPanel.tsx, use-woven-production.ts, index.ts]
-- "ink_types_inkconsumptioninput": "InkConsumptionInput" | kind=code-symbol | source=client/src/features/ink/types.ts:L46 | neighbors=[use-ink.ts, types.ts, ink-service.ts]
-- "ink_types_inkpurchaseinput": "InkPurchaseInput" | kind=code-symbol | source=client/src/features/ink/types.ts:L15 | neighbors=[use-ink.ts, types.ts, ink-service.ts]
-- "inventory_inventory_roll_service_assertnonnegative": "assertNonNegative()" | kind=code-symbol | source=server/src/modules/inventory/inventory-roll.service.ts:L32 | neighbors=[inventory-roll.service.ts, .createInventoryRoll(), .updateInventoryRoll()]
-- "inventory_inventory_roll_service_inventoryrollservice_createinventoryroll": ".createInventoryRoll()" | kind=code-symbol | source=server/src/modules/inventory/inventory-roll.service.ts:L66 | neighbors=[InventoryRollService, assertNonNegative(), withPerSkuBalance()]
-- "inventory_inventory_roll_service_inventoryrollservice_updateinventoryroll": ".updateInventoryRoll()" | kind=code-symbol | source=server/src/modules/inventory/inventory-roll.service.ts:L120 | neighbors=[InventoryRollService, assertNonNegative(), withPerSkuBalance()]
-- "inventory_inventory_service_calculatederivedfields": "calculateDerivedFields()" | kind=code-symbol | source=server/src/modules/inventory/inventory.service.ts:L23 | neighbors=[inventory.service.ts, .createPurchase(), .updatePurchase()]
-- "layout_index": "index.ts" | kind=code-symbol | source=client/src/components/layout/index.ts:L1 | neighbors=[c0c79ec Initial commit: Label Manufactu…, index.ts, PageHeader.tsx]
-- "layouts_applayout_applayout": "AppLayout()" | kind=code-symbol | source=client/src/shared/layouts/AppLayout.tsx:L27 | neighbors=[AppRoutes.tsx, AppLayout.tsx, getInitialSidebarOpen()]
-- "lib_api_apierror": "ApiError" | kind=code-symbol | source=client/src/lib/api.ts:L3 | neighbors=[api.ts, .constructor(), request()]
-- "lib_celebrate_fireconfetti": "fireConfetti()" | kind=code-symbol | source=client/src/lib/celebrate.ts:L10 | neighbors=[celebrate.ts, celebrateCompletion(), prefersReducedMotion()]
-- "lib_celebrate_playsuccesschime": "playSuccessChime()" | kind=code-symbol | source=client/src/lib/celebrate.ts:L44 | neighbors=[celebrate.ts, celebrateCompletion(), prefersReducedMotion()]
-- "lib_celebrate_prefersreducedmotion": "prefersReducedMotion()" | kind=code-symbol | source=client/src/lib/celebrate.ts:L3 | neighbors=[celebrate.ts, fireConfetti(), playSuccessChime()]
-- "lib_format_calculaterequiredrolls": "calculateRequiredRolls()" | kind=code-symbol | source=client/src/lib/format.ts:L51 | neighbors=[PlanLabelTypeForm.tsx, format.ts, format.test.ts]
-- "lib_format_calculatetotalrolls": "calculateTotalRolls()" | kind=code-symbol | source=client/src/lib/format.ts:L64 | neighbors=[PlanLabelTypeForm.tsx, format.ts, format.test.ts]
-- "lib_query_client": "query-client.ts" | kind=code-symbol | source=client/src/lib/query-client.ts:L1 | neighbors=[c0c79ec Initial commit: Label Manufactu…, queryClient, QueryProvider.tsx]
-- "machines_operators_types_operator_types": "OPERATOR_TYPES" | kind=code-symbol | source=client/src/features/machines-operators/types.ts:L35 | neighbors=[operator-table.tsx, OperatorDialog.tsx, types.ts]
-- "materials_receipts_types_materialreceipt": "MaterialReceipt" | kind=code-symbol | source=client/src/features/materials/receipts-types.ts:L4 | neighbors=[MaterialReceiptPage.tsx, receipts-types.ts, material-receipts-service.ts]
-- "materials_receipts_types_receiptkind": "ReceiptKind" | kind=code-symbol | source=client/src/features/materials/receipts-types.ts:L1 | neighbors=[use-material-receipts.ts, receipts-types.ts, material-receipts-service.ts]
-- "materials_types_materialinput": "MaterialInput" | kind=code-symbol | source=client/src/features/materials/types.ts:L14 | neighbors=[use-materials.ts, types.ts, material-service.ts]
-- "middleware_ratelimiter_apiratelimiter": "apiRateLimiter" | kind=code-symbol | source=server/src/shared/middleware/rateLimiter.ts:L8 | neighbors=[index.ts, rateLimiter.ts, app.ts]
-- "operators_operator_service_normaliseavatar": "normaliseAvatar()" | kind=code-symbol | source=server/src/modules/operators/operator.service.ts:L8 | neighbors=[operator.service.ts, .createOperator(), .updateOperator()]
-- "production_orders_types_assignresourcesinput": "AssignResourcesInput" | kind=code-symbol | source=client/src/features/production-orders/types.ts:L393 | neighbors=[use-production-orders.ts, types.ts, production-order-service.ts]
-- "production_orders_types_createproductionorderinput": "CreateProductionOrderInput" | kind=code-symbol | source=client/src/features/production-orders/types.ts:L331 | neighbors=[use-production-orders.ts, types.ts, production-order-service.ts]
-- "production_orders_types_issuerollsinput": "IssueRollsInput" | kind=code-symbol | source=client/src/features/production-orders/types.ts:L386 | neighbors=[use-production-orders.ts, types.ts, production-order-service.ts]
-- "production_orders_types_lineplanning": "LinePlanning" | kind=code-symbol | source=client/src/features/production-orders/types.ts:L110 | neighbors=[types.ts, line-draft.ts, line-draft.test.ts]
+- "ui_checkbox": "checkbox.tsx" | kind=code-symbol | source=client/src/components/ui/checkbox.tsx:L1 | neighbors=[c0c79ec Initial commit: Label Manufactu…, data-table.tsx, utils.ts, cn(), Checkbox()] | lang=en
+- "ui_collapsible": "collapsible.tsx" | kind=code-symbol | source=client/src/components/ui/collapsible.tsx:L1 | neighbors=[c0c79ec Initial commit: Label Manufactu…, nav-main.tsx, Collapsible(), CollapsibleContent(), CollapsibleTrigger] | lang=en
+- "ui_progress_progress": "Progress()" | kind=code-symbol | source=client/src/components/ui/progress.tsx:L5 | neighbors=[LabelTypeRow.tsx, progress-bar.tsx, StageProgressBars.tsx, WorkOrderDetailPage.tsx, progress.tsx] | lang=en
+- "ui_scroll_area": "scroll-area.tsx" | kind=code-symbol | source=client/src/components/ui/scroll-area.tsx:L1 | neighbors=[c0c79ec Initial commit: Label Manufactu…, utils.ts, cn(), ScrollArea(), ScrollBar()] | lang=en
+- "ui_sonner": "sonner.tsx" | kind=code-symbol | source=client/src/components/ui/sonner.tsx:L1 | neighbors=[c0c79ec Initial commit: Label Manufactu…, ToastProvider.tsx, ui-store.ts, useUiStore, Toaster()] | lang=en
+- "utils_weaving_time": "weaving-time.ts" | kind=code-symbol | source=client/src/features/work-orders/utils/weaving-time.ts:L1 | neighbors=[c401a21 feat(client): weaving-time disp…, work-order-columns.tsx, WovenSpecification.tsx, estimateWeavingHours(), weaving-time.test.ts] | lang=en
+- "validation_common_schema": "common.schema.ts" | kind=code-symbol | source=server/src/shared/validation/common.schema.ts:L1 | neighbors=[ee6d4dd refactor(server): vertical-slic…, companyIdParamsSchema, idParamsSchema, lineIdParamsSchema, paginationQuerySchema] | lang=en
+- "work_orders_types_workorderdetail": "WorkOrderDetail" | kind=code-symbol | source=client/src/features/work-orders/types.ts:L109 | neighbors=[DispatchDialog.tsx, WorkOrderDialog.tsx, work-order-service.ts, types.ts, WorkOrder] | lang=en
+- "woven_production_woven_production_helpers_tonumbers": "toNumbers()" | kind=code-symbol | source=server/src/modules/production/woven-production/woven-production.helpers.ts:L12 | neighbors=[woven-production.helpers.ts, canStartCutting(), canStartPackaging(), deriveWovenLineStatus(), hasWovenProgress()] | lang=en
+- "analytics_analytics_controller": "analytics.controller.ts" | kind=code-symbol | source=server/src/modules/analytics/analytics.controller.ts:L1 | neighbors=[AnalyticsController, asyncHandler.ts, asyncHandler(), ee6d4dd refactor(server): vertical-slic…] | lang=en
+- "baseline_live_schema_public_batch_consumptions": "public.batch_consumptions" | kind=code-symbol | source=server/scripts/baseline/live-schema.sql:L251 | neighbors=[live-schema.sql, public.production_batches, public.production_orders, public.users] | lang=en
+- "baseline_live_schema_public_production_roll_issuances": "public.production_roll_issuances" | kind=code-symbol | source=server/scripts/baseline/live-schema.sql:L861 | neighbors=[live-schema.sql, public.materials, public.production_order_lines, public.users] | lang=en
+- "baseline_live_schema_public_production_stage_transactions": "public.production_stage_transactions" | kind=code-symbol | source=server/scripts/baseline/live-schema.sql:L954 | neighbors=[live-schema.sql, public.production_batches, public.production_order_lines, public.users] | lang=en
+- "baseline_live_schema_public_thread_dyeing_sends": "public.thread_dyeing_sends" | kind=code-symbol | source=server/scripts/baseline/live-schema.sql:L1188 | neighbors=[live-schema.sql, public.thread_dyeing_allocations, public.thread_dyeing_receives, public.thread_service_providers] | lang=en
+- "baseline_live_schema_public_thread_stocks": "public.thread_stocks" | kind=code-symbol | source=server/scripts/baseline/live-schema.sql:L1340 | neighbors=[live-schema.sql, public.thread_dye_batches, public.thread_stock_movements, public.woven_thread_plan_items] | lang=en
+- "baseline_live_schema_public_woven_production_lines": "public.woven_production_lines" | kind=code-symbol | source=server/scripts/baseline/live-schema.sql:L1462 | neighbors=[live-schema.sql, public.production_batches, public.production_orders, public.woven_thread_plan_items] | lang=en
+- "batch_and_runs_batch_flow_helpers_batchpositionof": "batchPositionOf()" | kind=code-symbol | source=server/src/modules/production/batch-and-runs/batch-flow.helpers.ts:L138 | neighbors=[batch-flow.helpers.ts, assertWithinAvailable(), n(), round2()] | lang=en
+- "batch_and_runs_batch_flow_repository_batchflowrepository_attachsources": ".attachSources()" | kind=code-symbol | source=server/src/modules/production/batch-and-runs/batch-flow.repository.ts:L266 | neighbors=[BatchFlowRepository, .findById(), .findByLine(), .findByOrder()] | lang=en
+- "batch_and_runs_batch_flow_repository_batchflowrepository_bumpconsumedtx": ".bumpConsumedTx()" | kind=code-symbol | source=server/src/modules/production/batch-and-runs/batch-flow.repository.ts:L1181 | neighbors=[BatchFlowRepository, .releaseAllSourcesTx(), .releaseToSourcesTx(), .replaceSourcesTx()] | lang=en
+- "batch_and_runs_batch_flow_repository_batchflowrepository_locksourcestx": ".lockSourcesTx()" | kind=code-symbol | source=server/src/modules/production/batch-and-runs/batch-flow.repository.ts:L957 | neighbors=[BatchFlowRepository, lineRefOfBatchOrNull(), round2(), .replaceSourcesTx()] | lang=en
+- "batch_and_runs_batch_flow_repository_linecolumn": "lineColumn()" | kind=code-symbol | source=server/src/modules/production/batch-and-runs/batch-flow.repository.ts:L115 | neighbors=[batch-flow.repository.ts, .findByLine(), .flowInTx(), .insertBatchTx()] | lang=en
+- "batch_and_runs_batch_flow_service_batchflowservice_createbatch": ".createBatch()" | kind=code-symbol | source=server/src/modules/production/batch-and-runs/batch-flow.service.ts:L413 | neighbors=[BatchFlowService, .getBatch(), .kindForStage(), .resolveLine()] | lang=en
+- "batch_and_runs_batch_flow_service_batchflowservice_getavailablesources": ".getAvailableSources()" | kind=code-symbol | source=server/src/modules/production/batch-and-runs/batch-flow.service.ts:L275 | neighbors=[BatchFlowService, .kindForStage(), .plannedQtyOf(), .resolveLine()] | lang=en
+- "batch_and_runs_batch_flow_service_batchflowservice_getlinebatches": ".getLineBatches()" | kind=code-symbol | source=server/src/modules/production/batch-and-runs/batch-flow.service.ts:L118 | neighbors=[BatchFlowService, .kindForStage(), .resolveLine(), .withEstimates()] | lang=en
+- "batch_and_runs_batch_flow_service_batchflowservice_getstageresources": ".getStageResources()" | kind=code-symbol | source=server/src/modules/production/batch-and-runs/batch-flow.service.ts:L344 | neighbors=[BatchFlowService, .kindForStage(), .resolveLine(), .resolveStageResources()] | lang=en
+- "batch_and_runs_batch_flow_service_batchflowservice_withestimates": ".withEstimates()" | kind=code-symbol | source=server/src/modules/production/batch-and-runs/batch-flow.service.ts:L93 | neighbors=[BatchFlowService, .getBatch(), .getLineBatches(), .getOrderBatches()] | lang=en
+- "batch_and_runs_production_run_controller": "production-run.controller.ts" | kind=code-symbol | source=server/src/modules/production/batch-and-runs/production-run.controller.ts:L1 | neighbors=[ProductionRunController, asyncHandler.ts, asyncHandler(), 558dd8a refactor(server): split flat do…] | lang=en
+- "brands_brand_controller": "brand.controller.ts" | kind=code-symbol | source=server/src/modules/brands/brand.controller.ts:L1 | neighbors=[BrandController, asyncHandler.ts, asyncHandler(), 558dd8a refactor(server): split flat do…] | lang=en
+- "cards_index": "index.ts" | kind=code-symbol | source=client/src/components/cards/index.ts:L1 | neighbors=[AppCard.tsx, StatCard.tsx, c0c79ec Initial commit: Label Manufactu…, index.ts] | lang=en
+- "commit:repo:local/3Q-facility-Dashboard@9740e304@0daa333b8127e7d6df443c8030964df2c9d4064d": "0daa333 feat(client): show live stock balance in MaterialSelect" | kind=Commit | source=git | neighbors=[chore/ci, 7318ae9 docs: memory-bank, corrected .c…, MaterialSelect.tsx, 2c8bd34 feat(client): per-table column …] | lang=en
+- "commit:repo:local/3Q-facility-Dashboard@9740e304@13b0a3c5f898256f5a7c78e84617e8ab92ba7fbd": "13b0a3c chore(server): give vitest a fallback DATABASE_URL" | kind=Commit | source=git | neighbors=[chore/ci, 558dd8a refactor(server): split flat do…, vitest.config.ts, e4ae1ff chore: ignore graphify cache/ou…] | lang=pt
+- "commit:repo:local/3Q-facility-Dashboard@9740e304@8221c40cf8f46102576c386f0824958c90e4368f": "8221c40 chore(scripts,docs): default the batch-visibility gate to the newest or…" | kind=Commit | source=git | neighbors=[0a3ef12 fix(production): order-scoped c…, chore/ci, efa0e77 chore(db): repair migration jou…, verify-batch-visibility.mjs] | lang=en
+- "commit:repo:local/3Q-facility-Dashboard@9740e304@a7e14be19c323870aed1b5d2fa4579227660e3a3": "a7e14be feat: woven planning, weaving/cutting/packaging stages, thread stock en…" | kind=Commit | source=git | neighbors=[09c4b95 feat: dispatch dialog, product-…, chore/ci, 95aebc1 feat: thread receiving, stock a…, woven-production-service.ts] | lang=pt
+- "companies_company_controller": "company.controller.ts" | kind=code-symbol | source=server/src/modules/companies/company.controller.ts:L1 | neighbors=[ee6d4dd refactor(server): vertical-slic…, CompanyController, asyncHandler.ts, asyncHandler()] | lang=en
+- "components_batchstageboard_batchstageboard": "BatchStageBoard()" | kind=code-symbol | source=client/src/features/production-orders/components/BatchStageBoard.tsx:L107 | neighbors=[BatchStageBoard.tsx, WovenProductionPanel.tsx, ProductionOrderDashboardPage.tsx, index.ts] | lang=en
+- "components_materialreceiptpage_materialreceiptpage": "MaterialReceiptPage()" | kind=code-symbol | source=client/src/features/materials/components/MaterialReceiptPage.tsx:L21 | neighbors=[MaterialReceiptPage.tsx, LabelSheetsPage.tsx, LocalSheetsPage.tsx, StickerMaterialsPage.tsx] | lang=en
+- "components_productionstatusbadge_productionorderstatusbadge": "ProductionOrderStatusBadge()" | kind=code-symbol | source=client/src/features/production-orders/components/ProductionStatusBadge.tsx:L18 | neighbors=[production-order-columns.tsx, ProductionStatusBadge.tsx, ProductionOrderDashboardPage.tsx, ProductionOrderPlanningPage.tsx] | lang=en
+- "components_purchaseform_purchaseform": "PurchaseForm()" | kind=code-symbol | source=client/src/features/purchases/components/PurchaseForm.tsx:L23 | neighbors=[purchase-row-actions.tsx, PurchaseForm.tsx, PurchaseRecordPage.tsx, RollPurchasesPage.tsx] | lang=en
+- "dashboard_types": "types.ts" | kind=code-symbol | source=client/src/features/dashboard/types.ts:L1 | neighbors=[c0c79ec Initial commit: Label Manufactu…, DashboardKpis, KpiResponse, dashboard-service.ts] | lang=en
+- "data_table_data_table_export_datatableexportcolumn": "DataTableExportColumn" | kind=code-symbol | source=client/src/shared/components/data-table/data-table-export.tsx:L8 | neighbors=[EditableLabelTypeTable.tsx, data-table.tsx, data-table-export.tsx, index.ts] | lang=en
 
 ## Instructions
 
