@@ -1,10 +1,53 @@
 import { useState } from "react";
-import { useFormContext } from "react-hook-form";
+import { useFormContext, useWatch } from "react-hook-form";
 import { Plus, X } from "lucide-react";
 import { AppInput } from "@/components/forms/AppInput";
 import { AppButton } from "@/components/forms/AppButton";
 import { Label } from "@/components/ui/label";
+import { formatNumber } from "@/lib/format";
+import { estimateWeavingHours } from "../utils/weaving-time";
 import type { WorkOrderSchemaInput } from "../schemas/work-order-schemas";
+
+/**
+ * Read-only estimate of loom hours for the whole order — recomputes live as totalQty,
+ * pick, repeat or speed change. Mirrors the server formula; the value that actually
+ * persists is the one `work-order.service.ts` calculates (never sent from here).
+ */
+function EstimatedWeavingTime() {
+  const { control } = useFormContext<WorkOrderSchemaInput>();
+  const totalQty = useWatch({ control, name: "totalQty" });
+  const pick = useWatch({ control, name: "pick" });
+  const repeat = useWatch({ control, name: "repeat" });
+  const speed = useWatch({ control, name: "speed" });
+
+  const hours = estimateWeavingHours({
+    totalQty: Number(totalQty) || 0,
+    // useWatch widens these unions to {}; runtime values are number | "" — String()
+    // normalises both for the formula (which re-parses with Number()).
+    pick: String(pick ?? ""),
+    repeat: String(repeat ?? ""),
+    speed: String(speed ?? ""),
+  });
+
+  return (
+    <div className="sm:col-span-2">
+      <Label className="text-xs font-semibold">Estimated Weaving Time</Label>
+      <div className="mt-1.5 flex h-9 items-center rounded-lg border border-dashed bg-muted/40 px-3 text-sm font-semibold tabular-nums text-foreground">
+        {hours > 0 ? (
+          <span>{formatNumber(hours, 2)} hrs</span>
+        ) : (
+          <span className="font-normal text-muted-foreground">
+            Enter total qty, pick &amp; repeat to estimate
+          </span>
+        )}
+      </div>
+      <p className="mt-1 text-[10px] text-muted-foreground">
+        (totalQty ÷ repeat) × pick ÷ (speed × 60) — speed defaults to 600 RPM
+      </p>
+    </div>
+  );
+}
+
 
 export function WovenSpecification({
   isLocked,
@@ -75,6 +118,7 @@ export function WovenSpecification({
         error={errors.extra?.message}
         {...register("extra")}
       />
+      <EstimatedWeavingTime />
       <SizeLabelsInput
         disabled={isLocked}
         value={sizeLabels}

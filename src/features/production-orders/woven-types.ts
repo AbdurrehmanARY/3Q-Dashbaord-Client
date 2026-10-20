@@ -1,4 +1,5 @@
 import type { ThreadDenier } from "@/features/thread";
+import type { SizePlan } from "./label-types";
 
 /** One planned thread colour on a woven line. Up to 8 per line. */
 export interface WovenThread {
@@ -14,22 +15,29 @@ export interface WovenThread {
 }
 
 export interface WovenLineOverview {
+  labelType: string;
   id: number;
   quantity: number;
+  /** Planned sizes of a Size Label line — drives the per-size batch tracking. */
+  sizes: SizePlan[];
   status: "pending" | "active" | "paused" | "completed" | "cancelled";
   planning: {
     /** Summed server-side from the thread colours — never client-supplied. */
     totalThreadWeightKg: number;
     completedAt: string | null;
     threadCount: number;
+    /** Dyed thread this label type actually consumed. */
+    dyedThreadUsedKg: number;
+    /**
+     * Beam thread: packaged weight − dyed thread consumed. Server-calculated, never
+     * client-supplied. Signed — a negative figure means consumption exceeded packaged
+     * weight, which is information rather than an error.
+     */
+    beamThreadKg: number;
     threads: WovenThread[];
   };
   weaving: {
-    machineId: number | null;
-    machineName: string | null;
-    operatorId: number | null;
-    operatorName: string | null;
-    wovenQty: number;
+            wovenQty: number;
     status: string;
     startedAt: string | null;
     endedAt: string | null;
@@ -41,18 +49,14 @@ export interface WovenLineOverview {
     weavingTimeDiffHours?: number;
   };
   cutting: {
-    operatorId: number | null;
-    operatorName: string | null;
-    cutQty: number;
+        cutQty: number;
     cuttingDate: string | null;
     /** False until weaving is 100% complete. */
     canStart: boolean;
     isComplete: boolean;
   };
   packaging: {
-    operatorId: number | null;
-    operatorName: string | null;
-    packagedQty: number;
+        packagedQty: number;
     packagedWeightKg: number;
     packagingDate: string | null;
     /** False until cut quantity equals woven quantity. */
@@ -76,6 +80,9 @@ export interface WovenOverview {
     lineCount: number;
     quantity: number;
     totalThreadWeightKg: number;
+    dyedThreadUsedKg: number;
+    /** Σ beam thread across every label type. */
+    beamThreadKg: number;
     wovenQty: number;
     cutQty: number;
     packagedQty: number;
@@ -92,9 +99,11 @@ export interface ThreadPlanInput {
 }
 
 export interface PlanWovenInput {
+  /** One woven line per label type, exactly like the printed side. */
+  labelType: string;
   quantity: number;
-  weavingMachineId: number;
-  weavingOperatorId: number;
+  /** Planned sizes — required by a Size Label and summed to `quantity`. */
+  sizes?: SizePlan[];
   threads: ThreadPlanInput[];
 }
 

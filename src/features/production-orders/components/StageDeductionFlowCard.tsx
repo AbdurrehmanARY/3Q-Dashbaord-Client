@@ -25,13 +25,18 @@ export function StageDeductionFlowCard({ lines }: StageDeductionFlowCardProps) {
   const waitingForPackaging = Math.max(totalCut - totalSentPkg, 0);
   const inPackagingProcess = Math.max(totalSentPkg - totalPackaged, 0);
 
+  const totalInPrinting = lines.reduce((acc, l) => acc + Number((l.printing as any).inPrintingRolls || 0), 0);
+  const totalInCutting = lines.reduce((acc, l) => acc + Number((l.cutting as any).inCuttingRolls || 0), 0);
+  const totalInPackaging = lines.reduce((acc, l) => acc + Number((l.packaging as any).inPackagingRolls || 0), 0);
+
   const stages = [
     {
       id: "unprinted",
       title: "Planned (Unprinted)",
-      subtitle: "Deducted by Printing",
+      subtitle: totalInPrinting > 0 ? `${formatNumber(totalInPrinting, 2)} rolls in printing` : "Deducted by Printing",
       count: unprintedBalance,
       total: totalPlanned,
+      activeRolls: totalInPrinting,
       icon: Layers,
       color: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800",
       badgeColor: "bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
@@ -42,6 +47,7 @@ export function StageDeductionFlowCard({ lines }: StageDeductionFlowCardProps) {
       subtitle: "Printed ready to Transfer",
       count: waitingForCutting,
       total: totalPrinted,
+      activeRolls: 0,
       icon: Printer,
       color: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800",
       badgeColor: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300",
@@ -49,9 +55,10 @@ export function StageDeductionFlowCard({ lines }: StageDeductionFlowCardProps) {
     {
       id: "cutting",
       title: "In Cutting Process",
-      subtitle: "Sent but not yet Cut",
+      subtitle: totalInCutting > 0 ? `${formatNumber(totalInCutting, 2)} rolls in cutting` : "Sent but not yet Cut",
       count: inCuttingProcess,
       total: totalSentCutting,
+      activeRolls: totalInCutting,
       icon: Scissors,
       color: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800",
       badgeColor: "bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300",
@@ -62,6 +69,7 @@ export function StageDeductionFlowCard({ lines }: StageDeductionFlowCardProps) {
       subtitle: "Cut ready to Transfer",
       count: waitingForPackaging,
       total: totalCut,
+      activeRolls: 0,
       icon: Scissors,
       color: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800",
       badgeColor: "bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300",
@@ -69,9 +77,10 @@ export function StageDeductionFlowCard({ lines }: StageDeductionFlowCardProps) {
     {
       id: "packaging",
       title: "In Packaging Process",
-      subtitle: "Sent but not yet Boxed",
+      subtitle: totalInPackaging > 0 ? `${formatNumber(totalInPackaging, 2)} rolls in packaging` : "Sent but not yet Boxed",
       count: inPackagingProcess,
       total: totalSentPkg,
+      activeRolls: totalInPackaging,
       icon: PackageCheck,
       color: "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-200 dark:border-purple-800",
       badgeColor: "bg-purple-50 text-purple-700 dark:bg-purple-950 dark:text-purple-300",
@@ -82,6 +91,7 @@ export function StageDeductionFlowCard({ lines }: StageDeductionFlowCardProps) {
       subtitle: "Completed Output",
       count: totalPackaged,
       total: totalPlanned,
+      activeRolls: 0,
       icon: PackageCheck,
       color: "bg-success/10 text-success border-success/20",
       badgeColor: "bg-success/15 text-success",
@@ -114,6 +124,11 @@ export function StageDeductionFlowCard({ lines }: StageDeductionFlowCardProps) {
                 <div className="text-[10px] text-muted-foreground mt-0.5">
                   {stage.subtitle}
                 </div>
+                {stage.activeRolls > 0 && (
+                  <div className="mt-1 text-[9px] font-semibold text-primary">
+                    Active: +{formatNumber(stage.activeRolls, 2)} rolls
+                  </div>
+                )}
               </div>
 
               <div className="mt-3 pt-2 border-t flex items-baseline justify-between">
@@ -136,4 +151,5 @@ export function StageDeductionFlowCard({ lines }: StageDeductionFlowCardProps) {
       </div>
     </AppCard>
   );
+
 }

@@ -8,11 +8,11 @@ import { AppButton } from "@/components/forms/AppButton";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DataTable, DataTableEmpty } from "@/shared/components/data-table";
 import { formatDate, formatNumber } from "@/lib/format";
-import { PlanLabelTypeDialog } from "../components/PlanLabelTypeDialog";
+import { UnifiedPlanningDialog } from "../components/PlanLabelTypeDialog";
 import { ProductionOrderStatusBadge } from "../components/ProductionStatusBadge";
 import { createPlannedLineColumns } from "../components/planned-line-columns";
 import { useProductionOrderOverview } from "../hooks/use-production-orders";
-import type { ProductionLineOverview } from "../types";
+import type { ProductionLineOverview, ProductType } from "../types";
 
 export function ProductionOrderPlanningPage() {
   const { id = "" } = useParams();
@@ -122,8 +122,9 @@ export function ProductionOrderPlanningPage() {
       </AppCard>
 
       {dialogOpen && (
-        <PlanLabelTypeDialog
+        <UnifiedPlanningDialog
           open={dialogOpen}
+          productType={order.productType}
           orderId={id}
           soNumber={order.soNumber}
           remainingQty={remainingQty}

@@ -9,8 +9,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
-import { SlidersHorizontal } from "lucide-react";
+import { Download, SlidersHorizontal } from "lucide-react";
 import { formatNumber } from "@/lib/format";
+import { exportRowsToExcel, type DataTableExportColumn } from "@/shared/components/data-table/data-table-export";
 import { useUpdateLineFull, useAvailableResources } from "../hooks/use-production-orders";
 import { LabelTypeRow } from "./LabelTypeRow";
 import { lineToDraft, diffLineDraft, validateLineDraft, cascadeDraft, type LineDraft } from "../utils/line-draft";
@@ -23,13 +24,14 @@ interface EditableLabelTypeTableProps {
   lines: ProductionLineOverview[];
   loading?: boolean;
   onEditPlan?: (line: ProductionLineOverview) => void;
+  onLogBatch?: (lineId: number, stage: "printing" | "cutting" | "packaging") => void;
 }
 
 /**
  * The Production Progress table with row-level inline editing, column visibility toggling,
  * and a bottom Totals summary row.
  */
-export function EditableLabelTypeTable({ orderId, lines, loading, onEditPlan }: EditableLabelTypeTableProps) {
+export function EditableLabelTypeTable({ orderId, lines, loading, onEditPlan, onLogBatch }: EditableLabelTypeTableProps) {
   const updateLine = useUpdateLineFull(orderId);
 
   const [editingLine, setEditingLine] = useState<ProductionLineOverview | null>(null);
@@ -43,6 +45,27 @@ export function EditableLabelTypeTable({ orderId, lines, loading, onEditPlan }: 
   });
 
   const isVisible = useCallback((id: string) => visibleColumns[id] !== false, [visibleColumns]);
+
+  const exportColumns = useMemo<DataTableExportColumn<ProductionLineOverview>[]>(
+    () => [
+      { header: "Label Type", value: (l) => l.labelType },
+      { header: "Planned Qty", value: (l) => Number(l.planning.quantity || 0) },
+      { header: "Total Rolls", value: (l) => Number(l.planning.totalRolls || 0) },
+      { header: "Material Code", value: (l) => l.material.materialCode ?? "—" },
+      { header: "Assigned Rolls", value: (l) => Number(l.material.assignedRolls || 0) },
+      { header: "Printing Machine", value: (l) => l.printing.machineName ?? "—" },
+      { header: "Printing Operator", value: (l) => l.printing.operatorName ?? "—" },
+      { header: "Printed Rolls", value: (l) => Number(l.printing.printedRolls || 0) },
+      { header: "Cutting Machine", value: (l) => l.cutting.machineName ?? "—" },
+      { header: "Cutting Operator", value: (l) => l.cutting.operatorName ?? "—" },
+      { header: "Cut Rolls", value: (l) => Number(l.cutting.cutRolls || 0) },
+      { header: "Packaging Operator", value: (l) => l.packaging.operatorName ?? "—" },
+      { header: "Packaged Rolls", value: (l) => Number(l.packaging.packagedRolls || 0) },
+      { header: "Packaged Qty", value: (l) => Number(l.packaging.packagedQty || 0) },
+      { header: "Completion", value: (l) => `${l.liveProgress?.completionPct ?? 0}%` },
+    ],
+    []
+  );
 
   const { data: resources } = useAvailableResources(
     editingLine ? { lineId: editingLine.id, productType: "printed" } : undefined
@@ -178,35 +201,44 @@ export function EditableLabelTypeTable({ orderId, lines, loading, onEditPlan }: 
 
   return (
     <div className="space-y-0">
-      {/* Top Toolbar: Columns toggle */}
+      {/* Top Toolbar: Columns toggle + Export */}
       <div className="flex items-center justify-between border-b bg-card px-3 py-2">
         <span className="text-xs font-semibold text-muted-foreground">
           Label Types Progress ({lines.length})
         </span>
-        <DropdownMenu>
-          <DropdownMenuTrigger className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-8 gap-1.5 text-xs")}>
-            <SlidersHorizontal className="h-3.5 w-3.5" />
-            Columns
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="max-h-72 w-52 overflow-y-auto">
-            <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
-              Toggle Columns
-            </div>
-            <DropdownMenuSeparator />
-            {PROGRESS_COLUMNS.filter((c) => c.toggleable).map((col) => (
-              <DropdownMenuCheckboxItem
-                key={col.id}
-                checked={isVisible(col.id)}
-                onCheckedChange={(checked) =>
-                  setVisibleColumns((prev) => ({ ...prev, [col.id]: checked }))
-                }
-                className="text-xs"
-              >
-                {col.label}
-              </DropdownMenuCheckboxItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-8 gap-1.5 text-xs")}
+            onClick={() => exportRowsToExcel(lines, exportColumns, `production_progress_${orderId}`)}
+          >
+            <Download className="h-3.5 w-3.5 text-emerald-600" /> Export Excel
+          </button>
+          <DropdownMenu>
+            <DropdownMenuTrigger className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-8 gap-1.5 text-xs")}>
+              <SlidersHorizontal className="h-3.5 w-3.5" />
+              Columns
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="max-h-72 w-52 overflow-y-auto">
+              <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+                Toggle Columns
+              </div>
+              <DropdownMenuSeparator />
+              {PROGRESS_COLUMNS.filter((c) => c.toggleable).map((col) => (
+                <DropdownMenuCheckboxItem
+                  key={col.id}
+                  checked={isVisible(col.id)}
+                  onCheckedChange={(checked) =>
+                    setVisibleColumns((prev) => ({ ...prev, [col.id]: checked }))
+                  }
+                  className="text-xs"
+                >
+                  {col.label}
+                </DropdownMenuCheckboxItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
 
       <Table>
@@ -269,6 +301,7 @@ export function EditableLabelTypeTable({ orderId, lines, loading, onEditPlan }: 
                   visibleColumns={visibleColumns}
                   onEdit={onEdit}
                   onEditPlan={onEditPlan}
+                  onLogBatch={onLogBatch}
                   onCancel={onCancel}
                   onSave={onSave}
                   onDraftChange={onDraftChange}

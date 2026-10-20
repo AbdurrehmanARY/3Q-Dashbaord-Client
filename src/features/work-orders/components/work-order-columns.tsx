@@ -9,6 +9,7 @@ import {
   type WorkOrder,
 } from "../types";
 import { WorkOrderRowActions } from "./work-order-row-actions";
+import { estimateWeavingHours } from "../utils/weaving-time";
 
 /**
  * Column definitions only — no state, no data fetching, no side effects. Everything here
@@ -119,13 +120,19 @@ export const workOrderColumns: ColumnDef<WorkOrder>[] = [
     },
     cell: ({ row }) => {
       const wo = row.original;
-      const isWoven = wo.productType === "woven";
-      const repeatVal = wo.repeat ? Number(wo.repeat) : 0;
-      const pickVal = wo.pick ? Number(wo.pick) : 0;
-      const speedVal = wo.speed ? Number(wo.speed) : 0;
-      if (!isWoven) return <span className="text-muted-foreground">—</span>;
-      if (!(repeatVal > 0 && speedVal > 0 && pickVal > 0)) return <span className="text-muted-foreground">—</span>;
-      const estHours = Math.round(((wo.totalQty / repeatVal) * pickVal / (speedVal * 60)) * 100) / 100;
+      if (wo.productType !== "woven") return <span className="text-muted-foreground">—</span>;
+      // Persisted value first (server-calculated); fall back to the live formula for
+      // rows not yet backfilled by migration 0024.
+      const stored = wo.estimatedWeavingHours != null ? Number(wo.estimatedWeavingHours) : NaN;
+      const estHours = Number.isFinite(stored)
+        ? stored
+        : estimateWeavingHours({
+            totalQty: wo.totalQty,
+            repeat: wo.repeat ?? 0,
+            pick: wo.pick ?? 0,
+            speed: wo.speed,
+          });
+      if (!(estHours > 0)) return <span className="text-muted-foreground">—</span>;
       return <span className="font-semibold tabular-nums text-foreground">{formatNumber(estHours, 2)} hrs</span>;
     },
     meta: { align: "right" },

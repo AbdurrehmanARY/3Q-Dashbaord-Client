@@ -43,6 +43,7 @@ export function DispatchDialog({ open, workOrder, onClose }: DispatchDialogProps
       dispatchedDate: workOrder.dispatchedDate ?? todayISO(),
       dispatchedQty: workOrder.dispatchedQty ?? workOrder.totalQty,
       imageUrl: workOrder.imageUrl ?? "",
+      dcImageUrl: workOrder.dcImageUrl ?? "",
     },
   });
 
@@ -62,6 +63,7 @@ export function DispatchDialog({ open, workOrder, onClose }: DispatchDialogProps
           dispatchedDate: String(data.dispatchedDate),
           dispatchedQty: Number(data.dispatchedQty),
           imageUrl: data.imageUrl || undefined,
+          dcImageUrl: data.dcImageUrl || undefined,
         },
       });
       handleClose();
@@ -129,6 +131,22 @@ export function DispatchDialog({ open, workOrder, onClose }: DispatchDialogProps
                 error={errors.imageUrl?.message}
                 alt="Order artwork"
                 hint="Optional. Upload final label artwork for dispatch."
+              />
+            )}
+          />
+        </div>
+        <div className="sm:col-span-2">
+          <Controller
+            control={control}
+            name="dcImageUrl"
+            render={({ field }) => (
+              <ImageUploadField
+                label="DC Copy"
+                value={field.value}
+                onChange={field.onChange}
+                error={errors.dcImageUrl?.message}
+                alt="DC copy"
+                hint="Optional. Upload the DC copy / dispatch document for the shipment."
               />
             )}
           />

@@ -54,6 +54,7 @@ export function InventoryStockTable() {
   return (
     <div className="overflow-hidden rounded-xl border bg-card shadow-card">
       <DataTable
+        tableId="inventory-stock"
         columns={inventoryColumns}
         data={rows}
         loading={stock.isLoading || materials.isLoading}

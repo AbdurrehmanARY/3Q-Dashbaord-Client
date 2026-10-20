@@ -20,8 +20,9 @@ const exportColumns: DataTableExportColumn<ProductionOrder>[] = [
   { header: "Production Type", columnId: "productType", value: (po) => (po.productType === "woven" ? "Woven Labels" : "Printed Labels") },
   { header: "SO Number", columnId: "soNumber", value: (po) => po.soNumber },
   { header: "PO Number", columnId: "poNumber", value: (po) => po.poNumber ?? "" },
-  { header: "Company", columnId: "companyName", value: (po) => po.companyName ?? "" },
-  { header: "Brand", columnId: "brandName", value: (po) => po.brandName ?? "" },
+  // Both map to the single "companyBrand" column so hiding it drops both from the export.
+  { header: "Company", columnId: "companyBrand", value: (po) => po.companyName ?? "" },
+  { header: "Brand", columnId: "companyBrand", value: (po) => po.brandName ?? "" },
   { header: "Total Qty", columnId: "totalQty", value: (po) => po.totalQty },
   { header: "Unplanned Qty", columnId: "unplannedQty", value: (po) => po.unplannedQty ?? Math.max(0, po.totalQty - (po.plannedQty ?? 0)) },
   { header: "Machine", columnId: "machineName", value: (po) => po.machineName ?? "Unassigned" },
@@ -51,6 +52,7 @@ export function ProductionOrderTable() {
 
       <div className="overflow-hidden rounded-xl border bg-card shadow-card">
         <DataTable
+          tableId="production-orders"
           columns={productionOrderColumns}
           data={data ?? []}
           loading={isLoading}
