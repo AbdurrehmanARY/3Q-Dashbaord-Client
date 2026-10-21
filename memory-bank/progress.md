@@ -294,3 +294,5 @@ and a misplaced root vite.config.ts.
 Note: pushing triggers Vercel redeploy of client-jet-omega-25.vercel.app
 and server-jade-gamma-86.vercel.app (both repos have the Vercel GitHub
 integration).
+## Vercel build fix (2026-10-20)
+- Client build (tsc -b && vite build) failed on Vercel with TS18003: tsconfig.node.json included vite.config.ts but it had been removed. Restored client/vite.config.ts (proxy config) so tsc -b finds its input. Build now passes locally (~53s). Pushed updated client as a fast-forward.
