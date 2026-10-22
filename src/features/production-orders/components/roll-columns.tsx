@@ -46,6 +46,16 @@ export const rollColumns: ColumnDef<ProductionLineOverview>[] = [
     ),
   },
   {
+    id: "requiredRolls",
+    accessorFn: (line) => line.planning.requiredRolls,
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Required Rolls" />,
+    cell: ({ row }) => (
+      <span className="tabular-nums font-medium">
+        {formatNumber(row.original.planning.requiredRolls, 2)}
+      </span>
+    ),
+  },
+  {
     id: "unprinted",
     accessorFn: (line) => Math.max(line.planning.totalRolls - line.printing.printedRolls, 0),
     header: ({ column }) => <DataTableColumnHeader column={column} title="Unprinted Balance" />,
