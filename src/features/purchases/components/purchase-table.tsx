@@ -71,6 +71,7 @@ export function PurchaseTable({ onCreateNew }: PurchaseTableProps) {
   return (
     <div className="overflow-hidden rounded-xl border bg-card shadow-card">
       <DataTable
+        tableId="purchases"
         columns={purchaseColumns}
         data={data ?? []}
         loading={isLoading}

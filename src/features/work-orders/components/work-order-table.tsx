@@ -52,8 +52,10 @@ const exportColumns: DataTableExportColumn<WorkOrder>[] = [
   { header: "PO Number", columnId: "poNumber", value: (wo) => wo.poNumber ?? "" },
   { header: "Type", columnId: "productType", value: (wo) => ((wo.productType ?? "printed") === "woven" ? "Woven" : "Printed") },
   { header: "Design Code", columnId: "designCode", value: (wo) => wo.designCode ?? "" },
-  { header: "Company", columnId: "companyName", value: (wo) => wo.companyName ?? "" },
-  { header: "Brand", columnId: "brandName", value: (wo) => wo.brandName ?? "" },
+  // `companyName`/`brandName` both map to the single "companyBrand" column, exactly like
+  // DC/LC → "dispatch" — so hiding Company / Brand drops both columns from the export.
+  { header: "Company", columnId: "companyBrand", value: (wo) => wo.companyName ?? "" },
+  { header: "Brand", columnId: "companyBrand", value: (wo) => wo.brandName ?? "" },
   { header: "Priority", columnId: "priority", value: (wo) => WORK_ORDER_PRIORITY_META[wo.priority]?.label ?? wo.priority },
   { header: "Order Type", columnId: "orderType", value: (wo) => WORK_ORDER_TYPE_META[wo.orderType]?.label ?? wo.orderType },
   { header: "Order Date", columnId: "orderDate", value: (wo) => formatDate(wo.orderDate) },
@@ -74,7 +76,7 @@ export function WorkOrderTable({ onCreateNew }: WorkOrderTableProps) {
   const handleDeleteSelected = async (selected: WorkOrder[]) => {
     await Promise.allSettled(selected.map((wo) => deleteWorkOrder.mutateAsync(wo.id)));
   };
-
+  
   const [status, setStatus] = React.useState<WorkOrderStatus | null>(null);
   const [productType, setProductType] = React.useState<ProductType | null>(null);
 
@@ -99,6 +101,7 @@ export function WorkOrderTable({ onCreateNew }: WorkOrderTableProps) {
   return (
     <div className="overflow-hidden rounded-xl border bg-card shadow-card">
       <DataTable
+        tableId="work-orders"
         columns={workOrderColumns}
         data={rows}
         loading={isLoading}

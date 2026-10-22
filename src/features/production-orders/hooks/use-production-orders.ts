@@ -7,6 +7,7 @@ import type {
   CreateProductionOrderInput,
   IssueRollsInput,
   PlanLineInput,
+  CompletionReport,
   ProductionOrderOverview,
   ProductionStage,
   StageProgressInput,
@@ -20,6 +21,7 @@ export const PRODUCTION_ORDER_KEYS = {
   list: (q: Record<string, unknown>) => ["production-orders", "list", q] as const,
   detail: (id: string) => ["production-orders", "detail", id] as const,
   overview: (id: string) => ["production-orders", "overview", id] as const,
+  completionReport: (id: string) => ["production-orders", "completion-report", id] as const,
   events: (id: string) => ["production-orders", "events", id] as const,
   lineEvents: (lineId: string) => ["production-orders", "line-events", lineId] as const,
   lineIssuances: (lineId: string) => ["production-orders", "line-issuances", lineId] as const,
@@ -66,6 +68,16 @@ export function useProductionOrderOverview(id: string) {
   return useQuery({
     queryKey: PRODUCTION_ORDER_KEYS.overview(id),
     queryFn: () => productionOrderService.getOverview(id),
+    enabled: !!id,
+    select: (res) => res.data,
+  });
+}
+
+/** Order-wide completion totals + per-operator waste breakdown (printed & woven). */
+export function useCompletionReport(id: string) {
+  return useQuery({
+    queryKey: PRODUCTION_ORDER_KEYS.completionReport(id),
+    queryFn: () => productionOrderService.getCompletionReport(id),
     enabled: !!id,
     select: (res) => res.data,
   });
@@ -305,6 +317,21 @@ export function useReconcileLine(orderId: string) {
       qc.invalidateQueries({ queryKey: ["inventory"] });
       qc.invalidateQueries({ queryKey: ["inventory-rolls"] });
       toast.success("Stock reconciled — extra rolls & weight returned to main inventory");
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+}
+
+/* Batch hooks live in `use-batches.ts` — see the material-flow model. */
+
+export function useCompleteProductionOrder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => productionOrderService.completeOrder(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: PRODUCTION_ORDER_KEYS.all });
+      qc.invalidateQueries({ queryKey: ["work-orders"] });
+      toast.success("Production order marked as complete!");
     },
     onError: (err: any) => toast.error(err.message),
   });

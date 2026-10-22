@@ -38,6 +38,22 @@ export function DispatchInfo({ isDispatched }: { isDispatched: boolean }) {
           )}
         />
       </div>
+      <div className="sm:col-span-2">
+        <Controller
+          control={control}
+          name="dcImageUrl"
+          render={({ field }) => (
+            <ImageUploadField
+              label="DC Copy"
+              value={field.value}
+              onChange={field.onChange}
+              error={errors.dcImageUrl?.message}
+              alt="DC copy"
+              hint="Upload or update the DC copy document."
+            />
+          )}
+        />
+      </div>
       <p className="text-[11px] text-muted-foreground sm:col-span-2">
         {isDispatched
           ? "This order is dispatched. Paperwork and artwork stay editable for corrections."

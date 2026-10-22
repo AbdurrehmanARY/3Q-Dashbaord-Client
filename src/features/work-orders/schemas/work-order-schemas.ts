@@ -40,6 +40,16 @@ export const workOrderSchema = z.object({
       "Upload an image or enter a valid image URL"
     )
     .optional(),
+  /** DC-copy image — captured alongside artwork during dispatch (0028). */
+  dcImageUrl: z
+    .string()
+    .trim()
+    .max(4_000_000, "Image is too large — keep it under about 3 MB")
+    .refine(
+      (v) => v === "" || v.startsWith("data:image/") || /^https?:\/\/.+/i.test(v),
+      "Upload an image or enter a valid image URL"
+    )
+    .optional(),
   productType: z.enum(["printed", "woven"]).default("printed"),
   /* ---- Woven loom spec. Only required when productType is "woven" (see superRefine). ---- */
   designCode: z.string().optional().or(z.literal("")),
@@ -91,6 +101,16 @@ export const dispatchSchema = z.object({
     .string()
     .trim()
     .max(4_000_000, "Image is too large â€” keep it under about 3 MB")
+    .refine(
+      (v) => v === "" || v.startsWith("data:image/") || /^https?:\/\/.+/i.test(v),
+      "Upload an image or enter a valid image URL"
+    )
+    .optional(),
+  /** DC-copy image — captured alongside artwork during dispatch (0028). */
+  dcImageUrl: z
+    .string()
+    .trim()
+    .max(4_000_000, "Image is too large — keep it under about 3 MB")
     .refine(
       (v) => v === "" || v.startsWith("data:image/") || /^https?:\/\/.+/i.test(v),
       "Upload an image or enter a valid image URL"

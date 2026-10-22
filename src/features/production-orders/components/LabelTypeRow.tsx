@@ -34,6 +34,7 @@ interface LabelTypeRowProps {
   visibleColumns?: Record<string, boolean>;
   onEdit: (line: ProductionLineOverview) => void;
   onEditPlan?: (line: ProductionLineOverview) => void;
+  onLogBatch?: (lineId: number, stage: "printing" | "cutting" | "packaging") => void;
   onCancel: () => void;
   onSave: (line: ProductionLineOverview) => void;
   onDraftChange: (field: keyof LineDraft, value: number | null) => void;
@@ -140,6 +141,7 @@ export const LabelTypeRow = React.memo(function LabelTypeRow({
   visibleColumns,
   onEdit,
   onEditPlan,
+  onLogBatch,
   onCancel,
   onSave,
   onDraftChange,
@@ -152,14 +154,10 @@ export const LabelTypeRow = React.memo(function LabelTypeRow({
   const hasErrors = Object.keys(errors).length > 0;
 
   // Step 3 of the workflow: no production quantity can be entered until the printing
-  // machine and operator are assigned. Editing the assignment itself stays enabled —
-  // that is how the row gets unblocked.
-  const assigned = draft
-    ? draft.printingMachineId != null && draft.printingOperatorId != null
-    : line.readiness.canStart;
+  const assigned = line.readiness.canStart;
   const quantityLock = {
     disabled: !assigned,
-    disabledHint: "Assign a printing machine and operator first",
+    disabledHint: "Material must be assigned first",
   };
 
   // Real-time stage deduction & buffer calculations
@@ -227,12 +225,29 @@ export const LabelTypeRow = React.memo(function LabelTypeRow({
             </div>
           ) : (
             <div>
-              <span className="tabular-nums font-semibold text-emerald-600 dark:text-emerald-400">
-                {formatNumber(waitingForCut, 2)}
-              </span>
+              <div className="flex items-center justify-end gap-1">
+                <span className="tabular-nums font-semibold text-emerald-600 dark:text-emerald-400">
+                  {formatNumber(waitingForCut, 2)}
+                </span>
+                {onLogBatch && (
+                  <button
+                    type="button"
+                    title="Log Printing Batch"
+                    onClick={() => onLogBatch(line.id, "printing")}
+                    className="inline-flex h-5 w-5 items-center justify-center rounded bg-blue-500/10 text-[10px] font-bold text-blue-600 hover:bg-blue-500/20 dark:text-blue-400"
+                  >
+                    +
+                  </button>
+                )}
+              </div>
               <div className="text-[10px] text-muted-foreground">
                 Total Printed: {formatNumber(line.printing.printedRolls, 2)}
               </div>
+              {((line.printing as any).inPrintingRolls > 0 || (line.printing as any).isPrintingActive) && (
+                <div className="mt-0.5 inline-flex items-center gap-1 rounded bg-blue-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-blue-600 dark:text-blue-400">
+                  In Printing: {formatNumber((line.printing as any).inPrintingRolls || 0, 2)} rolls
+                </div>
+              )}
             </div>
           )}
         </TableCell>
@@ -293,6 +308,11 @@ export const LabelTypeRow = React.memo(function LabelTypeRow({
               <div className="text-[10px] text-muted-foreground">
                 Total Sent: {formatNumber(line.cutting.sentToCuttingRolls, 2)}
               </div>
+              {((line.cutting as any).inCuttingRolls > 0 || (line.cutting as any).isCuttingActive) && (
+                <div className="mt-0.5 inline-flex items-center gap-1 rounded bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-amber-600 dark:text-amber-400">
+                  In Cutting: {formatNumber((line.cutting as any).inCuttingRolls || 0, 2)} rolls
+                </div>
+              )}
             </div>
           )}
         </TableCell>
@@ -317,9 +337,21 @@ export const LabelTypeRow = React.memo(function LabelTypeRow({
             </div>
           ) : (
             <div>
-              <span className="tabular-nums font-semibold text-indigo-600 dark:text-indigo-400">
-                {formatNumber(waitingForPkg, 2)}
-              </span>
+              <div className="flex items-center justify-end gap-1">
+                <span className="tabular-nums font-semibold text-indigo-600 dark:text-indigo-400">
+                  {formatNumber(waitingForPkg, 2)}
+                </span>
+                {onLogBatch && (
+                  <button
+                    type="button"
+                    title="Log Cutting Batch"
+                    onClick={() => onLogBatch(line.id, "cutting")}
+                    className="inline-flex h-5 w-5 items-center justify-center rounded bg-amber-500/10 text-[10px] font-bold text-amber-600 hover:bg-amber-500/20 dark:text-amber-400"
+                  >
+                    +
+                  </button>
+                )}
+              </div>
               <div className="text-[10px] text-muted-foreground">
                 Total Cut: {formatNumber(line.cutting.cutRolls, 2)}
               </div>
@@ -385,10 +417,16 @@ export const LabelTypeRow = React.memo(function LabelTypeRow({
               <div className="text-[10px] text-muted-foreground">
                 Total Sent: {formatNumber(line.packaging.sentToPackagingRolls, 2)}
               </div>
+              {((line.packaging as any).inPackagingRolls > 0 || (line.packaging as any).isPackagingActive) && (
+                <div className="mt-0.5 inline-flex items-center gap-1 rounded bg-purple-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-purple-600 dark:text-purple-400">
+                  In Packaging: {formatNumber((line.packaging as any).inPackagingRolls || 0, 2)} rolls
+                </div>
+              )}
             </div>
           )}
         </TableCell>
       )}
+
 
       {isVisible("packaged") && (
         <TableCell className="text-right align-top pt-3">
@@ -402,7 +440,19 @@ export const LabelTypeRow = React.memo(function LabelTypeRow({
               max={draft.sentToPackagingRolls}
             />
           ) : (
-            <span className="tabular-nums">{formatNumber(line.packaging.packagedRolls, 2)}</span>
+            <div className="flex items-center justify-end gap-1">
+              <span className="tabular-nums font-semibold">{formatNumber(line.packaging.packagedRolls, 2)}</span>
+              {onLogBatch && (
+                <button
+                  type="button"
+                  title="Log Packaging Batch"
+                  onClick={() => onLogBatch(line.id, "packaging")}
+                  className="inline-flex h-5 w-5 items-center justify-center rounded bg-emerald-500/10 text-[10px] font-bold text-emerald-600 hover:bg-emerald-500/20 dark:text-emerald-400"
+                >
+                  +
+                </button>
+              )}
+            </div>
           )}
         </TableCell>
       )}

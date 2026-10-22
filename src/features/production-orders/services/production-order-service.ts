@@ -2,6 +2,7 @@ import { api } from "@/lib/api";
 import type {
   AssignResourcesInput,
   AvailableResources,
+  CompletionReport,
   CreateProductionOrderInput,
   EligibleSalesOrder,
   PlanLineInput,
@@ -27,6 +28,9 @@ export const productionOrderService = {
 
   getOverview: (id: string) =>
     api.get<{ data: ProductionOrderOverview }>(`/production-orders/${id}/overview`),
+
+  getCompletionReport: (id: string) =>
+    api.get<{ data: CompletionReport }>(`/production-orders/${id}/completion-report`),
 
   listEligibleSalesOrders: () =>
     api.get<{ data: EligibleSalesOrder[] }>("/production-orders/eligible-sales-orders"),
@@ -79,4 +83,9 @@ export const productionOrderService = {
 
   reconcileLine: (lineId: string, body: ReconcileInput) =>
     api.put<{ data: ProductionOrderLine }>(`/production-orders/lines/${lineId}/reconcile`, body),
+
+  /* Batch CRUD lives in `batch-service.ts` — three stage-scoped resources. */
+
+  completeOrder: (id: string) =>
+    api.post<{ data: ProductionOrder }>(`/production-orders/${id}/complete`),
 };
