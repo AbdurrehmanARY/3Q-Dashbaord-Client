@@ -164,7 +164,9 @@ export class ProductionOrderService {
       try {
         return await productionOrderRepository.createWithWorkOrderStatusTx({
           productionNumber,
-          workOrderId: input.workOrderId,
+          ...(workOrder.productType === "printed"
+            ? { printedWorkOrderId: Number(input.workOrderId) }
+            : { wovenWorkOrderId: Number(input.workOrderId) }),
           totalQty: workOrder.totalQty,
           notes: input.notes,
           createdByUserId,
@@ -1044,6 +1046,12 @@ export class ProductionOrderService {
       batchFlowRepository.findByOrder(Number(id)),
     ]);
 
+    // Normalize batch completedAt (Date from DB) to ISO string for the builder.
+    const normalizedBatches = orderBatches.map((b) => ({
+      ...b,
+      completedAt: b.completedAt ? b.completedAt.toISOString() : null,
+    }));
+
     // Per-label-type detail + order rollups are pure shaping — see the builder.
     const { lines, totals } = buildProductionOverviewBody(
       rawLines,
@@ -1051,7 +1059,7 @@ export class ProductionOrderService {
       allOperators,
       allMaterials,
       order.totalQty,
-      orderBatches
+      normalizedBatches
     );
 
 

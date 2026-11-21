@@ -21,6 +21,7 @@ import {
   stageResourcesQuerySchema,
 } from "./batch-flow.schema";
 import type { BatchStage } from "./batch-flow.helpers";
+import { requireProductionManager } from "@shared/middleware/rbac";
 
 /**
  * The nine verbs every stage supports. Mounted three times — one router per stage — so
@@ -62,6 +63,8 @@ function stageRouter(controller: BatchFlowController, stage: BatchStage) {
 }
 
 const router = Router();
+
+router.use(requireProductionManager());
 
 /** Woven's first stage. Cutting and packaging are shared by both workflows. */
 router.use("/weaving-batches", stageRouter(weavingBatchController, "weaving"));

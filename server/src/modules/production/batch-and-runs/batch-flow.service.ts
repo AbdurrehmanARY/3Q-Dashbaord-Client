@@ -174,7 +174,7 @@ export class BatchFlowService {
             labelType: l.labelType,
             planned: Number(l.quantity),
             quantity: Number(l.quantity),
-            required: 0,
+            required: Number(l.quantity),
             materialCode: null as string | null,
             sizes: (l.sizes ?? []) as SizePlan[],
           }))
@@ -204,13 +204,17 @@ export class BatchFlowService {
       /** Summed over this label type's own batches — cancelled ones count for nothing. */
       const sumOf = (
         list: typeof own,
-        pick: "producedRolls" | "consumedRolls" | "packagedQty"
+        pick: "producedRolls" | "consumedRolls" | "packagedQty" | "wastedRolls"
       ) => round2(live(list).reduce((n, b) => n + Number(b[pick] ?? 0), 0));
 
       const cutProduced = sumOf(ownCutting, "producedRolls");
       const cutConsumed = sumOf(ownCutting, "consumedRolls");
+      const cutWasted = sumOf(ownCutting, "wastedRolls");
       const packagedProduced = sumOf(ownPackaging, "producedRolls");
       const packagedLabels = sumOf(ownPackaging, "packagedQty");
+      const packagedWasted = sumOf(ownPackaging, "wastedRolls");
+      /** True Σ of waste across every live stage this line's batches reached. */
+      const totalWasted = round2(flow.printedWasted + cutWasted + packagedWasted);
 
       return {
         lineId: line.id,
@@ -219,9 +223,13 @@ export class BatchFlowService {
         materialCode: line.materialCode,
         kind,
         unit: UNIT_OF[kind],
-        required: line.required,
+        required: round2(Math.max(0, line.required - totalWasted)),
         stages,
         ...flow,
+        /** Correct Σ waste across all three stages (overrides flow's first-stage-only figure). */
+        wastedTotal: totalWasted,
+        cutWasted,
+        packagedWasted,
         cutProduced,
         cutAvailable: round2(Math.max(0, cutProduced - cutConsumed)),
         packagedProduced,
@@ -241,26 +249,31 @@ export class BatchFlowService {
     const totals = perLine.reduce(
       (acc, l) => ({
         planned: acc.planned + l.planned,
+        quantity: acc.quantity + l.quantity,
         required: acc.required + l.required,
         assignedToPrinting: acc.assignedToPrinting + l.assignedToPrinting,
         remainingPlanned: acc.remainingPlanned + l.remainingPlanned,
         printedProduced: acc.printedProduced + l.printedProduced,
         printedAvailable: acc.printedAvailable + l.printedAvailable,
         printedWasted: acc.printedWasted + l.printedWasted,
+        wastedTotal: acc.wastedTotal + l.wastedTotal,
         cutProduced: acc.cutProduced + l.cutProduced,
         cutAvailable: acc.cutAvailable + l.cutAvailable,
+        cutWasted: acc.cutWasted + l.cutWasted,
         packagedProduced: acc.packagedProduced + l.packagedProduced,
         packagedLabels: acc.packagedLabels + l.packagedLabels,
+        packagedWasted: acc.packagedWasted + l.packagedWasted,
         remainingRolls: acc.remainingRolls + l.remainingRolls,
-        wastedTotal: acc.wastedTotal + l.wastedTotal,
       }),
       {
         planned: 0, assignedToPrinting: 0, remainingPlanned: 0,
+        quantity: 0,
         required: 0,
         printedProduced: 0, printedAvailable: 0, printedWasted: 0,
-        cutProduced: 0, cutAvailable: 0,
-        packagedProduced: 0, packagedLabels: 0, remainingRolls: 0,
         wastedTotal: 0,
+        cutProduced: 0, cutAvailable: 0, cutWasted: 0,
+        packagedProduced: 0, packagedLabels: 0, packagedWasted: 0,
+        remainingRolls: 0,
       }
     );
 

@@ -1,0 +1,5 @@
+The string is missing the terminator: '.
+    + CategoryInfo          : ParserError: (:) [], ParentContainsErrorR 
+   ecordException
+    + FullyQualifiedErrorId : TerminatorExpectedAtEndOfString
+ 

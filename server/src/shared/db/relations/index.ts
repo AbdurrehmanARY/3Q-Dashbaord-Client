@@ -1,7 +1,6 @@
 import { relations } from "drizzle-orm";
 import { companies } from "../tables/companies.table";
 import { brands } from "../tables/brands.table";
-import { workOrders } from "../tables/work-orders.table";
 import { materials } from "../tables/materials.table";
 import { machines } from "../tables/machines.table";
 import { operators } from "../tables/operators.table";
@@ -15,7 +14,8 @@ import { productionRollIssuances } from "../tables/production-roll-issuances.tab
 import { productionBatches } from "../tables/production-batches.table";
 import { productionStageTransactions } from "../tables/production-stage-transactions.table";
 import { batchConsumptions } from "../tables/batch-consumptions.table";
-import { wovenWorkOrderDetails } from "../tables/woven-work-order-details.table";
+import { printedLabelWorkOrders } from "../tables/printed-label-work-orders.table";
+import { wovenLabelWorkOrders } from "../tables/woven-label-work-orders.table";
 import { wovenProductionLines } from "../tables/woven-production-lines.table";
 import { wovenThreadPlanItems } from "../tables/woven-thread-plan-items.table";
 import { threadStocks } from "../tables/thread-stocks.table";
@@ -38,20 +38,29 @@ export const brandsRelations = relations(brands, ({ one, many }) => ({
     fields: [brands.companyId],
     references: [companies.id],
   }),
-  workOrders: many(workOrders),
+  printedWorkOrders: many(printedLabelWorkOrders),
+  wovenWorkOrders: many(wovenLabelWorkOrders),
 }));
 
-export const workOrdersRelations = relations(workOrders, ({ one, many }) => ({
+/* workOrdersRelations is removed — the unified work_orders table no longer exists.
+   Printed and woven work-orders are now standalone tables with their own relations. */
+
+export const printedLabelWorkOrdersRelations = relations(printedLabelWorkOrders, ({ one, many }) => ({
   brand: one(brands, {
-    fields: [workOrders.brandId],
+    fields: [printedLabelWorkOrders.brandId],
     references: [brands.id],
   }),
   productionOrders: many(productionOrders),
-  /** Present only when `productType` is `woven`. */
-  wovenDetail: one(wovenWorkOrderDetails, {
-    fields: [workOrders.id],
-    references: [wovenWorkOrderDetails.workOrderId],
+  productionRuns: many(productionRuns),
+}));
+
+export const wovenLabelWorkOrdersRelations = relations(wovenLabelWorkOrders, ({ one, many }) => ({
+  brand: one(brands, {
+    fields: [wovenLabelWorkOrders.brandId],
+    references: [brands.id],
   }),
+  productionOrders: many(productionOrders),
+  productionRuns: many(productionRuns),
 }));
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -62,9 +71,13 @@ export const usersRelations = relations(users, ({ many }) => ({
 }));
 
 export const productionOrdersRelations = relations(productionOrders, ({ one, many }) => ({
-  workOrder: one(workOrders, {
-    fields: [productionOrders.workOrderId],
-    references: [workOrders.id],
+  printedWorkOrder: one(printedLabelWorkOrders, {
+    fields: [productionOrders.printedWorkOrderId],
+    references: [printedLabelWorkOrders.id],
+  }),
+  wovenWorkOrder: one(wovenLabelWorkOrders, {
+    fields: [productionOrders.wovenWorkOrderId],
+    references: [wovenLabelWorkOrders.id],
   }),
   createdBy: one(users, {
     fields: [productionOrders.createdByUserId],
@@ -241,13 +254,6 @@ export const machinesRelations = relations(machines, ({ one, many }) => ({
 
 /* ==================== Woven Labels workflow ==================== */
 
-export const wovenWorkOrderDetailsRelations = relations(wovenWorkOrderDetails, ({ one }) => ({
-  workOrder: one(workOrders, {
-    fields: [wovenWorkOrderDetails.workOrderId],
-    references: [workOrders.id],
-  }),
-}));
-
 export const wovenProductionLinesRelations = relations(wovenProductionLines, ({ one, many }) => ({
   productionOrder: one(productionOrders, {
     fields: [wovenProductionLines.productionOrderId],
@@ -310,9 +316,13 @@ export const threadDyeBatchesRelations = relations(threadDyeBatches, ({ one }) =
 /* ==================== Append-only production runs ==================== */
 
 export const productionRunsRelations = relations(productionRuns, ({ one }) => ({
-  saleOrder: one(workOrders, {
-    fields: [productionRuns.saleOrderId],
-    references: [workOrders.id],
+  printedSaleOrder: one(printedLabelWorkOrders, {
+    fields: [productionRuns.printedSaleOrderId],
+    references: [printedLabelWorkOrders.id],
+  }),
+  wovenSaleOrder: one(wovenLabelWorkOrders, {
+    fields: [productionRuns.wovenSaleOrderId],
+    references: [wovenLabelWorkOrders.id],
   }),
   machine: one(machines, {
     fields: [productionRuns.machineId],

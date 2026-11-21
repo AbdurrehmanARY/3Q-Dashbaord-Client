@@ -116,23 +116,24 @@ function initialRow(
     return {
       ...EMPTY_ROW,
       labelType: line.labelType,
-      quantity: toNumber(line.quantity),
+      quantity: line.quantity ?? 0,
       sizes: line.sizes ?? [],
     };
   }
+  // printed: editing is ProductionLineOverview, quantity is under planning
   const line = editing as ProductionLineOverview;
   return {
     ...EMPTY_ROW,
     labelType: line.labelType,
-    quantity: toNumber(line.planning.quantity),
-    sizes: line.planning.sizes ?? [],
-    labelSize: toNumber(line.planning.labelSize),
-    rollLength: toNumber(line.planning.rollLength) || 200,
-    extraRolls: toNumber(line.planning.extraRolls),
-    materialCode: line.material.materialCode ?? "",
-    assignedRolls: toNumber(line.material.assignedRolls),
-    printingMachineId: line.printing.machineId,
-    printingOperatorId: line.printing.operatorId,
+    quantity: line.planning?.quantity ?? 0,
+    sizes: line.planning?.sizes ?? [],
+    labelSize: line.planning?.labelSize ?? 0,
+    rollLength: line.planning?.rollLength ?? 200,
+    extraRolls: line.planning?.extraRolls ?? 0,
+    materialCode: line.material?.materialCode ?? "",
+    assignedRolls: line.material?.assignedRolls ?? 0,
+    printingMachineId: line.printing?.machineId,
+    printingOperatorId: line.printing?.operatorId,
   };
 }
 
@@ -275,7 +276,7 @@ export function PlanLabelTypeForm({
     const map = new Map(balanceByCode);
     if (!isWoven && editing) {
       const line = editing as ProductionLineOverview;
-      const code = line.material.materialCode;
+      const code = line.material?.materialCode ?? "";
       if (code) map.set(code, (map.get(code) ?? 0) + toNumber(line.material.assignedRolls));
     }
     return map;
@@ -331,13 +332,14 @@ export function PlanLabelTypeForm({
 
   const busy = saving || isSubmitting;
   const blocked =
-    overAllocated ||
+    (!isWoven && overAllocated) ||
     hasDuplicate ||
     stockIssues.length > 0 ||
     sizeIssues.length > 0 ||
     (isWoven && (allocationIncomplete || splitImpossible));
 
   const submit = handleSubmit(async (values) => {
+    if (blocked) return;
     const planRows = values.rows ?? [];
 
     if (isWoven) {
@@ -690,7 +692,10 @@ export function PlanLabelTypeForm({
           <span className="text-muted-foreground">
             {rowValues.length} label type{rowValues.length === 1 ? "" : "s"} · Total planned:{" "}
             <strong className="tabular-nums text-foreground">{formatNumber(plannedTotal, 0)}</strong> of{" "}
-            <strong className="tabular-nums text-foreground">{formatNumber(ceiling, 0)}</strong> pcs
+            <strong className="tabular-nums text-foreground">{formatNumber(ceiling, 0)}</strong> pcs{" "}
+            {isWoven && overAllocated && (
+              <span className="text-amber-600">(exceeds order total)</span>
+            )}
           </span>
           {isWoven && (
             <span className="text-muted-foreground">
@@ -709,7 +714,9 @@ export function PlanLabelTypeForm({
 
         {overAllocated && (
           <Warning>
-            Only {formatNumber(ceiling, 0)} of the order quantity is still unplanned in total.
+            {isWoven
+              ? `${formatNumber(plannedTotal, 0)} pcs planned exceeds the order's unplanned ${formatNumber(ceiling, 0)} pcs (allowed for make-up after waste)`
+              : `Only ${formatNumber(ceiling, 0)} of the order quantity is still unplanned in total.`}
           </Warning>
         )}
         {hasDuplicate && <Warning>A label type is planned more than once — remove the duplicate row.</Warning>}

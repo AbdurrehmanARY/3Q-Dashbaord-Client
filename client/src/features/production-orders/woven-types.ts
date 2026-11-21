@@ -41,12 +41,21 @@ export interface WovenLineOverview {
     status: string;
     startedAt: string | null;
     endedAt: string | null;
+    /** Σ waste across this line's batches — subtracted from the planned quantity to form the progress target. */
+    wastedTotal: number;
     progressPct: number;
     isComplete: boolean;
     speedRpm?: number;
     estimatedWeavingHours?: number;
     actualWeavingHours?: number;
     weavingTimeDiffHours?: number;
+    /** Batch traceability: who ran this stage and on what machine. */
+    operatorId: number | null;
+    operatorName: string | null;
+    operatorAvatarUrl: string | null;
+    machineId: number | null;
+    machineName: string | null;
+    completedAt: string | null;
   };
   cutting: {
         cutQty: number;
@@ -54,6 +63,13 @@ export interface WovenLineOverview {
     /** False until weaving is 100% complete. */
     canStart: boolean;
     isComplete: boolean;
+    /** Batch traceability: who ran this stage and on what machine. */
+    operatorId: number | null;
+    operatorName: string | null;
+    operatorAvatarUrl: string | null;
+    machineId: number | null;
+    machineName: string | null;
+    completedAt: string | null;
   };
   packaging: {
         packagedQty: number;
@@ -62,6 +78,13 @@ export interface WovenLineOverview {
     /** False until cut quantity equals woven quantity. */
     canStart: boolean;
     isComplete: boolean;
+    /** Batch traceability: who ran this stage. Packaging has an operator but NO machine. */
+    operatorId: number | null;
+    operatorName: string | null;
+    operatorAvatarUrl: string | null;
+    machineId: null;
+    machineName: null;
+    completedAt: string | null;
   };
 }
 
@@ -87,6 +110,8 @@ export interface WovenOverview {
     cutQty: number;
     packagedQty: number;
     packagedWeightKg: number;
+    /** Σ waste across every batch/stage — deducted from the running total for progress. */
+    wastedTotal: number;
   };
 }
 

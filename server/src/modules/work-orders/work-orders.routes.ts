@@ -13,21 +13,26 @@ import {
 } from "@modules/production/batch-and-runs/production-run.schema";
 import { listWorkOrdersQuerySchema } from "@shared/validation/query.schema";
 import { idParamsSchema } from "@shared/validation/common.schema";
+import {
+  requireWorkOrderAccess,
+  requireDispatchAccess,
+  requireRole,
+} from "@shared/middleware/rbac";
 
 const router = Router();
 
-router.get("/", validateQuery(listWorkOrdersQuerySchema), workOrderController.getWorkOrders);
-router.post("/", validateRequest(createWorkOrderSchema), workOrderController.createWorkOrder);
-router.get("/:id", validateParams(idParamsSchema), workOrderController.getWorkOrder);
-router.put("/:id", validateParams(idParamsSchema), validateRequest(updateWorkOrderSchema), workOrderController.updateWorkOrder);
-/* Dispatch completion — DC Number + LC Number are both required by the schema. */
+router.get("/", validateQuery(listWorkOrdersQuerySchema), requireWorkOrderAccess(), workOrderController.getWorkOrders);
+router.post("/", validateRequest(createWorkOrderSchema), requireRole("office_staff", "production_manager"), workOrderController.createWorkOrder);
+router.get("/:id", validateParams(idParamsSchema), requireWorkOrderAccess(), workOrderController.getWorkOrder);
+router.put("/:id", validateParams(idParamsSchema), validateRequest(updateWorkOrderSchema), requireRole("office_staff", "production_manager"), workOrderController.updateWorkOrder);
 router.post(
   "/:id/dispatch",
   validateParams(idParamsSchema),
   validateRequest(dispatchWorkOrderSchema),
+  requireDispatchAccess(),
   workOrderController.dispatchWorkOrder
 );
-router.delete("/:id", validateParams(idParamsSchema), workOrderController.deleteWorkOrder);
+router.delete("/:id", validateParams(idParamsSchema), requireRole("office_staff", "production_manager"), workOrderController.deleteWorkOrder);
 
 /* ---- Append-only production runs against a sale order ---- */
 router.get(

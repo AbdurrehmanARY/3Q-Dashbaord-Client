@@ -11,11 +11,14 @@ import { formatNumber, formatDate } from "@/lib/format";
 import { SubmitOnEnter } from "@/components/forms/SubmitOnEnter";
 import { cn } from "@/lib/utils";
 import { useCreateProductionOrder, useEligibleSalesOrders } from "../hooks/use-production-orders";
+import type { ProductType } from "@/features/work-orders/types";
 
 interface CreateProductionOrderDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCreated?: (productionOrderId: number) => void;
+  /** When provided, only sales orders of this workflow (printed/woven) are listed. */
+  productTypeFilter?: ProductType;
 }
 
 interface NotesForm {
@@ -30,12 +33,18 @@ export function CreateProductionOrderDialog({
   open,
   onOpenChange,
   onCreated,
+  productTypeFilter,
 }: CreateProductionOrderDialogProps) {
   const { data: salesOrders, isLoading } = useEligibleSalesOrders(open);
   const createOrder = useCreateProductionOrder();
 
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const { register, handleSubmit, reset } = useForm<NotesForm>({ defaultValues: { notes: "" } });
+
+  const filteredSalesOrders = useMemo(() => {
+    if (!productTypeFilter) return salesOrders ?? [];
+    return (salesOrders ?? []).filter((so) => so.productType === productTypeFilter);
+  }, [salesOrders, productTypeFilter]);
 
   useEffect(() => {
     if (open) {
@@ -45,27 +54,27 @@ export function CreateProductionOrderDialog({
   }, [open, reset]);
 
   const soOptions = useMemo(() => {
-    return (salesOrders ?? []).map((so) => ({
+    return (filteredSalesOrders ?? []).map((so) => ({
       value: so.id,
       label: `${so.soNumber} ${so.poNumber ? `(PO: ${so.poNumber})` : ""}`,
       hint: `${so.companyName ?? "—"} · ${so.brandName ?? "—"} · ${formatNumber(so.totalQty, 0)} units`,
     }));
-  }, [salesOrders]);
+  }, [filteredSalesOrders]);
 
   const poOptions = useMemo(() => {
-    return (salesOrders ?? [])
+    return (filteredSalesOrders ?? [])
       .filter((so) => !!so.poNumber)
       .map((so) => ({
         value: so.id,
         label: `PO: ${so.poNumber} (${so.soNumber})`,
         hint: `${so.companyName ?? "—"} · ${so.brandName ?? "—"}`,
       }));
-  }, [salesOrders]);
+  }, [filteredSalesOrders]);
 
   const selectedSO = useMemo(() => {
     if (selectedId == null) return null;
-    return (salesOrders ?? []).find((so) => so.id === selectedId) ?? null;
-  }, [salesOrders, selectedId]);
+    return (filteredSalesOrders ?? []).find((so) => so.id === selectedId) ?? null;
+  }, [filteredSalesOrders, selectedId]);
 
   const onSubmit = async (data: NotesForm) => {
     if (selectedId == null) return;
@@ -77,7 +86,7 @@ export function CreateProductionOrderDialog({
     onCreated?.(created.data.id);
   };
 
-  const isEmpty = !isLoading && (salesOrders ?? []).length === 0;
+  const isEmpty = !isLoading && (filteredSalesOrders ?? []).length === 0;
 
   return (
     <AppDialog
@@ -169,14 +178,14 @@ export function CreateProductionOrderDialog({
                         Loading eligible work orders…
                       </TableCell>
                     </TableRow>
-                  ) : (salesOrders ?? []).length === 0 ? (
+                  ) : (filteredSalesOrders ?? []).length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
                         No work orders available.
                       </TableCell>
                     </TableRow>
                   ) : (
-                    (salesOrders ?? []).map((so) => {
+                    (filteredSalesOrders ?? []).map((so) => {
                       const selected = selectedId === so.id;
                       return (
                         <TableRow

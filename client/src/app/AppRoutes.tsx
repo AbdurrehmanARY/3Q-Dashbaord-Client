@@ -1,7 +1,10 @@
 import { Suspense } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AppLayout } from "@/shared/layouts/AppLayout";
+import { ProtectedRoute, PublicRoute, RoleProtectedRoute } from "@/shared/components/auth";
 import { routes, redirects } from "./routes";
+import { LoginPage } from "@/features/auth/pages/LoginPage";
+import { RegisterPage } from "@/features/auth/pages/RegisterPage";
 
 function PageFallback() {
   return (
@@ -15,14 +18,25 @@ function PageFallback() {
 export function AppRoutes() {
   return (
     <Routes>
-      <Route element={<AppLayout />}>
-        {routes.map(({ path, component: Page }) => (
+      {/* Public routes — no auth required */}
+      <Route path="/auth/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
+      <Route path="/auth/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
+
+      {/* Protected routes — auth required, wrapped in AppLayout */}
+      <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
+        {routes.map(({ path, component: Page, roles }) => (
           <Route
             key={path}
             path={path}
             element={
               <Suspense fallback={<PageFallback />}>
-                <Page />
+                {roles && roles.length > 0 ? (
+                  <RoleProtectedRoute allowedRoles={roles}>
+                    <Page />
+                  </RoleProtectedRoute>
+                ) : (
+                  <Page />
+                )}
               </Suspense>
             }
           />

@@ -46,15 +46,13 @@ optional attribution field, **not** an authorization signal.
 
 | Role | Responsibility |
 |---|---|
+| `ceo` | Executive overview; full read access to all dashboards and analytics |
 | `office_staff` | Office staff; work-order master data |
 | `production_manager` | Production planning; assign machines + operators; reserve material |
-| `production_operator` | Operate machines; perform packaging (no packaging-specific role) |
+| `accountant` | Financial oversight; work-order dispatch; analytics read access |
 
 `apiRateLimiter` (express-rate-limit) is active at 1000 req/IP/min on `/api`;
-`authRateLimiter` is pre-wired for when auth arrives (unused today). There is **no
-CEO / Initiator / Accountant** role and **no invoicing/accounting** module — only
-invoice-number/date data columns and inventory "ledgers". This memory bank mirrors
-the real code, not the imagined matrix.
+`authRateLimiter` is pre-wired for when auth arrives (unused today).
 
 ## Technical constraints (verified)
 - **Two independent packages**, no root `package.json`, no npm workspaces. Every

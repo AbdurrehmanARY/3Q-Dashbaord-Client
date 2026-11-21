@@ -34,7 +34,9 @@ export class ProductionRunService {
     }
 
     return productionRunRepository.create({
-      saleOrderId,
+      ...(workOrder.productType === "printed"
+        ? { printedSaleOrderId: saleOrderId }
+        : { wovenSaleOrderId: saleOrderId }),
       productId: data.productId,
       machineId: data.machineId,
       operatorId: data.operatorId,

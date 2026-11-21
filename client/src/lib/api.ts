@@ -1,4 +1,6 @@
 import axios from "axios";
+import type { AxiosError, InternalAxiosRequestConfig } from "axios";
+import { useAuthStore } from "@/store/auth-store";
 
 export class ApiError extends Error {
   status: number;
@@ -19,6 +21,69 @@ export const axiosInstance = axios.create({
     "Content-Type": "application/json",
   },
 });
+
+let isRefreshing = false;
+let refreshSubscribers: ((token: string | null) => void)[] = [];
+
+function onTokenRefreshed(token: string | null) {
+  refreshSubscribers.forEach((cb) => cb(token));
+  refreshSubscribers = [];
+}
+
+function addRefreshSubscriber(cb: (token: string | null) => void) {
+  refreshSubscribers.push(cb);
+}
+
+// Request interceptor — attach Authorization header from auth store
+axiosInstance.interceptors.request.use(
+  (config: InternalAxiosRequestConfig) => {
+    const { accessToken } = useAuthStore.getState();
+    if (accessToken) {
+      config.headers.Authorization = `Bearer ${accessToken}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+// Response interceptor — handle 401 by attempting token refresh
+axiosInstance.interceptors.response.use(
+  (response) => response,
+  async (error: AxiosError) => {
+    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
+
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      if (!isRefreshing) {
+        isRefreshing = true;
+        try {
+          const { refreshAccessToken } = useAuthStore.getState();
+          await refreshAccessToken();
+          const { accessToken } = useAuthStore.getState();
+          isRefreshing = false;
+          onTokenRefreshed(accessToken);
+        } catch (refreshError) {
+          isRefreshing = false;
+          onTokenRefreshed(null);
+          return Promise.reject(refreshError);
+        }
+      }
+
+      return new Promise((resolve) => {
+        addRefreshSubscriber((token) => {
+          if (token) {
+            originalRequest.headers.Authorization = `Bearer ${token}`;
+            originalRequest._retry = true;
+            resolve(axiosInstance(originalRequest));
+          } else {
+            resolve(Promise.reject(error));
+          }
+        });
+      });
+    }
+
+    return Promise.reject(error);
+  }
+);
 
 async function request<T>(
   method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",

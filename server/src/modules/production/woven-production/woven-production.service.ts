@@ -1,5 +1,6 @@
 import { wovenProductionRepository, type ThreadPlanInput } from "./woven-production.repository";
 import { productionOrderRepository } from "../production-orders/production-order.repository";
+import { batchFlowRepository } from "../batch-and-runs/batch-flow.repository";
 import { userService } from "@modules/users/user.service";
 import { beamThreadKgOf } from "../batch-and-runs/batch-flow.helpers";
 import { mailService } from "@shared/services/mail.service";
@@ -60,6 +61,45 @@ export class WovenProductionService {
     const lines = await wovenProductionRepository.findLines(productionOrderId);
     const { machines, operators } = await wovenProductionRepository.findResourceNames();
 
+    /** Batch traceability: operator/machine/completedAt per (line, stage) for the woven side. */
+    const batches = await batchFlowRepository.findByOrder(Number(productionOrderId), "woven");
+    const completedBatchByLineStage = new Map<string, {
+      operatorId: number | null;
+      operatorName: string | null;
+      operatorAvatarUrl: string | null;
+      machineId: number | null;
+      machineName: string | null;
+      completedAt: string | null;
+    }>();
+    for (const b of batches) {
+      if (b.status !== "COMPLETED") continue;
+      const lineId = b.wovenProductionLineId;
+      if (lineId == null) continue;
+      const key = `${lineId}:${b.stage}`;
+      const existing = completedBatchByLineStage.get(key);
+      const completedAtStr = b.completedAt ? b.completedAt.toISOString() : null;
+      if (!existing || (completedAtStr && (!existing.completedAt || completedAtStr > existing.completedAt))) {
+        completedBatchByLineStage.set(key, {
+          operatorId: b.operatorId,
+          operatorName: b.operatorName,
+          operatorAvatarUrl: (b as { operatorAvatarUrl?: string | null }).operatorAvatarUrl ?? null,
+          machineId: b.machineId,
+          machineName: b.machineName,
+          completedAt: completedAtStr,
+        });
+      }
+    }
+
+    /** Per-line Σ waste from all live batches — the weaving progress target
+     *  is the line quantity minus this, not the raw quantity. */
+    const lineWaste = batches
+      .filter((b) => b.status !== "CANCELLED" && b.wovenProductionLineId != null)
+      .reduce((acc, b) => {
+        const id = b.wovenProductionLineId!;
+        acc[id] = (acc[id] || 0) + Number(b.wastedRolls ?? 0);
+        return acc;
+      }, {} as Record<number, number>);
+
     const detailed = await Promise.all(
       lines.map(async (line) => {
         const n = toNumbers(line);
@@ -105,6 +145,10 @@ export class WovenProductionService {
             ? Math.round((actualWeavingHours - estimatedWeavingHours) * 100) / 100
             : 0;
 
+        const wBatch = completedBatchByLineStage.get(`${line.id}:weaving`);
+        const cBatch = completedBatchByLineStage.get(`${line.id}:cutting`);
+        const pBatch = completedBatchByLineStage.get(`${line.id}:packaging`);
+
         return {
           id: line.id,
           /** One woven line per label type, exactly like the printed side. */
@@ -141,12 +185,24 @@ export class WovenProductionService {
             status: line.weavingStatus,
             startedAt: line.weavingStartedAt,
             endedAt: line.weavingEndedAt,
-            progressPct: n.quantity > 0 ? Math.round((n.wovenQty / n.quantity) * 10000) / 100 : 0,
-            isComplete: n.quantity > 0 && n.wovenQty >= n.quantity,
+            /** Waste deducts from the line's planned quantity to form the effective target. */
+            wastedTotal: lineWaste[line.id] ?? 0,
+            progressPct:
+              n.quantity > 0
+                ? Math.round((n.wovenQty / Math.max(1, n.quantity - (lineWaste[line.id] ?? 0))) * 10000) / 100
+                : 0,
+            isComplete:
+              n.quantity > 0 && n.wovenQty >= n.quantity - (lineWaste[line.id] ?? 0),
             speedRpm: speedVal,
             estimatedWeavingHours,
             actualWeavingHours,
             weavingTimeDiffHours,
+            operatorId: wBatch?.operatorId ?? null,
+            operatorName: wBatch?.operatorName ?? null,
+            operatorAvatarUrl: wBatch?.operatorAvatarUrl ?? null,
+            machineId: wBatch?.machineId ?? null,
+            machineName: wBatch?.machineName ?? null,
+            completedAt: wBatch?.completedAt ?? null,
           },
           cutting: {
             cutQty: n.cutQty,
@@ -154,6 +210,12 @@ export class WovenProductionService {
             /** Cutting cannot begin until weaving is 100% complete. */
             canStart: canStartCutting(line),
             isComplete: n.cutQty > 0 && n.cutQty >= n.wovenQty,
+            operatorId: cBatch?.operatorId ?? null,
+            operatorName: cBatch?.operatorName ?? null,
+            operatorAvatarUrl: cBatch?.operatorAvatarUrl ?? null,
+            machineId: cBatch?.machineId ?? null,
+            machineName: cBatch?.machineName ?? null,
+            completedAt: cBatch?.completedAt ?? null,
           },
           packaging: {
             packagedQty: n.packagedQty,
@@ -162,6 +224,12 @@ export class WovenProductionService {
             /** Packaging cannot begin until cut quantity equals woven quantity. */
             canStart: canStartPackaging(line),
             isComplete: n.quantity > 0 && n.packagedQty >= n.quantity,
+            operatorId: pBatch?.operatorId ?? null,
+            operatorName: pBatch?.operatorName ?? null,
+            operatorAvatarUrl: pBatch?.operatorAvatarUrl ?? null,
+            machineId: null,
+            machineName: null,
+            completedAt: pBatch?.completedAt ?? null,
           },
         };
       })
@@ -185,6 +253,12 @@ export class WovenProductionService {
       totals: {
         lineCount: lines.length,
         quantity: sum((l) => Number(l.quantity)),
+        /** Σ waste across every live (non-cancelled) batch — deducted from the
+         *  plan to form the effective required target the progress bars use. */
+        wastedTotal: batches.reduce(
+          (acc, b) => acc + (b.status !== "CANCELLED" ? Number(b.wastedRolls ?? 0) : 0),
+          0
+        ),
         totalThreadWeightKg: totalThreadIssued,
         remainingThreadReturned,
         threadUsedInPackagedQuantity,
@@ -222,25 +296,18 @@ export class WovenProductionService {
 
     /*
      * Planning is per label type and incremental, so it cannot demand an exact total on
-     * every submit. The rule is the printed one: never over-allocate. Cumulative planned
-     * quantity may not exceed the order's, and a label type cannot be named twice.
+     * every submit. A label type cannot be named twice.
+     *
+     * Woven lines may be planned BEYOND the order's totalQty — this is the make-up path:
+     * after waste is recorded at any stage, the production manager re-plans the affected
+     * label type with an increased quantity so new weaving batches can replace the lost
+     * pieces. The order's totalQty is a *guide*, not a hard ceiling, for woven lines.
      */
     const siblings = (await wovenProductionRepository.findLines(productionOrderId)).filter(
       (l) => l.id !== lineId
     );
     if (siblings.some((l) => l.labelType.trim().toLowerCase() === labelType.toLowerCase())) {
       throw new ApiError(`Label type '${labelType}' is already planned on this order`, 400);
-    }
-
-    const plannedBySiblings = siblings.reduce((n, l) => n + Number(l.quantity), 0);
-    const orderQty = Number(order.totalQty);
-    if (orderQty > 0 && plannedBySiblings + input.quantity > orderQty) {
-      const remaining = Math.max(0, orderQty - plannedBySiblings);
-      throw new ApiError(
-        `Cannot plan ${input.quantity} pcs for '${labelType}': only ${remaining} of the ` +
-          `order's ${orderQty} pcs remain unplanned`,
-        400
-      );
     }
 
     /**

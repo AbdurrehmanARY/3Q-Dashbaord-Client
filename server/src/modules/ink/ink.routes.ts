@@ -7,9 +7,12 @@ import {
   createInkConsumptionSchema,
 } from "./ink.schema";
 import { idParamsSchema } from "@shared/validation/common.schema";
+import { requireRole } from "@shared/middleware/rbac";
 
 /* Mounted at /api/ink — see routes/index.ts. */
 const router = Router();
+
+router.use(requireRole("production_manager", "ceo"));
 
 /* Purchases + derived stock */
 router.get("/purchases", inkController.listPurchases);

@@ -13,50 +13,61 @@ import {
 } from "../types";
 import type { WorkOrderSchemaInput } from "../schemas/work-order-schemas";
 
-export function WorkOrderBasicInfo({ isEdit, isLocked }: { isEdit: boolean; isLocked: boolean }) {
+export function WorkOrderBasicInfo({
+  isEdit,
+  isLocked,
+  hideProductType,
+}: {
+  isEdit: boolean;
+  isLocked: boolean;
+  /** When true, omits the product-type selector — used by the printed/woven workflow dialogs where the type is fixed. */
+  hideProductType?: boolean;
+}) {
   const { register, control, formState: { errors } } = useFormContext<WorkOrderSchemaInput>();
 
   return (
     <>
-      <div className="sm:col-span-2">
-        <Label className="text-xs font-semibold">Product Type *</Label>
-        <Controller
-          control={control}
-          name="productType"
-          render={({ field: { value, onChange } }) => (
-            <div className="mt-1.5 grid gap-2 sm:grid-cols-2">
-              {(Object.keys(PRODUCT_TYPE_META) as ProductType[]).map((type) => {
-                const meta = PRODUCT_TYPE_META[type];
-                const selected = value === type;
-                return (
-                  <button
-                    key={type}
-                    type="button"
-                    disabled={isEdit || isLocked}
-                    aria-pressed={selected}
-                    onClick={() => onChange(type)}
-                    className={cn(
-                      "rounded-lg border px-3 py-2 text-left transition-colors",
-                      selected
-                        ? "border-primary bg-primary/5 ring-1 ring-primary/30"
-                        : "border-input hover:bg-muted/50",
-                      (isEdit || isLocked) && "cursor-not-allowed opacity-60"
-                    )}
-                  >
-                    <span className="block text-sm font-medium">{meta.label}</span>
-                    <span className="block text-[11px] text-muted-foreground">{meta.description}</span>
-                  </button>
-                );
-              })}
-            </div>
+      {!hideProductType && (
+        <div className="sm:col-span-2">
+          <Label className="text-xs font-semibold">Product Type *</Label>
+          <Controller
+            control={control}
+            name="productType"
+            render={({ field: { value, onChange } }) => (
+              <div className="mt-1.5 grid gap-2 sm:grid-cols-2">
+                {(Object.keys(PRODUCT_TYPE_META) as ProductType[]).map((type) => {
+                  const meta = PRODUCT_TYPE_META[type];
+                  const selected = value === type;
+                  return (
+                    <button
+                      key={type}
+                      type="button"
+                      disabled={isEdit || isLocked}
+                      aria-pressed={selected}
+                      onClick={() => onChange(type)}
+                      className={cn(
+                        "rounded-lg border px-3 py-2 text-left transition-colors",
+                        selected
+                          ? "border-primary bg-primary/5 ring-1 ring-primary/30"
+                          : "border-input hover:bg-muted/50",
+                        (isEdit || isLocked) && "cursor-not-allowed opacity-60"
+                      )}
+                    >
+                      <span className="block text-sm font-medium">{meta.label}</span>
+                      <span className="block text-[11px] text-muted-foreground">{meta.description}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          />
+          {isEdit && (
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Product type is fixed once the order is created.
+            </p>
           )}
-        />
-        {isEdit && (
-          <p className="mt-1 text-[11px] text-muted-foreground">
-            Product type is fixed once the order is created.
-          </p>
-        )}
-      </div>
+        </div>
+      )}
 
       <AppInput
         label="SO Number *"

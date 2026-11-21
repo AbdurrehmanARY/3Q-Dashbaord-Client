@@ -17,7 +17,8 @@ import {
   productionStageEvents,
   productionOrderLines,
   productionOrders,
-  workOrders,
+  printedLabelWorkOrders,
+  wovenLabelWorkOrders,
   inventoryRolls,
 } from "./schema";
 import { sql } from "drizzle-orm";
@@ -30,7 +31,8 @@ async function reset() {
   await db.delete(productionStageEvents);
   await db.delete(productionOrderLines);
   await db.delete(productionOrders);
-  await db.delete(workOrders);
+  await db.delete(printedLabelWorkOrders);
+  await db.delete(wovenLabelWorkOrders);
 
   // Restore inventory to its pre-production state: nothing issued, balance back to received.
   const updated = await db

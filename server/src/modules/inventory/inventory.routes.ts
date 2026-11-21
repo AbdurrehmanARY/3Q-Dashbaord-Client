@@ -5,8 +5,11 @@ import { createPurchaseSchema, updatePurchaseSchema } from "./inventory.schema";
 import { listPurchasesQuerySchema, listStockQuerySchema } from "@shared/validation/query.schema";
 import { idParamsSchema } from "@shared/validation/common.schema";
 import inventoryRollRoutes from "./inventory-roll.routes";
+import { requireRole } from "@shared/middleware/rbac";
 
 const router = Router();
+
+router.use(requireRole("production_manager", "ceo"));
 
 router.use("/rolls", inventoryRollRoutes);
 

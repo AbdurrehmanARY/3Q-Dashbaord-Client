@@ -50,7 +50,7 @@ export const listProductionOrdersQuerySchema = z.object({
 });
 
 export const listUsersQuerySchema = z.object({
-  role: z.enum(["office_staff", "production_manager", "production_operator"]).optional(),
+  role: z.enum(["ceo", "office_staff", "production_manager", "accountant"]).optional(),
   includeInactive: z.coerce.boolean().optional(),
 });
 

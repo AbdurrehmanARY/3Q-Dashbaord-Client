@@ -37,7 +37,7 @@ export function ProductionOrderTable() {
   const navigate = useNavigate();
   const { data, isLoading, isError, error, refetch, isRefetching } = useProductionOrders();
   const deleteOrder = useDeleteProductionOrder();
-
+console.log("data",data)
   const handleDeleteSelected = async (selected: ProductionOrder[]) => {
     await Promise.allSettled(selected.map((po) => deleteOrder.mutateAsync(String(po.id))));
   };

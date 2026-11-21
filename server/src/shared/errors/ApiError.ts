@@ -25,6 +25,18 @@ export class NotFoundError extends ApiError {
   }
 }
 
+export class UnauthorizedError extends ApiError {
+  constructor(message: string = "Unauthorized") {
+    super(message, 401);
+  }
+}
+
+export class ForbiddenError extends ApiError {
+  constructor(message: string = "Access denied") {
+    super(message, 403);
+  }
+}
+
 export class ConflictError extends ApiError {
   constructor(message: string = "Conflict") {
     super(message, 409);

@@ -8,6 +8,11 @@ declare global {
       validatedBody?: any;
       validatedQuery?: any;
       validatedParams?: any;
+      user?: {
+        sub: number;
+        email: string;
+        role: string;
+      };
     }
   }
 }

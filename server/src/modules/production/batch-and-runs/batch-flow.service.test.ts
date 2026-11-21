@@ -266,9 +266,78 @@ describe("BatchFlowService.getOrderFlow (line-scoped)", () => {
     expect(flow.lines[0].batchCounts.packaging).toBe(1);
     expect(flow.lines[0].cutProduced).toBe(40000);
     expect(flow.lines[0].batchCounts.cutting).toBe(1);
+    // No waste in this fixture — per-stage waste fields are zero, total matches line quantity.
+    expect(flow.lines[0].quantity).toBe(40000);
+    expect(flow.lines[0].printedWasted).toBe(0);
+    expect(flow.lines[0].cutWasted).toBe(0);
+    expect(flow.lines[0].packagedWasted).toBe(0);
+    expect(flow.lines[0].wastedTotal).toBe(0);
+    // required = line.quantity (40000) - wastedTotal (0) = 40000; no waste yet.
+    expect(flow.lines[0].required).toBe(40000);
+    // Order-wide totals carry quantity and per-stage waste too.
+    expect(flow.totals.quantity).toBe(40000);
+    expect(flow.totals.printedWasted).toBe(0);
+    expect(flow.totals.cutWasted).toBe(0);
+    expect(flow.totals.packagedWasted).toBe(0);
+    expect(flow.totals.wastedTotal).toBe(0);
     // Nothing else in the system can currently produce this trueness.
     expect(flow.readyForCompletion).toBe(true);
   });
+
+  it("deducts cutting and packaging waste from the required target", async () => {
+    // Weaving produced 40 000 (no waste). Cutting wasted 500 of the 40 000 it took.
+    // Packaging wasted 300 of the 39 500 it took. Total waste = 800.
+    mockOrder22([
+      batchRow({
+        id: 30,
+        stage: "weaving",
+        batchCode: "W-001",
+        assignedRolls: "40000.00",
+        producedRolls: "40000.00",
+        availableRolls: "0.00",
+        wastedRolls: "0.00",
+      }),
+      batchRow({
+        id: 41,
+        stage: "cutting",
+        batchCode: "C-001",
+        assignedRolls: "40000.00",
+        producedRolls: "39500.00",
+        consumedRolls: "0.00",
+        wastedRolls: "500.00",
+        availableRolls: "39500.00",
+      }),
+      batchRow({
+        id: 43,
+        stage: "packaging",
+        batchCode: "PK-001",
+        assignedRolls: "39500.00",
+        producedRolls: "39200.00",
+        consumedRolls: "0.00",
+        wastedRolls: "300.00",
+        packagedQty: "39200.00",
+        availableRolls: "0.00",
+      }),
+    ]);
+    const flow = await service().getOrderFlow(22);
+    // Per-stage waste is surfaced individually.
+    expect(flow.lines[0].printedWasted).toBe(0);
+    expect(flow.lines[0].cutWasted).toBe(500);
+    expect(flow.lines[0].packagedWasted).toBe(300);
+    // wastedTotal is the true Σ across all three stages (not just first-stage).
+    expect(flow.lines[0].wastedTotal).toBe(800);
+    // required = line.quantity (40000) - totalWasted (800) = 39200.
+    expect(flow.lines[0].required).toBe(39200);
+    // packagedProduced (39200) reaches the deducted required (39200) -> ready.
+    expect(flow.lines[0].packagedProduced).toBe(39200);
+    expect(flow.readyForCompletion).toBe(true);
+    // Totals aggregate the same figures order-wide.
+    expect(flow.totals.wastedTotal).toBe(800);
+    expect(flow.totals.cutWasted).toBe(500);
+    expect(flow.totals.packagedWasted).toBe(300);
+    expect(flow.totals.required).toBe(39200);
+  });
+
 
   it("reads the order once and sums each label type's own batches", async () => {
     mockOrder22([

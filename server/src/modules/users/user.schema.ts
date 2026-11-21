@@ -1,6 +1,9 @@
 import { z } from "zod";
+import { userRoleEnum, users } from "@db/schema";
 
-export const userRoleSchema = z.enum(["office_staff", "production_manager", "production_operator"]);
+type UserRole = typeof users.$inferSelect["role"];
+
+export const userRoleSchema = z.enum(userRoleEnum.enumValues as [UserRole, ...UserRole[]]);
 
 export const createUserSchema = z.object({
   body: z.object({
@@ -8,6 +11,7 @@ export const createUserSchema = z.object({
     employeeCode: z.string().optional(),
     email: z.string().email("Must be a valid email").optional(),
     role: userRoleSchema,
+    passwordHash: z.string().min(1, "Password hash is required"),
   }),
 });
 

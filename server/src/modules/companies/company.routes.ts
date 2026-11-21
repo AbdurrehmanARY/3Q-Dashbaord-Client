@@ -4,8 +4,11 @@ import { validateRequest, validateQuery, validateParams } from "@shared/middlewa
 import { createCompanySchema, updateCompanySchema } from "./company.schema";
 import { listCompaniesQuerySchema } from "@shared/validation/query.schema";
 import { idParamsSchema } from "@shared/validation/common.schema";
+import { requireRole } from "@shared/middleware/rbac";
 
 const router = Router();
+
+router.use(requireRole("production_manager", "ceo"));
 
 router.get("/", validateQuery(listCompaniesQuerySchema), companyController.getCompanies);
 router.get("/:id", validateParams(idParamsSchema), companyController.getCompany);

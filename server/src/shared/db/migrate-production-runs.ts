@@ -1,5 +1,5 @@
 import { db } from "./index";
-import { productionRuns, productionOrderLines, productionOrders, workOrders } from "./schema";
+import { productionRuns, productionOrderLines, productionOrders, printedLabelWorkOrders } from "./schema";
 import { eq, like } from "drizzle-orm";
 
 /**
@@ -22,11 +22,11 @@ export async function migrateProductionRuns() {
       printingOperatorId: productionOrderLines.printingOperatorId,
       packagingCompletedAt: productionOrderLines.packagingCompletedAt,
       updatedAt: productionOrderLines.updatedAt,
-      saleOrderId: productionOrders.workOrderId,
+      saleOrderId: productionOrders.printedWorkOrderId,
     })
     .from(productionOrderLines)
     .innerJoin(productionOrders, eq(productionOrderLines.productionOrderId, productionOrders.id))
-    .innerJoin(workOrders, eq(productionOrders.workOrderId, workOrders.id));
+    .innerJoin(printedLabelWorkOrders, eq(productionOrders.printedWorkOrderId, printedLabelWorkOrders.id));
 
   const existing = await db
     .select({ key: productionRuns.idempotencyKey })
@@ -44,7 +44,7 @@ export async function migrateProductionRuns() {
       continue;
     }
     await db.insert(productionRuns).values({
-      saleOrderId: line.saleOrderId,
+      printedSaleOrderId: line.saleOrderId,
       productId: line.labelType,
       machineId: line.printingMachineId,
       operatorId: line.printingOperatorId,

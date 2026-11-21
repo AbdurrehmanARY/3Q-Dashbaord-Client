@@ -50,8 +50,8 @@
   order-scoped routes/schema/controller/service helpers are gone. Client side:
   `utils/batch-scope.ts`, `createFromOrder`/`getSourcesFromOrder`/`getResourcesFromOrder` and the
   scope-picking hooks are deleted; the board and dialog always use `flow.lineId`;
-  `services/batch-service.test.ts` pins the line URLs. ⚠ **Live is still pre-0025** — the
-  migration is journalled (idx 25) but has not been run against Supabase yet.
+  `services/batch-service.test.ts` pins the line URLs. ✅ **0025 has been applied to live Supabase** (verified 2026-10-28) — the
+  migration is journalled (idx 25) and has been applied to live Supabase.
   HISTORY (2026-09-26 → 2026-09-29): live was briefly order-scoped (0023's content had never
   executed, so `first_stage_one_line` + `order_stage_no_uq` were live), and the interim read-path
   and create-path fixes recorded below — and in `implementation.md` §12–§13 — described that
@@ -75,6 +75,22 @@
 - `GET /api/analytics/kpis` — the only analytics endpoint left (the old
   `reports` feature was removed; the dashboard consumes this one endpoint).
 - Dashboard page + production-order summary cards.
+
+### Dashboard consolidation (2026-10-29)
+- Removed `features/ceo-dashboard/` (7 pages + hooks + service). The
+  "CEO Dashboard" navigation entry was replaced by an expanded top-level
+  "Dashboard" section with six sub-pages (`/dashboard/work-orders`,
+  `/dashboard/work-orders/printed`, `/dashboard/work-orders/woven`,
+  `/dashboard/production-orders`, `/dashboard/production-orders/printed`,
+  `/dashboard/production-orders/woven`, `/dashboard/machines`,
+  `/dashboard/operators`, `/dashboard/roll-stock`,
+  `/dashboard/thread-stock`) plus the `/` overview.
+- The old `DashboardPage.tsx` KPI-based overview was replaced by the
+  CEO overview (stat cards + trend) from the deleted `CeoDashboardPage`.
+- Old `/ceo-dashboard/*` routes are kept as redirects to `/dashboard/*`
+  for backward compatibility.
+- `routes.tsx` and `shared/navigation.ts` updated accordingly; graphify
+  re-indexed; typecheck + 92/92 tests green.
 
 ### Tooling & delivery
 - CI (`.github/workflows/ci.yml`): typecheck → lint → test → build, both packages
@@ -296,3 +312,187 @@ and server-jade-gamma-86.vercel.app (both repos have the Vercel GitHub
 integration).
 ## Vercel build fix (2026-10-20)
 - Client build (tsc -b && vite build) failed on Vercel with TS18003: tsconfig.node.json included vite.config.ts but it had been removed. Restored client/vite.config.ts (proxy config) so tsc -b finds its input. Build now passes locally (~53s). Pushed updated client as a fast-forward.
+
+## Plan & Reserve — visible validation for hidden required fields (2026-10-21)
+- Symptom: user enters material (confirmed persisting via the Controller) but submit never fires — it was silently rejected by the row resolver with the error trapped inside a collapsed row.
+- Root cause: `planLineSchema.labelSize` (`z.coerce.number().positive("Must be > 0")`) and `materialCode` (`.min(1)`) are unconditional on every printed row, but their inline errors render only inside the `isOpen` block; the closed-row summary never surfaced them, so the blank required field was invisible. There is no top-level per-row-error summary, so RHF's `handleSubmit` set `errors` and skipped the async callback — looking like "submit won't fire."
+- Fix (`client/src/features/production-orders/components/PlanLabelTypeForm.tsx`, client-only):
+  - added `isSubmitted` to `formState`;
+  - added `hasRowErrors` boolean mirroring the file's existing `Array.isArray(errors.rows)` guard (avoids the TS2722 on `.some`);
+  - added a top-level `<Warning>` above the buttons that appears after a failed submit ("Plan incomplete — expand the highlighted row…");
+  - added a `useEffect` that auto-opens the first errored row after `isSubmitted && !isSubmitting`;
+  - extended the closed-row summary to also show `Label Size (mm)` (`N mm` or `"Label size needed"`), so the blocker is visible without expanding.
+- No schema/server change: `labelSize` is required-by-design (a real printed-label dimension; server twin `planLineSchema` enforces `.positive()`).
+- Validation: client typecheck 0 errors · vitest 92/92 · `npm run build` OK (full Vite bundle).
+
+## Woven make-up support — remove planning ceiling & surface required quantity (2026-10-27)
+- **Server (`woven-production.service.ts`):** Removed the `plannedBySiblings + input.quantity > orderQty`
+  ceiling check in `planLine()`. Woven label types may now be planned BEYOND the order's totalQty —
+  this is the make-up path: after waste is recorded, the production manager re-plans the affected
+  label type with an increased quantity so new weaving batches can replace lost pieces. A duplicate
+  label-type name is still rejected. (The compiled `server/api/index.js` bundle needs `npm run build`
+  to track this source change.)
+- **Server (`batch-flow.service.ts`):** Set `required: Number(l.quantity)` for woven lines (was `0`).
+  Makes the per-line target explicit instead of relying on the `required > 0 ? required : planned`
+  fallback in `StageProgressBars`.
+- **Client (`PlanLabelTypeForm.tsx`):** `blocked` now uses `(!isWoven && overAllocated)` so only the
+  *printed* workflow keeps the hard ceiling. Woven still shows an informational Warning when total
+  planned exceeds the order's unplanned remainder, but the submit button stays enabled for make-up.
+  Ceiling label appends "(exceeds order total)" when over-allocated.
+- **Client (`WovenProductionPanel.tsx`):** Added `quantityLabels` to the woven StageProgressBars
+  so bars read "X produced / Y required pcs"; removed the `disabled={remainingQty <= 0}` gate on the
+  "Add Label Type" button (woven has no hard ceiling now); added `ProductionCompletionReport` to the
+  completed-production summary so the floor gets the order-wide issued/produced/waste breakdown
+  alongside the per-stage audit cards.
+- **Client (`BatchOutputDialog.tsx`):** Updated JSDoc to state waste is recordable at every stage
+  (since 0027) and that recording waste does NOT create headroom — the user must re-plan the label
+  type to add make-up capacity (matching `remainingPlannedTx` / `lineFlowOf` comments).
+- **Verification:** static review confirms type-safety of every edit; `run_commands` tool unavailable
+  in this session for `tsc --noEmit` / `vitest` / `npm run build` — run `verify-changes.bat` at repo
+  root, or execute `cd server && npm run typecheck && npm test && npm run build` then
+  `cd client && npm run typecheck && npm test`.
+
+### Waste-deducted progress denominator (2026-10-27, continuation)
+
+- **Server (`batch-flow.service.ts` `getOrderFlow`):** `required` is now `round2(Math.max(0, line.required - flow.wastedTotal))` — waste is deduced from the planned target so the denominator shrinks when waste is recorded and grows when make-up is planned. This applies to both woven (`line.required = quantity`) and printed (`line.required = requiredRolls`).
+- **Server (`batch-flow.helpers.ts` `isReadyForCompletion`):** Removed `+ l.wastedTotal` from the left side — since `required` now already has waste subtracted, the check is simply `packagedProduced >= target`. Math is equivalent: old `packagedProduced + waste >= planned` equals new `packagedProduced >= planned - waste`.
+- **Server (`woven-production.service.ts` `getOverview`):** Added per-line `wastedTotal` (sum of `wastedRolls` from live batches per line); updated `progressPct` and `isComplete` to use `quantity - wastedTotal` as the target. Order-level `totals.wastedTotal` added to `WovenOverview.totals`.
+- **Client (`woven-types.ts`):** Added `wastedTotal: number` to `WovenLineOverview.weaving` and `WovenOverview.totals`.
+- **Client (`StageProgressBars.tsx`):** Added `wastedTotal: number` to `StageTotals` interface (field was already in the API response).
+- **Client (`WovenProductionPanel.tsx`):** Stat card now shows waste count in the description using `data.totals.wastedTotal`.
+- **Tests (`batch-flow.helpers.test.ts`):** Updated `isReadyForCompletion` tests — "waste deducts from required target" replaces "counts waste toward completion"; completion test now expects false when a line hasn't met its waste-adjusted target and true when it has.
+
+## CEO Dashboard + Work-Order Split (2026-10-28, completed)
+
+### Migration 0029 — separate workflow tables
+- **SQL** (`drizzle/0029_separate_workflow_tables.sql`): creates 4 new extension tables:
+  `printed_label_work_orders`, `woven_label_work_orders` (with absorbed loom spec: design_code,
+  pick, repeat, density, speed, extra, estimated_weaving_hours, size_labels; unique index on design_code),
+  `printed_label_production_orders`, `woven_label_production_orders`. Backfills all existing rows
+  by `product_type` via inner join to `work_orders`. Non-destructive — no existing tables dropped.
+- **Journal**: registered `idx 29` in `drizzle/meta/_journal.json`.
+- **Applied to live Supabase** (verified 2026-10-28): 30 migration rows in `__drizzle_migrations`.
+  1 woven work order backfilled with loom spec; all FKs validated.
+- **Idempotent**: backfill INSERTs filter by product_type; re-runnable.
+
+### Server — CEO Dashboard Module
+- **Routes** (`ceo-dashboard.routes.ts`): 6 GET-only endpoints — `roll-stock`, `thread-stock`,
+  `work-orders`, `production`, `operators`, `machines`. No mutation handlers.
+- **Controller** (`ceo-dashboard.controller.ts`): thin asyncHandler-wrapped methods, one service
+  call each; response shaped server-side.
+- **Service** (`ceo-dashboard.service.ts`): 6 read-only methods; operator/machine utilization
+  computed via joins through `production_batches` -> `production_orders` to resolve `productionNumber`.
+- **Repository** (`ceo-dashboard.repository.ts`): 6 query methods using Drizzle ORM; inner joins
+  enforce product-type scoping.
+- **App** (`app.ts`): mounted `@ceo` router + split work-order routers (`@work-orders/printed`,
+  `@work-orders/woven`, `@production/printed`, `@production/woven`).
+
+### Server — Split Work-Order Routes
+- **Printed** (`work-orders/printed/`): repository (inner join to `printed_label_work_orders`,
+  `product_type = 'printed'` filter), service (design-code uniqueness, `orderDate` required,
+  `estimatedWeavingHours` excluded), controller (validation middleware), routes (CRUD + filters).
+- **Woven** (`work-orders/woven/`): repository (inner join to `woven_label_work_orders`,
+  `product_type = 'woven'` filter), service (design-code uniqueness, server-side
+  `estimatedWeavingHours`), controller (validation middleware), routes (CRUD + filters).
+- **Type fix**: `status` field in both repositories uses `WorkOrder['status']` (pgEnum union),
+  not `string`; `WorkOrderRow` interface exported from printed repo for TS4053 fix.
+
+### Server — Fixed `findLines` Bug
+- **Before**: `woven-production-order.routes.ts` called `findLinesByOrder` which did not exist on
+  `woven-production-order.repository.ts`.
+- **Fix**: renamed `findLinesByOrder` -> `findLines` on both the repository method and the call site.
+
+### Client — CEO Dashboard Feature
+- **Service** (`ceo-dashboard-service.ts`): typed read-only API wrappers with
+  `select: (res) => res.data` unwrap pattern.
+- **Hooks** (`use-ceo-dashboard.ts`): 6 `useQuery`-only hooks with `CEO_DASHBOARD_KEYS` factory,
+  60s `staleTime`, single-object argument syntax (v5 style).
+- **Pages** (7 total): `CeoDashboardPage` (overview with stat cards) + 6 detail pages
+  (`RollStockDashboardPage`, `ThreadStockDashboardPage`, `WorkOrdersDashboardPage`,
+  `ProductionDashboardPage`, `OperatorsDashboardPage`, `MachinesDashboardPage`).
+  Uses plain HTML tables (no shadcn/ui data-table — simpler for read-only).
+- **Routes** (`app/routes.tsx`): 7 new routes under `/ceo/`.
+
+### Client — Split Work-Order Modules
+- **Printed** (`features/work-orders/printed/`): service, hooks (usePrintedWorkOrders,
+  useCreatePrintedWorkOrder, useUpdatePrintedWorkOrder, useDeletePrintedWorkOrder),
+  list page with filtering, `PrintedWorkOrderTable` (DataTable-based), `PrintedWorkOrderColumns`
+  (printed-only columns — omits Type badge and Design Code), `PrintedWorkOrderDialog` (productType
+  fixed to "printed", no WovenSpecification section, hideProductType selector), `PrintedWorkOrderRowActions`
+  (view/edit/child-order/dispatch/delete/pin).
+- **Woven** (`features/work-orders/woven/`): service, hooks (useWovenWorkOrders,
+  useCreateWovenWorkOrder, useUpdateWovenWorkOrder, useDeleteWovenWorkOrder),
+  list page with filtering, `WovenWorkOrderTable` (DataTable-based), `WovenWorkOrderColumns`
+  (woven-only columns — surfaces Design Code prominently), `WovenWorkOrderDialog` (productType fixed
+  to "woven", always shows WovenSpecification section), `WovenWorkOrderRowActions` (view/edit/child-order
+  dispatch/delete/pin).
+- Both dialogs support child-order creation (shortfall/recut/additional) with auto-suffixed SO numbers.
+- Both use `useQuery` + `useMutation` with `invalidateQueries` + `toast`.
+- `DataTableColumnHeaderProps` extended with optional `align` prop to support right-aligned headers.
+- **Verification**: client typecheck 0 errors; client tests 92/92 passed.
+
+### Client — Navigation
+- **shared/navigation.ts**: Added CEO Dashboard nav entry; added Printed Labels and
+  Woven Labels sub-items under Work Orders.
+
+### Seeding
+- **`seed-master-data.ts`** (new): Seeds ALL tables except work orders and production.
+  Includes: materials, operators, machines, users, companies, brands,
+  purchaseRecords, inventoryRolls, labelTypes, threadServiceProviders,
+  threadStocks, threadPurchases, threadDyeingSends, threadDyeingAllocations,
+  threadDyeingReceives, threadDyeBatches, stickerMaterials, localSheets,
+  labelSheets, inkPurchases, inkConsumptions.
+  Run via `npm run db:seed:master-data`. Idempotent upserts on natural keys.
+- ✅ **Successfully executed against live database** (2026-11-05): all tables populated.
+  Typecheck: 0 errors. Seeder exit code: 0.
+
+### Verification
+- **Server typecheck**: 0 errors
+- **Client typecheck**: 0 errors
+- **Server tests**: 10 files, 149 tests passed
+- **Client tests**: 8 files, 92 tests passed
+- **Server build**: tsup OK, server/api/index.js regenerated (552 KB)
+- **Migration**: 0029 applied to live Supabase, 4 tables created, data backfilled, FKs validated
+
+### Client — Workflow-specific Production Order Pages, Tables, Columns, Hooks, Services (2026-10-29)
+- **Printed** (`features/production-orders/printed/`): service (`printed-production-order-service.ts`,
+  list/get/remove delegating delete to `/production-orders/:id`), hooks (`use-printed-production-orders.ts`
+  with `PRINTED_PRODUCTION_ORDER_KEYS` factory, `usePrintedProductionOrders`, `usePrintedProductionOrderDetail`,
+  `useDeletePrintedProductionOrder`), columns (`printedProductionOrderColumns` omitting Production Type
+  badge and Est. Weaving Time columns), row actions (view/edit/delete with confirmation dialog),
+  table component (`PrintedProductionOrderTable` with DataTable, toolbar filters for status/priority,
+  export columns, proper `DataTableEmpty` states), list page (`PrintedProductionOrderListPage`).
+- **Woven** (`features/production-orders/woven/`): service (`woven-production-order-service.ts`), hooks
+  (`use-woven-production-orders.ts` with `WOVEN_PRODUCTION_ORDER_KEYS`, woven equivalents), columns
+  (`wovenProductionOrderColumns` including Est. Weaving Time prominently), row actions, table component
+  (`WovenProductionOrderTable` with same structure as printed but woven-specific), list page
+  (`WovenProductionOrderListPage`).
+- **Shared** modifications: `CreateProductionOrderDialog` gained `productTypeFilter` prop to narrow the
+  eligible-sales-orders list to printed/woven only; `DataTableColumnHeader` confirmed to support `align`
+  prop via the column definitions.
+- **Routes** (`app/routes.tsx`): added `/production-orders/printed` and `/production-orders/woven`
+  routes before the generic `/production-orders/:id` catch-all.
+- **Navigation** (`shared/navigation.ts`): expanded "Production Orders" with "Printed Labels" and
+  "Woven Labels" sub-items.
+- **Gate**: client typecheck 0 errors.
+
+### Client — Dashboard Production Order Planning Routes (2026-11-05)
+- Added missing dashboard planning routes to `app/routes.tsx`:
+  - `/dashboard/production-orders/printed/:id/plan` → `ProductionOrderPlanningPage`
+  - `/dashboard/production-orders/woven/:id/plan` → `ProductionOrderPlanningPage`
+- These connect the `CreateProductionOrderDialog` post-creation navigation
+  (`/dashboard/production-orders/printed/:id/plan` and `/dashboard/production-orders/woven/:id/plan`)
+  to the existing `ProductionOrderPlanningPage` component, which uses `UnifiedPlanningDialog`
+  and handles both printed and woven workflows based on the order's `productType`.
+- Non-dashboard equivalents (`/production-orders/printed/:id/plan`, `/production-orders/woven/:id/plan`)
+  already existed.
+- **Verification**: client typecheck 0 errors; client tests 92/92 passed.
+
+### Client — CEO Dashboard Tabbed Navigation (2026-11-05)
+- Replaced single-view CEO pages with tabbed pages that render both Printed and Woven views:
+  - Created `CeoWorkOrdersDashboardPage.tsx` — tabs for Printed/Woven Work Orders at `/dashboard/ceo/work-orders/{printed,woven}`
+  - Created `CeoProductionDashboardPage.tsx` — tabs for Printed/Woven Production at `/dashboard/ceo/production/{printed,woven}`
+  - Updated `app/routes.tsx`: CEO routes now point to the tabbed pages (each URL handled by same page via `useLocation`)
+  - Sidebar navigation already had nested CEO items; tabs now render within each page to switch between views
+  - Each tab has its own URL — refresh/deep-links preserve the selected tab
+- **Verification**: client typecheck 0 errors; client tests 92/92 passed; client build OK

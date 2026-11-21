@@ -8,7 +8,7 @@ var __export = (target, all) => {
 import "dotenv/config";
 
 // src/app.ts
-import express, { Router as Router21 } from "express";
+import express, { Router as Router27 } from "express";
 import cors from "cors";
 import helmet from "helmet";
 import compression from "compression";
@@ -19,7 +19,9 @@ var envSchema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   PORT: z.coerce.number().default(5e3),
   DATABASE_URL: z.string().url(),
-  // JWT_SECRET: z.string().min(1, "JWT_SECRET is required"),
+  JWT_SECRET: z.string().min(32, "JWT_SECRET must be at least 32 characters"),
+  JWT_EXPIRES_IN: z.string().default("15m"),
+  JWT_REFRESH_EXPIRES_IN: z.string().default("7d"),
   CORS_ORIGIN: z.string().default("*"),
   SMTP_HOST: z.string().default("mail.3qfacility.com"),
   SMTP_PORT: z.coerce.number().default(465),
@@ -36,15 +38,15 @@ var isTest = env.NODE_ENV === "test";
 
 // src/shared/config/logger.ts
 var colors = {
-  debug: (text12) => `\x1B[36m[DEBUG]\x1B[0m ${text12}`,
-  info: (text12) => `\x1B[32m[INFO]\x1B[0m ${text12}`,
-  warn: (text12) => `\x1B[33m[WARN]\x1B[0m ${text12}`,
-  error: (text12) => `\x1B[31m[ERROR]\x1B[0m ${text12}`
+  debug: (text15) => `\x1B[36m[DEBUG]\x1B[0m ${text15}`,
+  info: (text15) => `\x1B[32m[INFO]\x1B[0m ${text15}`,
+  warn: (text15) => `\x1B[33m[WARN]\x1B[0m ${text15}`,
+  error: (text15) => `\x1B[31m[ERROR]\x1B[0m ${text15}`
 };
 var Logger = class {
   formatMessage(level, message) {
-    const timestamp34 = (/* @__PURE__ */ new Date()).toISOString();
-    return `${timestamp34} ${colors[level](level.toUpperCase())} ${message}`;
+    const timestamp36 = (/* @__PURE__ */ new Date()).toISOString();
+    return `${timestamp36} ${colors[level](level.toUpperCase())} ${message}`;
   }
   debug(message, ...args) {
     console.log(this.formatMessage("debug", message), ...args);
@@ -80,6 +82,16 @@ var BadRequestError = class extends ApiError {
 var NotFoundError = class extends ApiError {
   constructor(message = "Resource not found") {
     super(message, 404);
+  }
+};
+var UnauthorizedError = class extends ApiError {
+  constructor(message = "Unauthorized") {
+    super(message, 401);
+  }
+};
+var ForbiddenError = class extends ApiError {
+  constructor(message = "Access denied") {
+    super(message, 403);
   }
 };
 var ConflictError = class extends ApiError {
@@ -202,6 +214,9 @@ __export(schema_exports, {
   operatorTypeEnum: () => operatorTypeEnum,
   operators: () => operators,
   operatorsRelations: () => operatorsRelations,
+  printedLabelProductionOrders: () => printedLabelProductionOrders,
+  printedLabelWorkOrders: () => printedLabelWorkOrders,
+  printedLabelWorkOrdersRelations: () => printedLabelWorkOrdersRelations,
   productTypeEnum: () => productTypeEnum,
   productionBatchStageEnum: () => productionBatchStageEnum,
   productionBatchStatusEnum: () => productionBatchStatusEnum,
@@ -252,14 +267,13 @@ __export(schema_exports, {
   users: () => users,
   usersRelations: () => usersRelations,
   workOrderStatusEnum: () => workOrderStatusEnum,
-  workOrders: () => workOrders,
-  workOrdersRelations: () => workOrdersRelations,
+  wovenLabelProductionOrders: () => wovenLabelProductionOrders,
+  wovenLabelWorkOrders: () => wovenLabelWorkOrders,
+  wovenLabelWorkOrdersRelations: () => wovenLabelWorkOrdersRelations,
   wovenProductionLines: () => wovenProductionLines,
   wovenProductionLinesRelations: () => wovenProductionLinesRelations,
   wovenThreadPlanItems: () => wovenThreadPlanItems,
-  wovenThreadPlanItemsRelations: () => wovenThreadPlanItemsRelations,
-  wovenWorkOrderDetails: () => wovenWorkOrderDetails,
-  wovenWorkOrderDetailsRelations: () => wovenWorkOrderDetailsRelations
+  wovenThreadPlanItemsRelations: () => wovenThreadPlanItemsRelations
 });
 
 // src/shared/db/tables/companies.table.ts
@@ -329,9 +343,10 @@ import { pgTable as pgTable5, serial as serial5, varchar as varchar5, timestamp 
 // src/shared/db/tables/users.table.ts
 import { pgTable as pgTable4, serial as serial4, varchar as varchar4, boolean as boolean3, timestamp as timestamp4, pgEnum, index as index2 } from "drizzle-orm/pg-core";
 var userRoleEnum = pgEnum("user_role", [
+  "ceo",
   "office_staff",
   "production_manager",
-  "production_operator"
+  "accountant"
 ]);
 var users = pgTable4(
   "users",
@@ -341,6 +356,7 @@ var users = pgTable4(
     employeeCode: varchar4("employee_code", { length: 100 }),
     email: varchar4("email", { length: 255 }).unique(),
     role: userRoleEnum("role").notNull(),
+    passwordHash: varchar4("password_hash", { length: 255 }).notNull(),
     isActive: boolean3("is_active").default(true).notNull(),
     createdAt: timestamp4("created_at").defaultNow().notNull(),
     updatedAt: timestamp4("updated_at").defaultNow().notNull()
@@ -401,14 +417,8 @@ var machines = pgTable6("machines", {
 });
 
 // src/shared/db/tables/work-orders.table.ts
-import { pgTable as pgTable7, serial as serial7, varchar as varchar7, date, integer as integer5, timestamp as timestamp7, unique as unique4, text as text3, index as index4, pgEnum as pgEnum4 } from "drizzle-orm/pg-core";
-
-// src/shared/db/tables/product-type.enum.ts
 import { pgEnum as pgEnum3 } from "drizzle-orm/pg-core";
-var productTypeEnum = pgEnum3("product_type", ["printed", "woven"]);
-
-// src/shared/db/tables/work-orders.table.ts
-var workOrderStatusEnum = pgEnum4("work_order_status", [
+var workOrderStatusEnum = pgEnum3("work_order_status", [
   "initiate_production",
   "production",
   "complete",
@@ -420,8 +430,35 @@ var workOrderStatusEnum = pgEnum4("work_order_status", [
    */
   "dispatched"
 ]);
-var workOrders = pgTable7(
-  "work_orders",
+
+// src/shared/db/tables/production-status.enum.ts
+import { pgEnum as pgEnum4 } from "drizzle-orm/pg-core";
+var productionStatusEnum = pgEnum4("production_status", [
+  "pending",
+  "active",
+  "paused",
+  "completed",
+  "cancelled"
+]);
+
+// src/shared/db/tables/production-orders.table.ts
+import { sql } from "drizzle-orm";
+import { pgTable as pgTable9, serial as serial9, integer as integer7, varchar as varchar9, text as text5, timestamp as timestamp9, index as index6, pgEnum as pgEnum5 } from "drizzle-orm/pg-core";
+
+// src/shared/db/tables/printed-label-work-orders.table.ts
+import {
+  pgTable as pgTable7,
+  serial as serial7,
+  varchar as varchar7,
+  date,
+  integer as integer5,
+  text as text3,
+  timestamp as timestamp7,
+  index as index4,
+  unique as unique4
+} from "drizzle-orm/pg-core";
+var printedLabelWorkOrders = pgTable7(
+  "printed_label_work_orders",
   {
     id: serial7("id").primaryKey(),
     soNumber: varchar7("so_number", { length: 100 }).notNull().unique(),
@@ -453,12 +490,6 @@ var workOrders = pgTable7(
      * `normal order | shortfall | additional order | recut order`. Default `normal order`.
      */
     orderType: varchar7("order_type", { length: 30 }).default("normal order").notNull(),
-    /**
-     * Which manufacturing workflow this order runs through. Defaults to `printed`, so every
-     * pre-existing row keeps its current behaviour untouched. Woven orders additionally
-     * carry a `woven_work_order_details` row with the loom specification.
-     */
-    productType: productTypeEnum("product_type").default("printed").notNull(),
     /** Dispatch chalan number — required to complete dispatch, and searchable. */
     dcNumber: varchar7("dc_number", { length: 100 }),
     /** Letter-of-credit number — required to complete dispatch, and searchable. */
@@ -473,88 +504,177 @@ var workOrders = pgTable7(
     updatedAt: timestamp7("updated_at").defaultNow().notNull()
   },
   (table) => ({
-    soNumberIdx: unique4("work_orders_so_number_idx").on(table.soNumber),
-    brandIdx: index4("work_orders_brand_idx").on(table.brandId),
-    statusIdx: index4("work_orders_status_idx").on(table.status),
-    productTypeIdx: index4("work_orders_product_type_idx").on(table.productType),
+    soNumberIdx: unique4("printed_label_work_orders_so_number_idx").on(table.soNumber),
+    brandIdx: index4("printed_label_work_orders_brand_idx").on(table.brandId),
+    statusIdx: index4("printed_label_work_orders_status_idx").on(table.status),
     // Dispatch paperwork is searchable, so both numbers get an index.
-    dcNumberIdx: index4("work_orders_dc_number_idx").on(table.dcNumber),
-    lcNumberIdx: index4("work_orders_lc_number_idx").on(table.lcNumber),
-    fbrInvoiceIdx: index4("work_orders_fbr_invoice_idx").on(table.fbrInvoiceNumber)
+    dcNumberIdx: index4("printed_label_work_orders_dc_number_idx").on(table.dcNumber),
+    lcNumberIdx: index4("printed_label_work_orders_lc_number_idx").on(table.lcNumber),
+    fbrInvoiceIdx: index4("printed_label_work_orders_fbr_invoice_idx").on(table.fbrInvoiceNumber)
   })
 );
 
-// src/shared/db/tables/production-status.enum.ts
-import { pgEnum as pgEnum5 } from "drizzle-orm/pg-core";
-var productionStatusEnum = pgEnum5("production_status", [
-  "pending",
-  "active",
-  "paused",
-  "completed",
-  "cancelled"
-]);
-
-// src/shared/db/tables/production-orders.table.ts
-import { pgTable as pgTable8, serial as serial8, integer as integer6, varchar as varchar8, text as text4, timestamp as timestamp8, index as index5, pgEnum as pgEnum6 } from "drizzle-orm/pg-core";
-var productionOrderStatusEnum = pgEnum6("production_order_status", [
-  "planned",
-  "production",
-  "complete"
-]);
-var productionOrders = pgTable8(
-  "production_orders",
+// src/shared/db/tables/woven-label-work-orders.table.ts
+import {
+  pgTable as pgTable8,
+  serial as serial8,
+  varchar as varchar8,
+  date as date2,
+  integer as integer6,
+  text as text4,
+  timestamp as timestamp8,
+  numeric,
+  jsonb,
+  index as index5,
+  unique as unique5
+} from "drizzle-orm/pg-core";
+var wovenLabelWorkOrders = pgTable8(
+  "woven_label_work_orders",
   {
     id: serial8("id").primaryKey(),
-    productionNumber: varchar8("production_number", { length: 100 }).notNull().unique(),
-    workOrderId: integer6("work_order_id").notNull().unique().references(() => workOrders.id, { onDelete: "restrict" }),
+    soNumber: varchar8("so_number", { length: 100 }).notNull().unique(),
+    poNumber: varchar8("po_number", { length: 100 }),
+    orderDate: date2("order_date").notNull(),
+    dueDate: date2("due_date"),
     totalQty: integer6("total_qty").notNull(),
-    status: productionOrderStatusEnum("status").default("planned").notNull(),
-    notes: text4("notes"),
-    createdByUserId: integer6("created_by_user_id").references(() => users.id),
-    plannedAt: timestamp8("planned_at"),
-    completedAt: timestamp8("completed_at"),
+    brandId: integer6("brand_id").references(() => brands.id),
+    comment: text4("comment"),
+    /**
+     * Artwork / reference image for the order, rendered on the detail page. Plain URL text
+     * today; a Cloudinary-hosted URL would drop in here unchanged.
+     */
+    imageUrl: text4("image_url"),
+    /**
+     * DC-copy image captured alongside the artwork during dispatch (0028).
+     * Same pattern as imageUrl: plain text holding a base64 data URI or URL.
+     */
+    dcImageUrl: text4("dc_image_url"),
+    status: workOrderStatusEnum("status").default("initiate_production").notNull(),
+    /**
+     * Scheduling priority, set by office staff on any order (woven or printed).
+     * Stored as a plain varchar (not a pg enum) so the value set is easy to extend —
+     * validated to `normal | urgent | emergency` by the Zod schema. Default `normal`.
+     */
+    priority: varchar8("priority", { length: 20 }).default("normal").notNull(),
+    /**
+     * Why this order exists. Validated to
+     * `normal order | shortfall | additional order | recut order`. Default `normal order`.
+     */
+    orderType: varchar8("order_type", { length: 30 }).default("normal order").notNull(),
+    /** Dispatch chalan number — required to complete dispatch, and searchable. */
+    dcNumber: varchar8("dc_number", { length: 100 }),
+    /** Letter-of-credit number — required to complete dispatch, and searchable. */
+    lcNumber: varchar8("lc_number", { length: 100 }),
+    /** FBR (tax authority) invoice number — required to complete dispatch, and searchable. */
+    fbrInvoiceNumber: varchar8("fbr_invoice_number", { length: 100 }),
+    /** Dispatch date — captured against a completed order. */
+    dispatchedDate: date2("dispatched_date"),
+    /** Quantity actually dispatched; may differ from `totalQty` on a short shipment. */
+    dispatchedQty: integer6("dispatched_qty"),
+    /* ---------- Woven-only loom specification (absorbed from woven_work_order_details) ---------- */
+    /** Customer-facing design identifier, e.g. "Guess 13R". Unique across the facility. */
+    designCode: varchar8("design_code", { length: 100 }).notNull().unique(),
+    /** Weft picks per unit, e.g. 853. */
+    pick: integer6("pick").notNull(),
+    /** Design repeat length, e.g. 60. */
+    repeat: numeric("repeat", { precision: 12, scale: 2 }).notNull(),
+    /** Warp density, e.g. 560. */
+    density: integer6("density").notNull(),
+    /** Loom speed in RPM, e.g. 500 RPM. */
+    speed: numeric("speed", { precision: 12, scale: 2 }).default("0").notNull(),
+    /** Extra allowance added on top of the ordered quantity, e.g. 150. */
+    extra: numeric("extra", { precision: 12, scale: 2 }).default("0").notNull(),
+    /**
+     * Derived figure: hours to weave the whole order at the loom speed.
+     * Formula: (totalQty / repeat) * pick / (speed * 60), rounded to 2dp,
+     * speed defaulting to 600 RPM when unset/0.
+     * Computed server-side, never accepted from the client.
+     */
+    estimatedWeavingHours: numeric("estimated_weaving_hours", { precision: 12, scale: 2 }).default("0").notNull(),
+    /** Size labels woven on this order, e.g. ["10", "12", "XL", "34/34"]. */
+    sizeLabels: jsonb("size_labels").$type().default([]).notNull(),
     createdAt: timestamp8("created_at").defaultNow().notNull(),
     updatedAt: timestamp8("updated_at").defaultNow().notNull()
   },
   (table) => ({
-    workOrderIdx: index5("production_orders_work_order_idx").on(table.workOrderId),
-    statusIdx: index5("production_orders_status_idx").on(table.status)
+    soNumberIdx: unique5("woven_label_work_orders_so_number_idx").on(table.soNumber),
+    brandIdx: index5("woven_label_work_orders_brand_idx").on(table.brandId),
+    statusIdx: index5("woven_label_work_orders_status_idx").on(table.status),
+    designCodeIdx: index5("woven_label_work_orders_design_code_idx").on(table.designCode),
+    dcNumberIdx: index5("woven_label_work_orders_dc_number_idx").on(table.dcNumber),
+    lcNumberIdx: index5("woven_label_work_orders_lc_number_idx").on(table.lcNumber),
+    fbrInvoiceIdx: index5("woven_label_work_orders_fbr_invoice_idx").on(table.fbrInvoiceNumber)
+  })
+);
+
+// src/shared/db/tables/production-orders.table.ts
+var productionOrderStatusEnum = pgEnum5("production_order_status", [
+  "planned",
+  "production",
+  "complete"
+]);
+var productionOrders = pgTable9(
+  "production_orders",
+  {
+    id: serial9("id").primaryKey(),
+    productionNumber: varchar9("production_number", { length: 100 }).notNull().unique(),
+    printedWorkOrderId: integer7("printed_work_order_id").references(() => printedLabelWorkOrders.id, {
+      onDelete: "restrict"
+    }),
+    wovenWorkOrderId: integer7("woven_work_order_id").references(() => wovenLabelWorkOrders.id, {
+      onDelete: "restrict"
+    }),
+    totalQty: integer7("total_qty").notNull(),
+    status: productionOrderStatusEnum("status").default("planned").notNull(),
+    notes: text5("notes"),
+    createdByUserId: integer7("created_by_user_id").references(() => users.id),
+    plannedAt: timestamp9("planned_at"),
+    completedAt: timestamp9("completed_at"),
+    createdAt: timestamp9("created_at").defaultNow().notNull(),
+    updatedAt: timestamp9("updated_at").defaultNow().notNull()
+  },
+  (table) => ({
+    printedWorkOrderIdx: index6("production_orders_printed_work_order_idx").on(table.printedWorkOrderId),
+    wovenWorkOrderIdx: index6("production_orders_woven_work_order_idx").on(table.wovenWorkOrderId),
+    statusIdx: index6("production_orders_status_idx").on(table.status),
+    /** Exactly one of the two workflow FKs must be set. */
+    oneWorkOrderCheck: sql`CHECK (num_nonnulls(${table.printedWorkOrderId}, ${table.wovenWorkOrderId}) = 1)`
   })
 );
 
 // src/shared/db/tables/production-order-lines.table.ts
-import { pgTable as pgTable10, serial as serial10, integer as integer7, varchar as varchar10, decimal as decimal2, text as text5, timestamp as timestamp10, jsonb, index as index6 } from "drizzle-orm/pg-core";
+import { pgTable as pgTable11, serial as serial11, integer as integer8, varchar as varchar11, decimal as decimal2, text as text6, timestamp as timestamp11, jsonb as jsonb2, index as index7 } from "drizzle-orm/pg-core";
 
 // src/shared/db/tables/label-types.table.ts
-import { pgTable as pgTable9, serial as serial9, varchar as varchar9, boolean as boolean6, timestamp as timestamp9, unique as unique5, check } from "drizzle-orm/pg-core";
-import { sql } from "drizzle-orm";
-var labelTypes = pgTable9(
+import { pgTable as pgTable10, serial as serial10, varchar as varchar10, boolean as boolean6, timestamp as timestamp10, unique as unique6, check } from "drizzle-orm/pg-core";
+import { sql as sql2 } from "drizzle-orm";
+var labelTypes = pgTable10(
   "label_types",
   {
-    id: serial9("id").primaryKey(),
-    name: varchar9("name", { length: 255 }).notNull(),
-    category: varchar9("category", { length: 20 }).notNull(),
+    id: serial10("id").primaryKey(),
+    name: varchar10("name", { length: 255 }).notNull(),
+    category: varchar10("category", { length: 20 }).notNull(),
     isActive: boolean6("is_active").default(true).notNull(),
-    createdAt: timestamp9("created_at").defaultNow().notNull(),
-    updatedAt: timestamp9("updated_at").defaultNow().notNull()
+    createdAt: timestamp10("created_at").defaultNow().notNull(),
+    updatedAt: timestamp10("updated_at").defaultNow().notNull()
   },
   (table) => [
-    unique5("label_types_name_category_uq").on(table.name, table.category),
+    unique6("label_types_name_category_uq").on(table.name, table.category),
     check(
       "label_types_valid_category",
-      sql`${table.category} IN ('woven', 'printed')`
+      sql2`${table.category} IN ('woven', 'printed')`
     )
   ]
 );
 
 // src/shared/db/tables/production-order-lines.table.ts
-var productionOrderLines = pgTable10(
+var productionOrderLines = pgTable11(
   "production_order_lines",
   {
-    id: serial10("id").primaryKey(),
-    productionOrderId: integer7("production_order_id").notNull().references(() => productionOrders.id, { onDelete: "cascade" }),
-    labelType: varchar10("label_type", { length: 255 }).notNull(),
-    labelTypeId: integer7("label_type_id").references(() => labelTypes.id),
+    id: serial11("id").primaryKey(),
+    productionOrderId: integer8("production_order_id").notNull().references(() => productionOrders.id, { onDelete: "cascade" }),
+    labelType: varchar11("label_type", { length: 255 }).notNull(),
+    labelTypeId: integer8("label_type_id").references(() => labelTypes.id),
     // NEW: FK to label_types
     /* --- Planning (Phase 2) --- */
     quantity: decimal2("quantity", { precision: 12, scale: 2 }).notNull(),
@@ -563,7 +683,7 @@ var productionOrderLines = pgTable10(
      * other label type. Mirrored from the woven side so the size editor behaves the same
      * in both planners; only weaving batches currently act on it per size.
      */
-    sizes: jsonb("sizes").$type().default([]).notNull(),
+    sizes: jsonb2("sizes").$type().default([]).notNull(),
     /* --- Roll planning (Phase 3) --- */
     /** Label size in millimetres — an input to the required-rolls formula. */
     labelSize: decimal2("label_size", { precision: 10, scale: 2 }).notNull(),
@@ -579,7 +699,7 @@ var productionOrderLines = pgTable10(
     totalWeight: decimal2("total_weight", { precision: 14, scale: 4 }),
     /* --- Material issuance from inventory --- */
     /** Raw material this label type is printed on. Required before rolls can be issued. */
-    materialCode: varchar10("material_code", { length: 100 }).references(() => materials.code),
+    materialCode: varchar11("material_code", { length: 100 }).references(() => materials.code),
     /** Denormalized running sum of `production_roll_issuances`; kept in sync transactionally. */
     issuedRolls: decimal2("issued_rolls", { precision: 10, scale: 2 }).default("0").notNull(),
     /* --- Cumulative roll flow (Phases 4-8) --- */
@@ -591,48 +711,48 @@ var productionOrderLines = pgTable10(
     /* --- Output in labels --- */
     packagedQty: decimal2("packaged_qty", { precision: 12, scale: 2 }).default("0").notNull(),
     /* --- Resource assignment. Packaging has an operator but no machine. --- */
-    printingMachineId: integer7("printing_machine_id").references(() => machines.id),
-    printingOperatorId: integer7("printing_operator_id").references(() => operators.id),
-    cuttingMachineId: integer7("cutting_machine_id").references(() => machines.id),
-    cuttingOperatorId: integer7("cutting_operator_id").references(() => operators.id),
-    packagingOperatorId: integer7("packaging_operator_id").references(() => operators.id),
+    printingMachineId: integer8("printing_machine_id").references(() => machines.id),
+    printingOperatorId: integer8("printing_operator_id").references(() => operators.id),
+    cuttingMachineId: integer8("cutting_machine_id").references(() => machines.id),
+    cuttingOperatorId: integer8("cutting_operator_id").references(() => operators.id),
+    packagingOperatorId: integer8("packaging_operator_id").references(() => operators.id),
     /**
      * When each stage finished — stamped the moment its counter first reaches the planned
      * roll count, and cleared if the count is later corrected back below it. Together with
      * the operator columns above these give a finished order full traceability: who did
      * each stage, and when it completed.
      */
-    printingCompletedAt: timestamp10("printing_completed_at"),
-    cuttingCompletedAt: timestamp10("cutting_completed_at"),
-    packagingCompletedAt: timestamp10("packaging_completed_at"),
+    printingCompletedAt: timestamp11("printing_completed_at"),
+    cuttingCompletedAt: timestamp11("cutting_completed_at"),
+    packagingCompletedAt: timestamp11("packaging_completed_at"),
     /* --- Stock Reconciliation after completion --- */
     usedRolls: decimal2("used_rolls", { precision: 10, scale: 2 }).default("0").notNull(),
     usedWeight: decimal2("used_weight", { precision: 14, scale: 4 }).default("0").notNull(),
     extraRollsReturned: decimal2("extra_rolls_returned", { precision: 10, scale: 2 }).default("0").notNull(),
     extraWeight: decimal2("extra_weight", { precision: 14, scale: 4 }).default("0").notNull(),
-    reconciledAt: timestamp10("reconciled_at"),
+    reconciledAt: timestamp11("reconciled_at"),
     status: productionStatusEnum("status").default("pending").notNull(),
-    notes: text5("notes"),
-    createdAt: timestamp10("created_at").defaultNow().notNull(),
-    updatedAt: timestamp10("updated_at").defaultNow().notNull()
+    notes: text6("notes"),
+    createdAt: timestamp11("created_at").defaultNow().notNull(),
+    updatedAt: timestamp11("updated_at").defaultNow().notNull()
   },
   (table) => ({
-    productionOrderIdx: index6("production_order_lines_order_idx").on(table.productionOrderId),
-    statusIdx: index6("production_order_lines_status_idx").on(table.status),
-    materialCodeIdx: index6("production_order_lines_material_code_idx").on(table.materialCode),
-    printingMachineIdx: index6("production_order_lines_printing_machine_idx").on(table.printingMachineId),
-    printingOperatorIdx: index6("production_order_lines_printing_operator_idx").on(table.printingOperatorId),
-    cuttingMachineIdx: index6("production_order_lines_cutting_machine_idx").on(table.cuttingMachineId),
-    cuttingOperatorIdx: index6("production_order_lines_cutting_operator_idx").on(table.cuttingOperatorId),
-    packagingOperatorIdx: index6("production_order_lines_packaging_operator_idx").on(table.packagingOperatorId),
-    labelTypeIdIdx: index6("production_order_lines_label_type_idx").on(table.labelTypeId)
+    productionOrderIdx: index7("production_order_lines_order_idx").on(table.productionOrderId),
+    statusIdx: index7("production_order_lines_status_idx").on(table.status),
+    materialCodeIdx: index7("production_order_lines_material_code_idx").on(table.materialCode),
+    printingMachineIdx: index7("production_order_lines_printing_machine_idx").on(table.printingMachineId),
+    printingOperatorIdx: index7("production_order_lines_printing_operator_idx").on(table.printingOperatorId),
+    cuttingMachineIdx: index7("production_order_lines_cutting_machine_idx").on(table.cuttingMachineId),
+    cuttingOperatorIdx: index7("production_order_lines_cutting_operator_idx").on(table.cuttingOperatorId),
+    packagingOperatorIdx: index7("production_order_lines_packaging_operator_idx").on(table.packagingOperatorId),
+    labelTypeIdIdx: index7("production_order_lines_label_type_idx").on(table.labelTypeId)
     // NEW: index for FK
   })
 );
 
 // src/shared/db/tables/production-stage-events.table.ts
-import { pgTable as pgTable11, serial as serial11, integer as integer8, decimal as decimal3, text as text6, timestamp as timestamp11, index as index7, pgEnum as pgEnum7 } from "drizzle-orm/pg-core";
-var productionEventTypeEnum = pgEnum7("production_event_type", [
+import { pgTable as pgTable12, serial as serial12, integer as integer9, decimal as decimal3, text as text7, timestamp as timestamp12, index as index8, pgEnum as pgEnum6 } from "drizzle-orm/pg-core";
+var productionEventTypeEnum = pgEnum6("production_event_type", [
   "printing_progress",
   "transfer_to_cutting",
   "cutting_progress",
@@ -641,136 +761,136 @@ var productionEventTypeEnum = pgEnum7("production_event_type", [
   "assignment",
   "row_update"
 ]);
-var productionStageEvents = pgTable11(
+var productionStageEvents = pgTable12(
   "production_stage_events",
   {
-    id: serial11("id").primaryKey(),
-    productionOrderLineId: integer8("production_order_line_id").notNull().references(() => productionOrderLines.id, { onDelete: "cascade" }),
+    id: serial12("id").primaryKey(),
+    productionOrderLineId: integer9("production_order_line_id").notNull().references(() => productionOrderLines.id, { onDelete: "cascade" }),
     eventType: productionEventTypeEnum("event_type").notNull(),
     previousValue: decimal3("previous_value", { precision: 12, scale: 2 }),
     newValue: decimal3("new_value", { precision: 12, scale: 2 }),
     delta: decimal3("delta", { precision: 12, scale: 2 }),
-    actorUserId: integer8("actor_user_id").references(() => users.id),
-    note: text6("note"),
-    createdAt: timestamp11("created_at").defaultNow().notNull()
+    actorUserId: integer9("actor_user_id").references(() => users.id),
+    note: text7("note"),
+    createdAt: timestamp12("created_at").defaultNow().notNull()
   },
   (table) => ({
-    lineIdx: index7("production_stage_events_line_idx").on(table.productionOrderLineId),
-    actorIdx: index7("production_stage_events_actor_idx").on(table.actorUserId),
-    createdAtIdx: index7("production_stage_events_created_at_idx").on(table.createdAt)
+    lineIdx: index8("production_stage_events_line_idx").on(table.productionOrderLineId),
+    actorIdx: index8("production_stage_events_actor_idx").on(table.actorUserId),
+    createdAtIdx: index8("production_stage_events_created_at_idx").on(table.createdAt)
   })
 );
 
 // src/shared/db/tables/production-roll-issuances.table.ts
-import { pgTable as pgTable12, serial as serial12, integer as integer9, varchar as varchar11, decimal as decimal4, text as text7, timestamp as timestamp12, index as index8 } from "drizzle-orm/pg-core";
-var productionRollIssuances = pgTable12(
+import { pgTable as pgTable13, serial as serial13, integer as integer10, varchar as varchar12, decimal as decimal4, text as text8, timestamp as timestamp13, index as index9 } from "drizzle-orm/pg-core";
+var productionRollIssuances = pgTable13(
   "production_roll_issuances",
   {
-    id: serial12("id").primaryKey(),
-    productionOrderLineId: integer9("production_order_line_id").notNull().references(() => productionOrderLines.id, { onDelete: "cascade" }),
-    materialCode: varchar11("material_code", { length: 100 }).notNull().references(() => materials.code),
+    id: serial13("id").primaryKey(),
+    productionOrderLineId: integer10("production_order_line_id").notNull().references(() => productionOrderLines.id, { onDelete: "cascade" }),
+    materialCode: varchar12("material_code", { length: 100 }).notNull().references(() => materials.code),
     rolls: decimal4("rolls", { precision: 10, scale: 2 }).notNull(),
-    note: text7("note"),
-    actorUserId: integer9("actor_user_id").references(() => users.id),
-    createdAt: timestamp12("created_at").defaultNow().notNull()
+    note: text8("note"),
+    actorUserId: integer10("actor_user_id").references(() => users.id),
+    createdAt: timestamp13("created_at").defaultNow().notNull()
   },
   (table) => ({
-    lineIdx: index8("production_roll_issuances_line_idx").on(table.productionOrderLineId),
-    materialCodeIdx: index8("production_roll_issuances_material_code_idx").on(table.materialCode)
+    lineIdx: index9("production_roll_issuances_line_idx").on(table.productionOrderLineId),
+    materialCodeIdx: index9("production_roll_issuances_material_code_idx").on(table.materialCode)
   })
 );
 
 // src/shared/db/tables/production-batches.table.ts
 import {
-  pgTable as pgTable14,
-  serial as serial14,
-  integer as integer11,
-  varchar as varchar13,
+  pgTable as pgTable15,
+  serial as serial15,
+  integer as integer12,
+  varchar as varchar14,
   decimal as decimal5,
-  text as text8,
-  timestamp as timestamp14,
-  index as index10,
-  unique as unique6,
+  text as text9,
+  timestamp as timestamp15,
+  index as index11,
+  unique as unique7,
   uniqueIndex,
   check as check2,
-  pgEnum as pgEnum8
+  pgEnum as pgEnum7
 } from "drizzle-orm/pg-core";
-import { sql as sql2 } from "drizzle-orm";
+import { sql as sql3 } from "drizzle-orm";
 
 // src/shared/db/tables/woven-production-lines.table.ts
-import { pgTable as pgTable13, serial as serial13, integer as integer10, varchar as varchar12, numeric, date as date2, timestamp as timestamp13, jsonb as jsonb2, index as index9 } from "drizzle-orm/pg-core";
-var wovenProductionLines = pgTable13(
+import { pgTable as pgTable14, serial as serial14, integer as integer11, varchar as varchar13, numeric as numeric2, date as date3, timestamp as timestamp14, jsonb as jsonb3, index as index10 } from "drizzle-orm/pg-core";
+var wovenProductionLines = pgTable14(
   "woven_production_lines",
   {
-    id: serial13("id").primaryKey(),
-    productionOrderId: integer10("production_order_id").notNull().references(() => productionOrders.id, { onDelete: "cascade" }),
+    id: serial14("id").primaryKey(),
+    productionOrderId: integer11("production_order_id").notNull().references(() => productionOrders.id, { onDelete: "cascade" }),
     /** One row per label type, exactly like the printed side. */
-    labelType: varchar12("label_type", { length: 255 }).notNull(),
+    labelType: varchar13("label_type", { length: 255 }).notNull(),
     /** Pieces to produce for this label type. */
-    quantity: numeric("quantity", { precision: 14, scale: 2 }).notNull(),
+    quantity: numeric2("quantity", { precision: 14, scale: 2 }).notNull(),
     /**
      * Planned size variants of a Size Label line: `[{ size, quantity }]`. Empty for any
      * other label type. Each weaving batch on a size line records which size it runs, so
      * the floor can see exactly how much of each size remains (`lineFlowOf.sizes`).
      */
-    sizes: jsonb2("sizes").$type().default([]).notNull(),
+    sizes: jsonb3("sizes").$type().default([]).notNull(),
     /* ---------- Planning ---------- */
     /** Sum of every thread plan item's weight. Server-calculated, never client-supplied. */
-    totalThreadWeightKg: numeric("total_thread_weight_kg", { precision: 14, scale: 3 }).default("0").notNull(),
+    totalThreadWeightKg: numeric2("total_thread_weight_kg", { precision: 14, scale: 3 }).default("0").notNull(),
     /** True once thread colours + machine + operator are all set and stock is reserved. */
-    planningCompletedAt: timestamp13("planning_completed_at"),
+    planningCompletedAt: timestamp14("planning_completed_at"),
     /* ---------- Weaving ----------
        Machine and operator live on the BATCHES now: a line no longer has a single weaver,
        it has a batch per machine-and-operator pairing. The counters below are projected
        from those batches. */
-    wovenQty: numeric("woven_qty", { precision: 14, scale: 2 }).default("0").notNull(),
+    wovenQty: numeric2("woven_qty", { precision: 14, scale: 2 }).default("0").notNull(),
     weavingStatus: productionStatusEnum("weaving_status").default("pending").notNull(),
-    weavingStartedAt: timestamp13("weaving_started_at"),
-    weavingEndedAt: timestamp13("weaving_ended_at"),
+    weavingStartedAt: timestamp14("weaving_started_at"),
+    weavingEndedAt: timestamp14("weaving_ended_at"),
     /* ---------- Cutting ---------- */
-    cutQty: numeric("cut_qty", { precision: 14, scale: 2 }).default("0").notNull(),
-    cuttingDate: date2("cutting_date"),
+    cutQty: numeric2("cut_qty", { precision: 14, scale: 2 }).default("0").notNull(),
+    cuttingDate: date3("cutting_date"),
     /* ---------- Packaging ---------- */
-    packagedQty: numeric("packaged_qty", { precision: 14, scale: 2 }).default("0").notNull(),
-    packagedWeightKg: numeric("packaged_weight_kg", { precision: 14, scale: 3 }).default("0").notNull(),
-    packagingDate: date2("packaging_date"),
+    packagedQty: numeric2("packaged_qty", { precision: 14, scale: 2 }).default("0").notNull(),
+    packagedWeightKg: numeric2("packaged_weight_kg", { precision: 14, scale: 3 }).default("0").notNull(),
+    packagingDate: date3("packaging_date"),
     /** Derived from the stage counters, exactly like the printed line's status. */
     status: productionStatusEnum("status").default("pending").notNull(),
-    createdAt: timestamp13("created_at").defaultNow().notNull(),
-    updatedAt: timestamp13("updated_at").defaultNow().notNull()
+    createdAt: timestamp14("created_at").defaultNow().notNull(),
+    updatedAt: timestamp14("updated_at").defaultNow().notNull()
   },
   (table) => ({
-    orderIdx: index9("woven_production_lines_order_idx").on(table.productionOrderId),
-    statusIdx: index9("woven_production_lines_status_idx").on(table.status)
+    orderIdx: index10("woven_production_lines_order_idx").on(table.productionOrderId),
+    statusIdx: index10("woven_production_lines_status_idx").on(table.status)
   })
 );
 
 // src/shared/db/tables/production-batches.table.ts
-var productionBatchStageEnum = pgEnum8("production_batch_stage", [
+var productionBatchStageEnum = pgEnum7("production_batch_stage", [
   /** Woven's first stage. Declared first so `ORDER BY stage` reads in pipeline order. */
   "weaving",
   "printing",
   "cutting",
   "packaging"
 ]);
-var productionBatchStatusEnum = pgEnum8("production_batch_status", [
+var productionBatchStatusEnum = pgEnum7("production_batch_status", [
   "PLANNED",
   "ASSIGNED",
   "IN_PROGRESS",
   "COMPLETED",
   "CANCELLED"
 ]);
-var productionBatches = pgTable14(
+var productionBatches = pgTable15(
   "production_batches",
   {
-    id: serial14("id").primaryKey(),
+    id: serial15("id").primaryKey(),
     /**
     * The order this batch belongs to. Every batch hangs off exactly one line
     * (the `production_order_line_id` / `woven_production_line_id` pair below),
     * and `production_order_id` is carried so the composite foreign keys on
     * `batch_consumptions` can enforce same-order edges without a second join.
     */
-    productionOrderId: integer11("production_order_id").notNull().references(() => productionOrders.id, { onDelete: "cascade" }),
+    productionOrderId: integer12("production_order_id").notNull().references(() => productionOrders.id, { onDelete: "cascade" }),
     /**
      * Which label type the batch runs — set for every stage and non-NULL for every batch.
      * Each batch hangs off exactly one line; that line IS its label type at every stage.
@@ -784,29 +904,29 @@ var productionBatches = pgTable14(
      * PIECES. The columns below are named for the printed case that came first; read them as
      * "quantity" on a woven batch, and as the batch's overall total on any stage.
      */
-    productionOrderLineId: integer11("production_order_line_id").references(
+    productionOrderLineId: integer12("production_order_line_id").references(
       () => productionOrderLines.id,
       { onDelete: "cascade" }
     ),
-    wovenProductionLineId: integer11("woven_production_line_id").references(
+    wovenProductionLineId: integer12("woven_production_line_id").references(
       () => wovenProductionLines.id,
       { onDelete: "cascade" }
     ),
     stage: productionBatchStageEnum("stage").notNull(),
     /** Sequence number within this line + stage: Printing #1, #2, … Cutting #1, #2, … */
-    batchNumber: integer11("batch_number").notNull(),
+    batchNumber: integer12("batch_number").notNull(),
     /** Human-facing identifier derived once from stage + number: P-001, C-001, PK-001. */
-    batchCode: varchar13("batch_code", { length: 32 }).notNull(),
+    batchCode: varchar14("batch_code", { length: 32 }).notNull(),
     /**
      * Which planned size a WEAVING batch runs — a Size Label line only. NULL everywhere
      * else. Together with `woven_production_lines.sizes` it powers the per-size remaining
      * figures (`lineFlowOf.sizes`); the check that the size is one of the line's planned
      * sizes lives in `batch-flow.repository.createBatch`.
      */
-    labelSize: varchar13("label_size", { length: 120 }),
+    labelSize: varchar14("label_size", { length: 120 }),
     /** Packaging may run without a machine; printing and cutting require one. */
-    machineId: integer11("machine_id").references(() => machines.id),
-    operatorId: integer11("operator_id").references(() => operators.id),
+    machineId: integer12("machine_id").references(() => machines.id),
+    operatorId: integer12("operator_id").references(() => operators.id),
     /**
      * The four quantities. Collapsing any two of them is what makes a batch system
      * untraceable, so they stay separate:
@@ -829,65 +949,65 @@ var productionBatches = pgTable14(
      * NULL means "no reason recorded". Added in 0027_waste_all_stages when waste
      * was allowed at every stage, not just printing/weaving.
      */
-    wasteReason: varchar13("waste_reason", { length: 40 }),
+    wasteReason: varchar14("waste_reason", { length: 40 }),
     consumedRolls: decimal5("consumed_rolls", { precision: 12, scale: 2 }).default("0").notNull(),
     /**
      * produced − consumed, computed by Postgres on every write. Never writable, so it
      * cannot drift from the edge table the way a hand-maintained figure would.
      */
     availableRolls: decimal5("available_rolls", { precision: 12, scale: 2 }).generatedAlwaysAs(
-      sql2`produced_rolls - consumed_rolls`
+      sql3`produced_rolls - consumed_rolls`
     ),
     /** Labels packaged by this batch (packaging stage only). */
     packagedQty: decimal5("packaged_qty", { precision: 12, scale: 2 }).default("0").notNull(),
     status: productionBatchStatusEnum("status").default("PLANNED").notNull(),
-    notes: text8("notes"),
-    createdByUserId: integer11("created_by_user_id").references(() => users.id),
-    startedAt: timestamp14("started_at"),
-    completedAt: timestamp14("completed_at"),
-    createdAt: timestamp14("created_at").defaultNow().notNull(),
-    updatedAt: timestamp14("updated_at").defaultNow().notNull()
+    notes: text9("notes"),
+    createdByUserId: integer12("created_by_user_id").references(() => users.id),
+    startedAt: timestamp15("started_at"),
+    completedAt: timestamp15("completed_at"),
+    createdAt: timestamp15("created_at").defaultNow().notNull(),
+    updatedAt: timestamp15("updated_at").defaultNow().notNull()
   },
   /* Array form (not the object form used elsewhere) because check constraints are only
      expressible here — the object overload is deprecated in Drizzle 0.36. */
   (table) => [
-    index10("production_batches_line_idx").on(table.productionOrderLineId),
+    index11("production_batches_line_idx").on(table.productionOrderLineId),
     /** Covers the hot query: every batch of one stage for one line. */
-    index10("production_batches_line_stage_idx").on(table.productionOrderLineId, table.stage),
-    index10("production_batches_stage_idx").on(table.stage),
-    index10("production_batches_machine_idx").on(table.machineId),
-    index10("production_batches_operator_idx").on(table.operatorId),
-    index10("production_batches_status_idx").on(table.status),
-    index10("production_batches_created_at_idx").on(table.createdAt),
+    index11("production_batches_line_stage_idx").on(table.productionOrderLineId, table.stage),
+    index11("production_batches_stage_idx").on(table.stage),
+    index11("production_batches_machine_idx").on(table.machineId),
+    index11("production_batches_operator_idx").on(table.operatorId),
+    index11("production_batches_status_idx").on(table.status),
+    index11("production_batches_created_at_idx").on(table.createdAt),
     /** Batch numbering restarts per line + stage for the first stages of each workflow. */
-    uniqueIndex("production_batches_printed_no_uq").on(table.productionOrderLineId, table.stage, table.batchNumber).where(sql2`${table.productionOrderLineId} IS NOT NULL`),
-    uniqueIndex("production_batches_woven_no_uq").on(table.wovenProductionLineId, table.stage, table.batchNumber).where(sql2`${table.wovenProductionLineId} IS NOT NULL`),
+    uniqueIndex("production_batches_printed_no_uq").on(table.productionOrderLineId, table.stage, table.batchNumber).where(sql3`${table.productionOrderLineId} IS NOT NULL`),
+    uniqueIndex("production_batches_woven_no_uq").on(table.wovenProductionLineId, table.stage, table.batchNumber).where(sql3`${table.wovenProductionLineId} IS NOT NULL`),
     /**
      * Target for the composite foreign keys on `batch_consumptions`. Edges are scoped to
      * one order, so a batch can never consume from, or feed, another order's material.
      */
-    unique6("production_batches_id_order_uq").on(table.id, table.productionOrderId),
-    index10("production_batches_woven_line_stage_idx").on(
+    unique7("production_batches_id_order_uq").on(table.id, table.productionOrderId),
+    index11("production_batches_woven_line_stage_idx").on(
       table.wovenProductionLineId,
       table.stage
     ),
     /** Covers the per-size remaining aggregate: weaving batches of one line, per size. */
-    index10("production_batches_woven_size_idx").on(
+    index11("production_batches_woven_size_idx").on(
       table.wovenProductionLineId,
       table.stage,
       table.labelSize
     ),
     check2(
       "production_batches_non_negative",
-      sql2`assigned_rolls >= 0 AND produced_rolls >= 0 AND wasted_rolls >= 0 AND consumed_rolls >= 0`
+      sql3`assigned_rolls >= 0 AND produced_rolls >= 0 AND wasted_rolls >= 0 AND consumed_rolls >= 0`
     ),
     /** Output can never exceed the input reserved for it. */
     check2(
       "production_batches_output_within_input",
-      sql2`produced_rolls + wasted_rolls <= assigned_rolls`
+      sql3`produced_rolls + wasted_rolls <= assigned_rolls`
     ),
     /** The over-allocation guarantee: downstream can never take more than exists. */
-    check2("production_batches_consumed_within_produced", sql2`consumed_rolls <= produced_rolls`),
+    check2("production_batches_consumed_within_produced", sql3`consumed_rolls <= produced_rolls`),
     /**
      * Scrap / waste may be recorded at ANY stage now (printing, weaving, cutting,
      * packaging). The first-stage-only restriction was dropped in 0027_waste_all_stages.
@@ -900,79 +1020,79 @@ var productionBatches = pgTable14(
      */
     check2(
       "production_batches_one_line",
-      sql2`num_nonnulls(production_order_line_id, woven_production_line_id) = 1`
+      sql3`num_nonnulls(production_order_line_id, woven_production_line_id) = 1`
     ),
     /** Packaging has an operator but no machine. */
     check2(
       "production_batches_packaging_no_machine",
-      sql2`stage <> 'packaging' OR machine_id IS NULL`
+      sql3`stage <> 'packaging' OR machine_id IS NULL`
     )
   ]
 );
 
 // src/shared/db/tables/production-stage-transactions.table.ts
-import { pgTable as pgTable15, serial as serial15, integer as integer12, varchar as varchar14, decimal as decimal6, timestamp as timestamp15, index as index11, pgEnum as pgEnum9 } from "drizzle-orm/pg-core";
-var productionStageTxTypeEnum = pgEnum9("production_stage_tx_type", [
+import { pgTable as pgTable16, serial as serial16, integer as integer13, varchar as varchar15, decimal as decimal6, timestamp as timestamp16, index as index12, pgEnum as pgEnum8 } from "drizzle-orm/pg-core";
+var productionStageTxTypeEnum = pgEnum8("production_stage_tx_type", [
   "print_credit",
   "cut_consume_print",
   "cut_credit",
   "package_consume_cut",
   "package_credit"
 ]);
-var productionStageTransactions = pgTable15(
+var productionStageTransactions = pgTable16(
   "production_stage_transactions",
   {
-    id: serial15("id").primaryKey(),
-    productionOrderLineId: integer12("production_order_line_id").notNull().references(() => productionOrderLines.id, { onDelete: "cascade" }),
+    id: serial16("id").primaryKey(),
+    productionOrderLineId: integer13("production_order_line_id").notNull().references(() => productionOrderLines.id, { onDelete: "cascade" }),
     /** The batch that caused this movement. Null for manual corrections. */
-    batchId: integer12("batch_id").references(() => productionBatches.id, { onDelete: "set null" }),
-    stage: varchar14("stage", { length: 50 }).notNull(),
+    batchId: integer13("batch_id").references(() => productionBatches.id, { onDelete: "set null" }),
+    stage: varchar15("stage", { length: 50 }).notNull(),
     transactionType: productionStageTxTypeEnum("transaction_type").notNull(),
     quantity: decimal6("quantity", { precision: 12, scale: 2 }).notNull(),
     /* --- Position after this movement, so a row is readable on its own --- */
     printedAvailableAfter: decimal6("printed_available_after", { precision: 12, scale: 2 }).notNull(),
     cuttedAvailableAfter: decimal6("cutted_available_after", { precision: 12, scale: 2 }).notNull(),
     packagedTotalAfter: decimal6("packaged_total_after", { precision: 12, scale: 2 }).notNull(),
-    createdByUserId: integer12("created_by_user_id").references(() => users.id),
-    createdAt: timestamp15("created_at").defaultNow().notNull()
+    createdByUserId: integer13("created_by_user_id").references(() => users.id),
+    createdAt: timestamp16("created_at").defaultNow().notNull()
   },
   (table) => ({
-    lineIdx: index11("production_stage_tx_line_idx").on(table.productionOrderLineId),
-    batchIdx: index11("production_stage_tx_batch_idx").on(table.batchId),
-    typeIdx: index11("production_stage_tx_type_idx").on(table.transactionType),
-    createdAtIdx: index11("production_stage_tx_created_at_idx").on(table.createdAt)
+    lineIdx: index12("production_stage_tx_line_idx").on(table.productionOrderLineId),
+    batchIdx: index12("production_stage_tx_batch_idx").on(table.batchId),
+    typeIdx: index12("production_stage_tx_type_idx").on(table.transactionType),
+    createdAtIdx: index12("production_stage_tx_created_at_idx").on(table.createdAt)
   })
 );
 
 // src/shared/db/tables/batch-consumptions.table.ts
 import {
-  pgTable as pgTable16,
-  serial as serial16,
-  integer as integer13,
+  pgTable as pgTable17,
+  serial as serial17,
+  integer as integer14,
   decimal as decimal7,
-  timestamp as timestamp16,
-  index as index12,
-  unique as unique7,
+  timestamp as timestamp17,
+  index as index13,
+  unique as unique8,
   check as check3,
   foreignKey
 } from "drizzle-orm/pg-core";
-import { sql as sql3 } from "drizzle-orm";
-var batchConsumptions = pgTable16(
+import { sql as sql4 } from "drizzle-orm";
+var batchConsumptions = pgTable17(
   "batch_consumptions",
   {
-    id: serial16("id").primaryKey(),
-    destinationBatchId: integer13("destination_batch_id").notNull(),
-    sourceBatchId: integer13("source_batch_id").notNull(),
+    id: serial17("id").primaryKey(),
+    destinationBatchId: integer14("destination_batch_id").notNull(),
+    sourceBatchId: integer14("source_batch_id").notNull(),
     /* --- denormalised scope guard, written by the service, enforced by the FKs below ---
        Both ends of the edge must be batches of this order. */
-    productionOrderId: integer13("production_order_id").notNull().references(() => productionOrders.id, { onDelete: "cascade" }),
+    productionOrderId: integer14("production_order_id").notNull().references(() => productionOrders.id, { onDelete: "cascade" }),
     sourceStage: productionBatchStageEnum("source_stage").notNull(),
     destinationStage: productionBatchStageEnum("destination_stage").notNull(),
     /** Rolls taken. Partial by design — never has to equal the source's output. */
     rolls: decimal7("rolls", { precision: 12, scale: 2 }).notNull(),
-    createdByUserId: integer13("created_by_user_id").references(() => users.id),
-    createdAt: timestamp16("created_at").defaultNow().notNull(),
-    updatedAt: timestamp16("updated_at").defaultNow().notNull()
+    createdByUserId: integer14("created_by_user_id").references(() => users.id),
+    createdAt: timestamp17("created_at").defaultNow().notNull(),
+    updatedAt: timestamp17("updated_at").defaultNow().notNull()
   },
   (table) => [
     /**
@@ -999,12 +1119,12 @@ var batchConsumptions = pgTable16(
      * UPDATE of `rolls`, not a second row — which keeps "edit the consumption" a
      * single-statement operation and the history unambiguous.
      */
-    unique7("batch_consumptions_pair_uq").on(table.destinationBatchId, table.sourceBatchId),
-    index12("batch_consumptions_destination_idx").on(table.destinationBatchId),
-    index12("batch_consumptions_source_idx").on(table.sourceBatchId),
-    index12("batch_consumptions_order_idx").on(table.productionOrderId),
-    check3("batch_consumptions_positive", sql3`rolls > 0`),
-    check3("batch_consumptions_not_self", sql3`source_batch_id <> destination_batch_id`),
+    unique8("batch_consumptions_pair_uq").on(table.destinationBatchId, table.sourceBatchId),
+    index13("batch_consumptions_destination_idx").on(table.destinationBatchId),
+    index13("batch_consumptions_source_idx").on(table.sourceBatchId),
+    index13("batch_consumptions_order_idx").on(table.productionOrderId),
+    check3("batch_consumptions_positive", sql4`rolls > 0`),
+    check3("batch_consumptions_not_self", sql4`source_batch_id <> destination_batch_id`),
     /**
      * Weaving feeds cutting exactly as printing does. Everything else is a stage skip.
      * Adding a workflow means adding its pair here and to `UPSTREAM_OF` in the helpers.
@@ -1015,7 +1135,7 @@ var batchConsumptions = pgTable16(
      */
     check3(
       "batch_consumptions_valid_adjacency",
-      sql3`(source_stage = 'printing' AND destination_stage = 'cutting')
+      sql4`(source_stage = 'printing' AND destination_stage = 'cutting')
        OR (source_stage = 'weaving'  AND destination_stage = 'cutting')
        OR (source_stage = 'cutting'  AND destination_stage = 'packaging')`
     )
@@ -1023,62 +1143,62 @@ var batchConsumptions = pgTable16(
 );
 
 // src/shared/db/tables/purchase-record.table.ts
-import { pgTable as pgTable17, serial as serial17, date as date3, varchar as varchar15, integer as integer14, decimal as decimal8, timestamp as timestamp17, index as index13 } from "drizzle-orm/pg-core";
-var purchaseRecords = pgTable17(
+import { pgTable as pgTable18, serial as serial18, date as date4, varchar as varchar16, integer as integer15, decimal as decimal8, timestamp as timestamp18, index as index14 } from "drizzle-orm/pg-core";
+var purchaseRecords = pgTable18(
   "purchase_records",
   {
-    id: serial17("id").primaryKey(),
-    reportDate: date3("report_date").notNull(),
-    materialCode: varchar15("material_code", { length: 100 }).notNull().references(() => materials.code),
-    materialType: varchar15("material_type", { length: 100 }),
-    itemName: varchar15("item_name", { length: 255 }),
-    invoiceNumber: varchar15("invoice_number", { length: 255 }),
-    vendor: varchar15("vendor", { length: 255 }).notNull(),
-    cartonQty: integer14("carton_qty").notNull(),
-    rollsPerCarton: integer14("rolls_per_carton").notNull(),
+    id: serial18("id").primaryKey(),
+    reportDate: date4("report_date").notNull(),
+    materialCode: varchar16("material_code", { length: 100 }).notNull().references(() => materials.code),
+    materialType: varchar16("material_type", { length: 100 }),
+    itemName: varchar16("item_name", { length: 255 }),
+    invoiceNumber: varchar16("invoice_number", { length: 255 }),
+    vendor: varchar16("vendor", { length: 255 }).notNull(),
+    cartonQty: integer15("carton_qty").notNull(),
+    rollsPerCarton: integer15("rolls_per_carton").notNull(),
     totalRoll: decimal8("total_roll", { precision: 12, scale: 2 }),
     rollLength: decimal8("roll_length", { precision: 10, scale: 2 }).notNull(),
     netWeight: decimal8("net_weight", { precision: 10, scale: 2 }).notNull(),
-    efs: varchar15("efs", { length: 100 }),
+    efs: varchar16("efs", { length: 100 }),
     /** = totalRoll * (rollLength / 200). Always server-calculated — see purchase-formula.ts. */
     totalRollPer200m: decimal8("total_roll_per_200m", { precision: 12, scale: 2 }),
     /** = (netWeight * 200) / (totalRoll * rollLength). Always server-calculated. */
     invoiceWeight: decimal8("invoice_weight", { precision: 10, scale: 2 }),
     /** Copied from `materials.weightPerRoll` for the purchase's material. Never user-entered. */
     localWeight: decimal8("local_weight", { precision: 10, scale: 4 }),
-    gdNumber: varchar15("gd_number", { length: 100 }),
-    createdAt: timestamp17("created_at").defaultNow().notNull(),
-    updatedAt: timestamp17("updated_at").defaultNow().notNull()
+    gdNumber: varchar16("gd_number", { length: 100 }),
+    createdAt: timestamp18("created_at").defaultNow().notNull(),
+    updatedAt: timestamp18("updated_at").defaultNow().notNull()
   },
   (table) => ({
-    materialCodeIdx: index13("purchase_records_material_code_idx").on(table.materialCode)
+    materialCodeIdx: index14("purchase_records_material_code_idx").on(table.materialCode)
   })
 );
 
 // src/shared/db/tables/inventory-rolls.table.ts
-import { pgTable as pgTable18, serial as serial18, varchar as varchar16, decimal as decimal9, timestamp as timestamp18, unique as unique8 } from "drizzle-orm/pg-core";
-var inventoryRolls = pgTable18(
+import { pgTable as pgTable19, serial as serial19, varchar as varchar17, decimal as decimal9, timestamp as timestamp19, unique as unique9 } from "drizzle-orm/pg-core";
+var inventoryRolls = pgTable19(
   "inventory_rolls",
   {
-    id: serial18("id").primaryKey(),
-    materialCode: varchar16("material_code", { length: 100 }).notNull().unique().references(() => materials.code),
+    id: serial19("id").primaryKey(),
+    materialCode: varchar17("material_code", { length: 100 }).notNull().unique().references(() => materials.code),
     openingStock: decimal9("opening_stock", { precision: 12, scale: 2 }).default("0").notNull(),
     receivedRolls: decimal9("received_rolls", { precision: 12, scale: 2 }).default("0").notNull(),
     issuedRolls: decimal9("issued_rolls", { precision: 12, scale: 2 }).default("0").notNull(),
     balanceRolls: decimal9("balance_rolls", { precision: 12, scale: 2 }).default("0").notNull(),
     /** Rolls per kilogram for this material — user input. Drives the computed per-SKU balance. */
     rollPerKg: decimal9("roll_per_kg", { precision: 12, scale: 4 }).default("0").notNull(),
-    createdAt: timestamp18("created_at").defaultNow().notNull(),
-    updatedAt: timestamp18("updated_at").defaultNow().notNull()
+    createdAt: timestamp19("created_at").defaultNow().notNull(),
+    updatedAt: timestamp19("updated_at").defaultNow().notNull()
   },
   (table) => ({
-    materialCodeIdx: unique8("inventory_rolls_material_code_idx").on(table.materialCode)
+    materialCodeIdx: unique9("inventory_rolls_material_code_idx").on(table.materialCode)
   })
 );
 
 // src/shared/db/tables/inventory-roll-movements.table.ts
-import { pgTable as pgTable19, serial as serial19, integer as integer15, varchar as varchar17, decimal as decimal10, timestamp as timestamp19, index as index14, pgEnum as pgEnum10 } from "drizzle-orm/pg-core";
-var rollMovementTypeEnum = pgEnum10("roll_movement_type", [
+import { pgTable as pgTable20, serial as serial20, integer as integer16, varchar as varchar18, decimal as decimal10, timestamp as timestamp20, index as index15, pgEnum as pgEnum9 } from "drizzle-orm/pg-core";
+var rollMovementTypeEnum = pgEnum9("roll_movement_type", [
   "opening_balance",
   // ledger created with an opening stock
   "purchase_receipt",
@@ -1092,79 +1212,79 @@ var rollMovementTypeEnum = pgEnum10("roll_movement_type", [
   "adjustment"
   // manual correction from the stock screen
 ]);
-var inventoryRollMovements = pgTable19(
+var inventoryRollMovements = pgTable20(
   "inventory_roll_movements",
   {
-    id: serial19("id").primaryKey(),
-    inventoryRollId: integer15("inventory_roll_id").notNull().references(() => inventoryRolls.id, { onDelete: "cascade" }),
+    id: serial20("id").primaryKey(),
+    inventoryRollId: integer16("inventory_roll_id").notNull().references(() => inventoryRolls.id, { onDelete: "cascade" }),
     /** Denormalised so history stays readable even if the ledger row is later removed. */
-    materialCode: varchar17("material_code", { length: 100 }).notNull(),
+    materialCode: varchar18("material_code", { length: 100 }).notNull(),
     movementType: rollMovementTypeEnum("movement_type").notNull(),
     /** Signed: + credits the ledger, - debits it. */
     rolls: decimal10("rolls", { precision: 12, scale: 2 }).notNull(),
     /** Balance immediately after this movement — makes the history readable on its own. */
     balanceAfter: decimal10("balance_after", { precision: 12, scale: 2 }).notNull(),
-    referenceType: varchar17("reference_type", { length: 50 }),
-    referenceId: integer15("reference_id"),
-    note: varchar17("note", { length: 500 }),
-    actorUserId: integer15("actor_user_id").references(() => users.id),
-    createdAt: timestamp19("created_at").defaultNow().notNull()
+    referenceType: varchar18("reference_type", { length: 50 }),
+    referenceId: integer16("reference_id"),
+    note: varchar18("note", { length: 500 }),
+    actorUserId: integer16("actor_user_id").references(() => users.id),
+    createdAt: timestamp20("created_at").defaultNow().notNull()
   },
   (table) => ({
-    rollIdx: index14("inventory_roll_movements_roll_idx").on(table.inventoryRollId),
-    materialIdx: index14("inventory_roll_movements_material_idx").on(table.materialCode),
-    createdIdx: index14("inventory_roll_movements_created_idx").on(table.createdAt)
+    rollIdx: index15("inventory_roll_movements_roll_idx").on(table.inventoryRollId),
+    materialIdx: index15("inventory_roll_movements_material_idx").on(table.materialCode),
+    createdIdx: index15("inventory_roll_movements_created_idx").on(table.createdAt)
   })
 );
 
 // src/shared/db/tables/ink-purchases.table.ts
-import { pgTable as pgTable20, serial as serial20, varchar as varchar18, date as date4, decimal as decimal11, timestamp as timestamp20, index as index15 } from "drizzle-orm/pg-core";
-var inkPurchases = pgTable20(
+import { pgTable as pgTable21, serial as serial21, varchar as varchar19, date as date5, decimal as decimal11, timestamp as timestamp21, index as index16 } from "drizzle-orm/pg-core";
+var inkPurchases = pgTable21(
   "ink_purchases",
   {
-    id: serial20("id").primaryKey(),
-    reportDate: date4("report_date").notNull(),
-    materialCode: varchar18("material_code", { length: 100 }).notNull(),
-    vendor: varchar18("vendor", { length: 200 }).notNull(),
-    invoiceNumber: varchar18("invoice_number", { length: 100 }),
+    id: serial21("id").primaryKey(),
+    reportDate: date5("report_date").notNull(),
+    materialCode: varchar19("material_code", { length: 100 }).notNull(),
+    vendor: varchar19("vendor", { length: 200 }).notNull(),
+    invoiceNumber: varchar19("invoice_number", { length: 100 }),
     /** Units purchased (cans / tins / kg-lots — whatever the facility counts ink in). */
     quantity: decimal11("quantity", { precision: 12, scale: 2 }).notNull(),
     /** Weight per unit. */
     weightPerQty: decimal11("weight_per_qty", { precision: 12, scale: 3 }).notNull(),
     /** Server-calculated `quantity × weightPerQty`. */
     totalWeight: decimal11("total_weight", { precision: 14, scale: 3 }).notNull(),
-    createdAt: timestamp20("created_at").defaultNow().notNull()
+    createdAt: timestamp21("created_at").defaultNow().notNull()
   },
   (table) => ({
-    materialCodeIdx: index15("ink_purchases_material_code_idx").on(table.materialCode)
+    materialCodeIdx: index16("ink_purchases_material_code_idx").on(table.materialCode)
   })
 );
 
 // src/shared/db/tables/ink-consumptions.table.ts
-import { pgTable as pgTable21, serial as serial21, varchar as varchar19, integer as integer16, decimal as decimal12, text as text9, timestamp as timestamp21, index as index16 } from "drizzle-orm/pg-core";
-var inkConsumptions = pgTable21(
+import { pgTable as pgTable22, serial as serial22, varchar as varchar20, integer as integer17, decimal as decimal12, text as text10, timestamp as timestamp22, index as index17 } from "drizzle-orm/pg-core";
+var inkConsumptions = pgTable22(
   "ink_consumptions",
   {
-    id: serial21("id").primaryKey(),
-    materialCode: varchar19("material_code", { length: 100 }).notNull(),
+    id: serial22("id").primaryKey(),
+    materialCode: varchar20("material_code", { length: 100 }).notNull(),
     /** Units drawn. */
     qtyAssigned: decimal12("qty_assigned", { precision: 12, scale: 2 }).notNull(),
-    operatorId: integer16("operator_id").references(() => operators.id),
-    operatorName: varchar19("operator_name", { length: 200 }),
+    operatorId: integer17("operator_id").references(() => operators.id),
+    operatorName: varchar20("operator_name", { length: 200 }),
     /** Weight consumed — this is what debits ink stock. */
     weight: decimal12("weight", { precision: 14, scale: 3 }).notNull(),
-    note: text9("note"),
-    consumedAt: timestamp21("consumed_at").defaultNow().notNull()
+    note: text10("note"),
+    consumedAt: timestamp22("consumed_at").defaultNow().notNull()
   },
   (table) => ({
-    materialCodeIdx: index16("ink_consumptions_material_code_idx").on(table.materialCode),
-    operatorIdx: index16("ink_consumptions_operator_idx").on(table.operatorId)
+    materialCodeIdx: index17("ink_consumptions_material_code_idx").on(table.materialCode),
+    operatorIdx: index17("ink_consumptions_operator_idx").on(table.operatorId)
   })
 );
 
 // src/shared/db/tables/production-run-reason.enum.ts
-import { pgEnum as pgEnum11 } from "drizzle-orm/pg-core";
-var productionRunReasonEnum = pgEnum11("production_run_reason", [
+import { pgEnum as pgEnum10 } from "drizzle-orm/pg-core";
+var productionRunReasonEnum = pgEnum10("production_run_reason", [
   "initial",
   "shortfall",
   "additional_order",
@@ -1175,139 +1295,114 @@ var productionRunReasonEnum = pgEnum11("production_run_reason", [
 ]);
 
 // src/shared/db/tables/production-runs.table.ts
-import { pgTable as pgTable22, uuid, integer as integer17, varchar as varchar20, decimal as decimal13, text as text10, timestamp as timestamp22, index as index17 } from "drizzle-orm/pg-core";
-var productionRuns = pgTable22(
+import { sql as sql5 } from "drizzle-orm";
+import { pgTable as pgTable23, uuid, integer as integer18, varchar as varchar21, decimal as decimal13, text as text11, timestamp as timestamp23, index as index18 } from "drizzle-orm/pg-core";
+var productionRuns = pgTable23(
   "production_runs",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    saleOrderId: integer17("sale_order_id").notNull().references(() => workOrders.id, { onDelete: "cascade" }),
+    printedSaleOrderId: integer18("printed_sale_order_id").references(() => printedLabelWorkOrders.id, {
+      onDelete: "cascade"
+    }),
+    wovenSaleOrderId: integer18("woven_sale_order_id").references(() => wovenLabelWorkOrders.id, {
+      onDelete: "cascade"
+    }),
     /** Label type / product specification this pass produced. */
-    productId: varchar20("product_id", { length: 150 }),
-    machineId: integer17("machine_id").references(() => machines.id),
-    operatorId: integer17("operator_id").references(() => operators.id),
+    productId: varchar21("product_id", { length: 150 }),
+    machineId: integer18("machine_id").references(() => machines.id),
+    operatorId: integer18("operator_id").references(() => operators.id),
     quantityProduced: decimal13("quantity_produced", { precision: 12, scale: 2 }).notNull(),
     runReason: productionRunReasonEnum("run_reason").default("initial").notNull(),
-    notes: text10("notes"),
-    producedAt: timestamp22("produced_at", { withTimezone: true }).defaultNow().notNull(),
-    createdBy: integer17("created_by").references(() => users.id),
+    notes: text11("notes"),
+    producedAt: timestamp23("produced_at", { withTimezone: true }).defaultNow().notNull(),
+    createdBy: integer18("created_by").references(() => users.id),
     /** Client-supplied token for duplicate-submission protection. */
-    idempotencyKey: varchar20("idempotency_key", { length: 100 }),
-    createdAt: timestamp22("created_at").defaultNow().notNull(),
-    updatedAt: timestamp22("updated_at").defaultNow().notNull()
-  },
-  (table) => ({
-    saleOrderIdx: index17("production_runs_sale_order_idx").on(table.saleOrderId),
-    producedAtIdx: index17("production_runs_produced_at_idx").on(table.producedAt),
-    idempotencyIdx: index17("production_runs_idempotency_idx").on(table.idempotencyKey)
-  })
-);
-
-// src/shared/db/tables/sticker-materials.table.ts
-import { pgTable as pgTable23, serial as serial22, varchar as varchar21, numeric as numeric2, date as date5, timestamp as timestamp23, index as index18 } from "drizzle-orm/pg-core";
-var stickerMaterials = pgTable23(
-  "sticker_materials",
-  {
-    id: serial22("id").primaryKey(),
-    invoiceDate: date5("invoice_date").notNull(),
-    /** e.g. "4 x 6". */
-    stickerSize: varchar21("sticker_size", { length: 100 }).notNull(),
-    materialCode: varchar21("material_code", { length: 100 }).notNull(),
-    rollQuantity: numeric2("roll_quantity", { precision: 12, scale: 2 }).notNull(),
-    weightPerRoll: numeric2("weight_per_roll", { precision: 12, scale: 3 }).notNull(),
-    /** Server-calculated: rollQuantity × weightPerRoll. */
-    totalWeight: numeric2("total_weight", { precision: 14, scale: 3 }).notNull(),
+    idempotencyKey: varchar21("idempotency_key", { length: 100 }),
     createdAt: timestamp23("created_at").defaultNow().notNull(),
     updatedAt: timestamp23("updated_at").defaultNow().notNull()
   },
   (table) => ({
-    materialCodeIdx: index18("sticker_materials_material_code_idx").on(table.materialCode),
-    dateIdx: index18("sticker_materials_date_idx").on(table.invoiceDate)
+    printedSaleOrderIdx: index18("production_runs_printed_sale_order_idx").on(table.printedSaleOrderId),
+    wovenSaleOrderIdx: index18("production_runs_woven_sale_order_idx").on(table.wovenSaleOrderId),
+    producedAtIdx: index18("production_runs_produced_at_idx").on(table.producedAt),
+    idempotencyIdx: index18("production_runs_idempotency_idx").on(table.idempotencyKey),
+    /** Exactly one of the two workflow FKs must be set. */
+    oneSaleOrderCheck: sql5`CHECK (num_nonnulls(${table.printedSaleOrderId}, ${table.wovenSaleOrderId}) = 1)`
   })
 );
 
-// src/shared/db/tables/local-sheets.table.ts
+// src/shared/db/tables/sticker-materials.table.ts
 import { pgTable as pgTable24, serial as serial23, varchar as varchar22, numeric as numeric3, date as date6, timestamp as timestamp24, index as index19 } from "drizzle-orm/pg-core";
-var localSheets = pgTable24(
-  "local_sheets",
+var stickerMaterials = pgTable24(
+  "sticker_materials",
   {
     id: serial23("id").primaryKey(),
-    date: date6("date").notNull(),
-    /** e.g. "20 x 30". */
+    invoiceDate: date6("invoice_date").notNull(),
+    /** e.g. "4 x 6". */
+    stickerSize: varchar22("sticker_size", { length: 100 }).notNull(),
     materialCode: varchar22("material_code", { length: 100 }).notNull(),
-    packetQuantity: numeric3("packet_quantity", { precision: 12, scale: 2 }).notNull(),
-    packetWeight: numeric3("packet_weight", { precision: 12, scale: 3 }).notNull(),
-    /** Server-calculated: packetQuantity × packetWeight. */
+    rollQuantity: numeric3("roll_quantity", { precision: 12, scale: 2 }).notNull(),
+    weightPerRoll: numeric3("weight_per_roll", { precision: 12, scale: 3 }).notNull(),
+    /** Server-calculated: rollQuantity × weightPerRoll. */
     totalWeight: numeric3("total_weight", { precision: 14, scale: 3 }).notNull(),
     createdAt: timestamp24("created_at").defaultNow().notNull(),
     updatedAt: timestamp24("updated_at").defaultNow().notNull()
   },
   (table) => ({
-    materialCodeIdx: index19("local_sheets_material_code_idx").on(table.materialCode),
-    dateIdx: index19("local_sheets_date_idx").on(table.date)
+    materialCodeIdx: index19("sticker_materials_material_code_idx").on(table.materialCode),
+    dateIdx: index19("sticker_materials_date_idx").on(table.invoiceDate)
   })
 );
 
-// src/shared/db/tables/label-sheets.table.ts
+// src/shared/db/tables/local-sheets.table.ts
 import { pgTable as pgTable25, serial as serial24, varchar as varchar23, numeric as numeric4, date as date7, timestamp as timestamp25, index as index20 } from "drizzle-orm/pg-core";
-var labelSheets = pgTable25(
-  "label_sheets",
+var localSheets = pgTable25(
+  "local_sheets",
   {
     id: serial24("id").primaryKey(),
     date: date7("date").notNull(),
+    /** e.g. "20 x 30". */
     materialCode: varchar23("material_code", { length: 100 }).notNull(),
-    sheetQuantity: numeric4("sheet_quantity", { precision: 12, scale: 2 }).notNull(),
-    weightPerSheet: numeric4("weight_per_sheet", { precision: 12, scale: 3 }).notNull(),
-    /** Server-calculated: sheetQuantity × weightPerSheet. */
+    packetQuantity: numeric4("packet_quantity", { precision: 12, scale: 2 }).notNull(),
+    packetWeight: numeric4("packet_weight", { precision: 12, scale: 3 }).notNull(),
+    /** Server-calculated: packetQuantity × packetWeight. */
     totalWeight: numeric4("total_weight", { precision: 14, scale: 3 }).notNull(),
     createdAt: timestamp25("created_at").defaultNow().notNull(),
     updatedAt: timestamp25("updated_at").defaultNow().notNull()
   },
   (table) => ({
-    materialCodeIdx: index20("label_sheets_material_code_idx").on(table.materialCode),
-    dateIdx: index20("label_sheets_date_idx").on(table.date)
+    materialCodeIdx: index20("local_sheets_material_code_idx").on(table.materialCode),
+    dateIdx: index20("local_sheets_date_idx").on(table.date)
   })
 );
 
-// src/shared/db/tables/woven-work-order-details.table.ts
-import { pgTable as pgTable26, serial as serial25, integer as integer18, varchar as varchar24, numeric as numeric5, jsonb as jsonb3, timestamp as timestamp26, index as index21 } from "drizzle-orm/pg-core";
-var wovenWorkOrderDetails = pgTable26(
-  "woven_work_order_details",
+// src/shared/db/tables/label-sheets.table.ts
+import { pgTable as pgTable26, serial as serial25, varchar as varchar24, numeric as numeric5, date as date8, timestamp as timestamp26, index as index21 } from "drizzle-orm/pg-core";
+var labelSheets = pgTable26(
+  "label_sheets",
   {
     id: serial25("id").primaryKey(),
-    workOrderId: integer18("work_order_id").notNull().unique().references(() => workOrders.id, { onDelete: "cascade" }),
-    /** Customer-facing design identifier, e.g. "Guess 13R". Unique across the facility. */
-    designCode: varchar24("design_code", { length: 100 }).notNull().unique(),
-    /** Weft picks per unit, e.g. 853. */
-    pick: integer18("pick").notNull(),
-    /** Design repeat length, e.g. 60. */
-    repeat: numeric5("repeat", { precision: 12, scale: 2 }).notNull(),
-    /** Warp density, e.g. 560. */
-    density: integer18("density").notNull(),
-    /** Loom speed in RPM, e.g. 500 RPM. */
-    speed: numeric5("speed", { precision: 12, scale: 2 }).default("0").notNull(),
-    /** Extra allowance added on top of the ordered quantity, e.g. 150. */
-    extra: numeric5("extra", { precision: 12, scale: 2 }).default("0").notNull(),
-    /**
-     * Derived figure: hours to weave the whole order at the loom speed —
-     * `(totalQty / repeat) * pick / (speed * 60)`, rounded to 2dp, speed defaulting to
-     * 600 RPM when unset. Computed **server-side** on create/update (see
-     * `work-order.service.ts`), never accepted from the client, and backfilled by
-     * migration 0024 for pre-existing woven orders.
-     */
-    estimatedWeavingHours: numeric5("estimated_weaving_hours", { precision: 12, scale: 2 }).default("0").notNull(),
-    /** Size labels woven on this order, e.g. ["10", "12", "XL", "34/34"]. */
-    sizeLabels: jsonb3("size_labels").$type().default([]).notNull(),
+    date: date8("date").notNull(),
+    materialCode: varchar24("material_code", { length: 100 }).notNull(),
+    sheetQuantity: numeric5("sheet_quantity", { precision: 12, scale: 2 }).notNull(),
+    weightPerSheet: numeric5("weight_per_sheet", { precision: 12, scale: 3 }).notNull(),
+    /** Server-calculated: sheetQuantity × weightPerSheet. */
+    totalWeight: numeric5("total_weight", { precision: 14, scale: 3 }).notNull(),
     createdAt: timestamp26("created_at").defaultNow().notNull(),
     updatedAt: timestamp26("updated_at").defaultNow().notNull()
   },
   (table) => ({
-    workOrderIdx: index21("woven_wo_details_work_order_idx").on(table.workOrderId),
-    designCodeIdx: index21("woven_wo_details_design_code_idx").on(table.designCode)
+    materialCodeIdx: index21("label_sheets_material_code_idx").on(table.materialCode),
+    dateIdx: index21("label_sheets_date_idx").on(table.date)
   })
 );
 
+// src/shared/db/tables/product-type.enum.ts
+import { pgEnum as pgEnum11 } from "drizzle-orm/pg-core";
+var productTypeEnum = pgEnum11("product_type", ["printed", "woven"]);
+
 // src/shared/db/tables/woven-thread-plan-items.table.ts
-import { pgTable as pgTable28, serial as serial27, integer as integer19, varchar as varchar26, numeric as numeric7, timestamp as timestamp28, unique as unique10, index as index23 } from "drizzle-orm/pg-core";
+import { pgTable as pgTable28, serial as serial27, integer as integer19, varchar as varchar26, numeric as numeric7, timestamp as timestamp28, unique as unique11, index as index23 } from "drizzle-orm/pg-core";
 
 // src/shared/db/tables/thread.enums.ts
 import { pgEnum as pgEnum12 } from "drizzle-orm/pg-core";
@@ -1330,7 +1425,7 @@ var threadMovementTypeEnum = pgEnum12("thread_movement_type", [
 ]);
 
 // src/shared/db/tables/thread-stocks.table.ts
-import { pgTable as pgTable27, serial as serial26, varchar as varchar25, numeric as numeric6, timestamp as timestamp27, unique as unique9, index as index22 } from "drizzle-orm/pg-core";
+import { pgTable as pgTable27, serial as serial26, varchar as varchar25, numeric as numeric6, timestamp as timestamp27, unique as unique10, index as index22 } from "drizzle-orm/pg-core";
 var threadStocks = pgTable27(
   "thread_stocks",
   {
@@ -1351,7 +1446,7 @@ var threadStocks = pgTable27(
   (table) => ({
     // One ledger row per distinct thread. Postgres treats NULLs as distinct in a unique
     // index, so primary rows (colorCode null) are additionally guarded in the service.
-    identity: unique9("thread_stocks_identity_idx").on(
+    identity: unique10("thread_stocks_identity_idx").on(
       table.stockType,
       table.denier,
       table.colorName,
@@ -1386,170 +1481,212 @@ var wovenThreadPlanItems = pgTable28(
     updatedAt: timestamp28("updated_at").defaultNow().notNull()
   },
   (table) => ({
-    slot: unique10("woven_thread_plan_items_slot_idx").on(table.wovenProductionLineId, table.sortOrder),
+    slot: unique11("woven_thread_plan_items_slot_idx").on(table.wovenProductionLineId, table.sortOrder),
     lineIdx: index23("woven_thread_plan_items_line_idx").on(table.wovenProductionLineId)
   })
 );
 
-// src/shared/db/tables/thread-purchases.table.ts
-import { pgTable as pgTable29, serial as serial28, varchar as varchar27, integer as integer20, numeric as numeric8, date as date8, timestamp as timestamp29, index as index24 } from "drizzle-orm/pg-core";
-var threadPurchases = pgTable29(
-  "thread_purchases",
+// src/shared/db/tables/printed-label-production-orders.table.ts
+import {
+  pgTable as pgTable29,
+  integer as integer20,
+  timestamp as timestamp29,
+  index as index24
+} from "drizzle-orm/pg-core";
+var printedLabelProductionOrders = pgTable29(
+  "printed_label_production_orders",
   {
-    id: serial28("id").primaryKey(),
-    receivedDate: date8("received_date").notNull(),
-    /** Always "Thread" today; kept explicit so other raw items can join this table later. */
-    itemName: varchar27("item_name", { length: 100 }).default("Thread").notNull(),
-    /** The item code IS the denier — 45 / 75 / 100 / 150. */
-    denier: threadDenierEnum("denier").notNull(),
-    threadColor: threadBaseColorEnum("thread_color").notNull(),
-    vendor: varchar27("vendor", { length: 255 }).notNull(),
-    invoiceNumber: varchar27("invoice_number", { length: 100 }).notNull(),
-    /** Cartons received. */
-    totalCtns: integer20("total_ctns").notNull(),
-    /** Weight of a single carton, in kg. */
-    weightPerCtnKg: numeric8("weight_per_ctn_kg", { precision: 12, scale: 3 }).notNull(),
-    /** Server-calculated: weightPerCtnKg * totalCtns. */
-    totalWeightKg: numeric8("total_weight_kg", { precision: 14, scale: 3 }).notNull(),
-    notes: varchar27("notes", { length: 500 }),
+    productionOrderId: integer20("production_order_id").primaryKey().references(() => productionOrders.id, { onDelete: "cascade" }),
     createdAt: timestamp29("created_at").defaultNow().notNull(),
     updatedAt: timestamp29("updated_at").defaultNow().notNull()
   },
   (table) => ({
-    vendorIdx: index24("thread_purchases_vendor_idx").on(table.vendor),
-    invoiceIdx: index24("thread_purchases_invoice_idx").on(table.invoiceNumber),
-    dateIdx: index24("thread_purchases_date_idx").on(table.receivedDate)
+    productionOrderIdIdx: index24("printed_label_production_orders_production_order_id_idx").on(
+      table.productionOrderId
+    )
+  })
+);
+
+// src/shared/db/tables/woven-label-production-orders.table.ts
+import {
+  pgTable as pgTable30,
+  integer as integer21,
+  timestamp as timestamp30,
+  index as index25
+} from "drizzle-orm/pg-core";
+var wovenLabelProductionOrders = pgTable30(
+  "woven_label_production_orders",
+  {
+    productionOrderId: integer21("production_order_id").primaryKey().references(() => productionOrders.id, { onDelete: "cascade" }),
+    createdAt: timestamp30("created_at").defaultNow().notNull(),
+    updatedAt: timestamp30("updated_at").defaultNow().notNull()
+  },
+  (table) => ({
+    productionOrderIdIdx: index25("woven_label_production_orders_production_order_id_idx").on(
+      table.productionOrderId
+    )
+  })
+);
+
+// src/shared/db/tables/thread-purchases.table.ts
+import { pgTable as pgTable31, serial as serial28, varchar as varchar29, integer as integer22, numeric as numeric8, date as date9, timestamp as timestamp31, index as index26 } from "drizzle-orm/pg-core";
+var threadPurchases = pgTable31(
+  "thread_purchases",
+  {
+    id: serial28("id").primaryKey(),
+    receivedDate: date9("received_date").notNull(),
+    /** Always "Thread" today; kept explicit so other raw items can join this table later. */
+    itemName: varchar29("item_name", { length: 100 }).default("Thread").notNull(),
+    /** The item code IS the denier — 45 / 75 / 100 / 150. */
+    denier: threadDenierEnum("denier").notNull(),
+    threadColor: threadBaseColorEnum("thread_color").notNull(),
+    vendor: varchar29("vendor", { length: 255 }).notNull(),
+    invoiceNumber: varchar29("invoice_number", { length: 100 }).notNull(),
+    /** Cartons received. */
+    totalCtns: integer22("total_ctns").notNull(),
+    /** Weight of a single carton, in kg. */
+    weightPerCtnKg: numeric8("weight_per_ctn_kg", { precision: 12, scale: 3 }).notNull(),
+    /** Server-calculated: weightPerCtnKg * totalCtns. */
+    totalWeightKg: numeric8("total_weight_kg", { precision: 14, scale: 3 }).notNull(),
+    notes: varchar29("notes", { length: 500 }),
+    createdAt: timestamp31("created_at").defaultNow().notNull(),
+    updatedAt: timestamp31("updated_at").defaultNow().notNull()
+  },
+  (table) => ({
+    vendorIdx: index26("thread_purchases_vendor_idx").on(table.vendor),
+    invoiceIdx: index26("thread_purchases_invoice_idx").on(table.invoiceNumber),
+    dateIdx: index26("thread_purchases_date_idx").on(table.receivedDate)
   })
 );
 
 // src/shared/db/tables/thread-dye-batches.table.ts
-import { pgTable as pgTable30, serial as serial29, integer as integer21, varchar as varchar28, numeric as numeric9, timestamp as timestamp30, index as index25 } from "drizzle-orm/pg-core";
-var threadDyeBatches = pgTable30(
+import { pgTable as pgTable32, serial as serial29, integer as integer23, varchar as varchar30, numeric as numeric9, timestamp as timestamp32, index as index27 } from "drizzle-orm/pg-core";
+var threadDyeBatches = pgTable32(
   "thread_dye_batches",
   {
     id: serial29("id").primaryKey(),
-    batchNumber: varchar28("batch_number", { length: 100 }).notNull().unique(),
+    batchNumber: varchar30("batch_number", { length: 100 }).notNull().unique(),
     /** The primary (undyed) stock row consumed. */
-    fromStockId: integer21("from_stock_id").notNull().references(() => threadStocks.id, { onDelete: "restrict" }),
+    fromStockId: integer23("from_stock_id").notNull().references(() => threadStocks.id, { onDelete: "restrict" }),
     /** The secondary (dyed) stock row credited. */
-    toStockId: integer21("to_stock_id").notNull().references(() => threadStocks.id, { onDelete: "restrict" }),
+    toStockId: integer23("to_stock_id").notNull().references(() => threadStocks.id, { onDelete: "restrict" }),
     denier: threadDenierEnum("denier").notNull(),
     /** Resulting colour, denormalised onto the batch so history survives a stock rename. */
-    colorName: varchar28("color_name", { length: 100 }).notNull(),
-    colorCode: varchar28("color_code", { length: 100 }).notNull(),
+    colorName: varchar30("color_name", { length: 100 }).notNull(),
+    colorCode: varchar30("color_code", { length: 100 }).notNull(),
     inputWeightKg: numeric9("input_weight_kg", { precision: 14, scale: 3 }).notNull(),
     outputWeightKg: numeric9("output_weight_kg", { precision: 14, scale: 3 }).notNull(),
-    notes: varchar28("notes", { length: 500 }),
-    actorUserId: integer21("actor_user_id").references(() => users.id),
-    createdAt: timestamp30("created_at").defaultNow().notNull()
+    notes: varchar30("notes", { length: 500 }),
+    actorUserId: integer23("actor_user_id").references(() => users.id),
+    createdAt: timestamp32("created_at").defaultNow().notNull()
   },
   (table) => ({
-    fromIdx: index25("thread_dye_batches_from_idx").on(table.fromStockId),
-    toIdx: index25("thread_dye_batches_to_idx").on(table.toStockId)
+    fromIdx: index27("thread_dye_batches_from_idx").on(table.fromStockId),
+    toIdx: index27("thread_dye_batches_to_idx").on(table.toStockId)
   })
 );
 
 // src/shared/db/tables/thread-stock-movements.table.ts
-import { pgTable as pgTable31, serial as serial30, integer as integer22, varchar as varchar29, numeric as numeric10, timestamp as timestamp31, index as index26 } from "drizzle-orm/pg-core";
-var threadStockMovements = pgTable31(
+import { pgTable as pgTable33, serial as serial30, integer as integer24, varchar as varchar31, numeric as numeric10, timestamp as timestamp33, index as index28 } from "drizzle-orm/pg-core";
+var threadStockMovements = pgTable33(
   "thread_stock_movements",
   {
     id: serial30("id").primaryKey(),
-    threadStockId: integer22("thread_stock_id").notNull().references(() => threadStocks.id, { onDelete: "cascade" }),
+    threadStockId: integer24("thread_stock_id").notNull().references(() => threadStocks.id, { onDelete: "cascade" }),
     movementType: threadMovementTypeEnum("movement_type").notNull(),
     /** Signed: + credits the stock, - debits it. */
     weightKg: numeric10("weight_kg", { precision: 14, scale: 3 }).notNull(),
     /** Balance immediately after this movement — makes the history readable on its own. */
     balanceAfterKg: numeric10("balance_after_kg", { precision: 14, scale: 3 }).notNull(),
-    referenceType: varchar29("reference_type", { length: 50 }),
-    referenceId: integer22("reference_id"),
-    note: varchar29("note", { length: 500 }),
-    actorUserId: integer22("actor_user_id").references(() => users.id),
-    createdAt: timestamp31("created_at").defaultNow().notNull()
+    referenceType: varchar31("reference_type", { length: 50 }),
+    referenceId: integer24("reference_id"),
+    note: varchar31("note", { length: 500 }),
+    actorUserId: integer24("actor_user_id").references(() => users.id),
+    createdAt: timestamp33("created_at").defaultNow().notNull()
   },
   (table) => ({
-    stockIdx: index26("thread_stock_movements_stock_idx").on(table.threadStockId),
-    typeIdx: index26("thread_stock_movements_type_idx").on(table.movementType),
-    createdIdx: index26("thread_stock_movements_created_idx").on(table.createdAt)
+    stockIdx: index28("thread_stock_movements_stock_idx").on(table.threadStockId),
+    typeIdx: index28("thread_stock_movements_type_idx").on(table.movementType),
+    createdIdx: index28("thread_stock_movements_created_idx").on(table.createdAt)
   })
 );
 
 // src/shared/db/tables/thread-service-providers.table.ts
-import { pgTable as pgTable32, serial as serial31, varchar as varchar30, text as text11, timestamp as timestamp32, index as index27 } from "drizzle-orm/pg-core";
-var threadServiceProviders = pgTable32(
+import { pgTable as pgTable34, serial as serial31, varchar as varchar32, text as text14, timestamp as timestamp34, index as index29 } from "drizzle-orm/pg-core";
+var threadServiceProviders = pgTable34(
   "thread_service_providers",
   {
     id: serial31("id").primaryKey(),
-    name: varchar30("name", { length: 255 }).notNull(),
-    contact: varchar30("contact", { length: 100 }),
-    address: text11("address"),
-    notes: text11("notes"),
-    createdAt: timestamp32("created_at").defaultNow().notNull(),
-    updatedAt: timestamp32("updated_at").defaultNow().notNull()
+    name: varchar32("name", { length: 255 }).notNull(),
+    contact: varchar32("contact", { length: 100 }),
+    address: text14("address"),
+    notes: text14("notes"),
+    createdAt: timestamp34("created_at").defaultNow().notNull(),
+    updatedAt: timestamp34("updated_at").defaultNow().notNull()
   },
   (table) => ({
-    nameIdx: index27("thread_service_providers_name_idx").on(table.name)
+    nameIdx: index29("thread_service_providers_name_idx").on(table.name)
   })
 );
 
 // src/shared/db/tables/thread-dyeing-workflow.table.ts
-import { pgTable as pgTable33, serial as serial32, integer as integer23, varchar as varchar31, numeric as numeric11, date as date9, timestamp as timestamp33, pgEnum as pgEnum13, index as index28 } from "drizzle-orm/pg-core";
+import { pgTable as pgTable35, serial as serial32, integer as integer25, varchar as varchar33, numeric as numeric11, date as date10, timestamp as timestamp35, pgEnum as pgEnum13, index as index30 } from "drizzle-orm/pg-core";
 var threadDyeingSendStatusEnum = pgEnum13("thread_dyeing_send_status", [
   "sent",
   "partially_received",
   "received"
 ]);
-var threadDyeingSends = pgTable33(
+var threadDyeingSends = pgTable35(
   "thread_dyeing_sends",
   {
     id: serial32("id").primaryKey(),
-    serviceProviderId: integer23("service_provider_id").notNull().references(() => threadServiceProviders.id),
-    sendingDate: date9("sending_date").notNull(),
-    senderTrackingNumber: varchar31("sender_tracking_number", { length: 100 }),
+    serviceProviderId: integer25("service_provider_id").notNull().references(() => threadServiceProviders.id),
+    sendingDate: date10("sending_date").notNull(),
+    senderTrackingNumber: varchar33("sender_tracking_number", { length: 100 }),
     denier: threadDenierEnum("denier").notNull(),
     baseThreadColor: threadBaseColorEnum("base_thread_color").notNull(),
     totalWeightSent: numeric11("total_weight_sent", { precision: 14, scale: 3 }).notNull(),
     status: threadDyeingSendStatusEnum("status").default("sent").notNull(),
-    createdAt: timestamp33("created_at").defaultNow().notNull(),
-    updatedAt: timestamp33("updated_at").defaultNow().notNull()
+    createdAt: timestamp35("created_at").defaultNow().notNull(),
+    updatedAt: timestamp35("updated_at").defaultNow().notNull()
   },
   (table) => ({
-    providerIdx: index28("thread_dyeing_sends_provider_idx").on(table.serviceProviderId),
-    dateIdx: index28("thread_dyeing_sends_date_idx").on(table.sendingDate)
+    providerIdx: index30("thread_dyeing_sends_provider_idx").on(table.serviceProviderId),
+    dateIdx: index30("thread_dyeing_sends_date_idx").on(table.sendingDate)
   })
 );
-var threadDyeingAllocations = pgTable33(
+var threadDyeingAllocations = pgTable35(
   "thread_dyeing_allocations",
   {
     id: serial32("id").primaryKey(),
-    threadDyeingSendId: integer23("thread_dyeing_send_id").notNull().references(() => threadDyeingSends.id, { onDelete: "cascade" }),
-    colorName: varchar31("color_name", { length: 100 }).notNull(),
-    pantone: varchar31("pantone", { length: 50 }),
-    colorCode: varchar31("color_code", { length: 50 }),
+    threadDyeingSendId: integer25("thread_dyeing_send_id").notNull().references(() => threadDyeingSends.id, { onDelete: "cascade" }),
+    colorName: varchar33("color_name", { length: 100 }).notNull(),
+    pantone: varchar33("pantone", { length: 50 }),
+    colorCode: varchar33("color_code", { length: 50 }),
     /** Weight sent for this colour (the "before" weight). */
     allocatedWeight: numeric11("allocated_weight", { precision: 14, scale: 3 }).notNull(),
     /** Actual dyed weight received back (the "after" weight). Set at receive time; this is
      *  what gets credited to dyed stock. Null until received. */
     receivedWeight: numeric11("received_weight", { precision: 14, scale: 3 }),
-    createdAt: timestamp33("created_at").defaultNow().notNull()
+    createdAt: timestamp35("created_at").defaultNow().notNull()
   },
   (table) => ({
-    sendIdx: index28("thread_dyeing_allocations_send_idx").on(table.threadDyeingSendId)
+    sendIdx: index30("thread_dyeing_allocations_send_idx").on(table.threadDyeingSendId)
   })
 );
-var threadDyeingReceives = pgTable33(
+var threadDyeingReceives = pgTable35(
   "thread_dyeing_receives",
   {
     id: serial32("id").primaryKey(),
-    threadDyeingSendId: integer23("thread_dyeing_send_id").notNull().references(() => threadDyeingSends.id, { onDelete: "cascade" }),
-    receivingDate: date9("receiving_date").notNull(),
-    receiverTrackingNumber: varchar31("receiver_tracking_number", { length: 100 }),
-    invoiceNumber: varchar31("invoice_number", { length: 100 }),
-    createdAt: timestamp33("created_at").defaultNow().notNull(),
-    updatedAt: timestamp33("updated_at").defaultNow().notNull()
+    threadDyeingSendId: integer25("thread_dyeing_send_id").notNull().references(() => threadDyeingSends.id, { onDelete: "cascade" }),
+    receivingDate: date10("receiving_date").notNull(),
+    receiverTrackingNumber: varchar33("receiver_tracking_number", { length: 100 }),
+    invoiceNumber: varchar33("invoice_number", { length: 100 }),
+    createdAt: timestamp35("created_at").defaultNow().notNull(),
+    updatedAt: timestamp35("updated_at").defaultNow().notNull()
   },
   (table) => ({
-    sendIdx: index28("thread_dyeing_receives_send_idx").on(table.threadDyeingSendId)
+    sendIdx: index30("thread_dyeing_receives_send_idx").on(table.threadDyeingSendId)
   })
 );
 
@@ -1563,19 +1700,24 @@ var brandsRelations = relations(brands, ({ one, many }) => ({
     fields: [brands.companyId],
     references: [companies.id]
   }),
-  workOrders: many(workOrders)
+  printedWorkOrders: many(printedLabelWorkOrders),
+  wovenWorkOrders: many(wovenLabelWorkOrders)
 }));
-var workOrdersRelations = relations(workOrders, ({ one, many }) => ({
+var printedLabelWorkOrdersRelations = relations(printedLabelWorkOrders, ({ one, many }) => ({
   brand: one(brands, {
-    fields: [workOrders.brandId],
+    fields: [printedLabelWorkOrders.brandId],
     references: [brands.id]
   }),
   productionOrders: many(productionOrders),
-  /** Present only when `productType` is `woven`. */
-  wovenDetail: one(wovenWorkOrderDetails, {
-    fields: [workOrders.id],
-    references: [wovenWorkOrderDetails.workOrderId]
-  })
+  productionRuns: many(productionRuns)
+}));
+var wovenLabelWorkOrdersRelations = relations(wovenLabelWorkOrders, ({ one, many }) => ({
+  brand: one(brands, {
+    fields: [wovenLabelWorkOrders.brandId],
+    references: [brands.id]
+  }),
+  productionOrders: many(productionOrders),
+  productionRuns: many(productionRuns)
 }));
 var usersRelations = relations(users, ({ many }) => ({
   operators: many(operators),
@@ -1584,9 +1726,13 @@ var usersRelations = relations(users, ({ many }) => ({
   rollIssuances: many(productionRollIssuances)
 }));
 var productionOrdersRelations = relations(productionOrders, ({ one, many }) => ({
-  workOrder: one(workOrders, {
-    fields: [productionOrders.workOrderId],
-    references: [workOrders.id]
+  printedWorkOrder: one(printedLabelWorkOrders, {
+    fields: [productionOrders.printedWorkOrderId],
+    references: [printedLabelWorkOrders.id]
+  }),
+  wovenWorkOrder: one(wovenLabelWorkOrders, {
+    fields: [productionOrders.wovenWorkOrderId],
+    references: [wovenLabelWorkOrders.id]
   }),
   createdBy: one(users, {
     fields: [productionOrders.createdByUserId],
@@ -1744,12 +1890,6 @@ var machinesRelations = relations(machines, ({ one, many }) => ({
   }),
   wovenWeavingLines: many(wovenProductionLines, { relationName: "wovenWeavingMachine" })
 }));
-var wovenWorkOrderDetailsRelations = relations(wovenWorkOrderDetails, ({ one }) => ({
-  workOrder: one(workOrders, {
-    fields: [wovenWorkOrderDetails.workOrderId],
-    references: [workOrders.id]
-  })
-}));
 var wovenProductionLinesRelations = relations(wovenProductionLines, ({ one, many }) => ({
   productionOrder: one(productionOrders, {
     fields: [wovenProductionLines.productionOrderId],
@@ -1803,9 +1943,13 @@ var threadDyeBatchesRelations = relations(threadDyeBatches, ({ one }) => ({
   })
 }));
 var productionRunsRelations = relations(productionRuns, ({ one }) => ({
-  saleOrder: one(workOrders, {
-    fields: [productionRuns.saleOrderId],
-    references: [workOrders.id]
+  printedSaleOrder: one(printedLabelWorkOrders, {
+    fields: [productionRuns.printedSaleOrderId],
+    references: [printedLabelWorkOrders.id]
+  }),
+  wovenSaleOrder: one(wovenLabelWorkOrders, {
+    fields: [productionRuns.wovenSaleOrderId],
+    references: [wovenLabelWorkOrders.id]
   }),
   machine: one(machines, {
     fields: [productionRuns.machineId],
@@ -2209,7 +2353,7 @@ var listProductionOrdersQuerySchema = z4.object({
   poNumber: z4.string().optional()
 });
 var listUsersQuerySchema = z4.object({
-  role: z4.enum(["office_staff", "production_manager", "production_operator"]).optional(),
+  role: z4.enum(["ceo", "office_staff", "production_manager", "accountant"]).optional(),
   includeInactive: z4.coerce.boolean().optional()
 });
 var listPurchasesQuerySchema = z4.object({
@@ -2239,8 +2383,166 @@ var paginationQuerySchema = z5.object({
   offset: z5.coerce.number().int().min(0).optional()
 });
 
+// src/shared/middleware/rbac.ts
+var PERMISSIONS = {
+  CEO_READ: "ceo:read",
+  WORK_ORDERS_READ: "work-orders:read",
+  WORK_ORDERS_CREATE: "work-orders:create",
+  WORK_ORDERS_UPDATE: "work-orders:update",
+  WORK_ORDERS_DISPATCH: "work-orders:dispatch",
+  WORK_ORDERS_DELETE: "work-orders:delete",
+  PRODUCTION_READ: "production:read",
+  PRODUCTION_CREATE: "production:create",
+  PRODUCTION_UPDATE: "production:update",
+  PRODUCTION_DELETE: "production:delete",
+  PRODUCTION_PLAN: "production:plan",
+  PRODUCTION_ASSIGN: "production:assign",
+  PRODUCTION_PROGRESS: "production:progress",
+  PRODUCTION_COMPLETE: "production:complete",
+  PRODUCTION_RECONCILE: "production:reconcile",
+  BATCHES_READ: "batches:read",
+  BATCHES_CREATE: "batches:create",
+  BATCHES_UPDATE: "batches:update",
+  BATCHES_DELETE: "batches:delete",
+  BATCHES_START: "batches:start",
+  BATCHES_OUTPUT: "batches:output",
+  BATCHES_COMPLETE: "batches:complete",
+  BATCHES_CANCEL: "batches:cancel",
+  INVENTORY_READ: "inventory:read",
+  INVENTORY_CREATE: "inventory:create",
+  INVENTORY_UPDATE: "inventory:update",
+  INVENTORY_DELETE: "inventory:delete",
+  MATERIALS_READ: "materials:read",
+  MATERIALS_CREATE: "materials:create",
+  MATERIALS_UPDATE: "materials:update",
+  MATERIALS_DELETE: "materials:delete",
+  PURCHASES_READ: "purchases:read",
+  PURCHASES_CREATE: "purchases:create",
+  PURCHASES_UPDATE: "purchases:update",
+  PURCHASES_DELETE: "purchases:delete",
+  THREAD_READ: "thread:read",
+  THREAD_CREATE: "thread:create",
+  THREAD_UPDATE: "thread:update",
+  THREAD_DELETE: "thread:delete",
+  THREAD_DYE: "thread:dye",
+  INK_READ: "ink:read",
+  INK_CREATE: "ink:create",
+  INK_UPDATE: "ink:update",
+  INK_DELETE: "ink:delete",
+  MACHINES_READ: "machines:read",
+  MACHINES_CREATE: "machines:create",
+  MACHINES_UPDATE: "machines:update",
+  MACHINES_DELETE: "machines:delete",
+  OPERATORS_READ: "operators:read",
+  OPERATORS_CREATE: "operators:create",
+  OPERATORS_UPDATE: "operators:update",
+  OPERATORS_DELETE: "operators:delete",
+  USERS_READ: "users:read",
+  USERS_CREATE: "users:create",
+  USERS_UPDATE: "users:update",
+  USERS_DELETE: "users:delete",
+  ANALYTICS_READ: "analytics:read"
+};
+var ROLE_PERMISSIONS = {
+  ceo: [PERMISSIONS.CEO_READ, PERMISSIONS.ANALYTICS_READ],
+  office_staff: [
+    PERMISSIONS.WORK_ORDERS_READ,
+    PERMISSIONS.WORK_ORDERS_CREATE,
+    PERMISSIONS.WORK_ORDERS_UPDATE,
+    PERMISSIONS.WORK_ORDERS_DISPATCH,
+    PERMISSIONS.WORK_ORDERS_DELETE,
+    PERMISSIONS.PRODUCTION_READ,
+    PERMISSIONS.MATERIALS_READ,
+    PERMISSIONS.PURCHASES_READ
+  ],
+  production_manager: [
+    PERMISSIONS.PRODUCTION_READ,
+    PERMISSIONS.PRODUCTION_CREATE,
+    PERMISSIONS.PRODUCTION_UPDATE,
+    PERMISSIONS.PRODUCTION_DELETE,
+    PERMISSIONS.PRODUCTION_PLAN,
+    PERMISSIONS.PRODUCTION_ASSIGN,
+    PERMISSIONS.PRODUCTION_PROGRESS,
+    PERMISSIONS.PRODUCTION_COMPLETE,
+    PERMISSIONS.PRODUCTION_RECONCILE,
+    PERMISSIONS.BATCHES_READ,
+    PERMISSIONS.BATCHES_CREATE,
+    PERMISSIONS.BATCHES_UPDATE,
+    PERMISSIONS.BATCHES_DELETE,
+    PERMISSIONS.BATCHES_START,
+    PERMISSIONS.BATCHES_OUTPUT,
+    PERMISSIONS.BATCHES_COMPLETE,
+    PERMISSIONS.BATCHES_CANCEL,
+    PERMISSIONS.INVENTORY_READ,
+    PERMISSIONS.INVENTORY_CREATE,
+    PERMISSIONS.INVENTORY_UPDATE,
+    PERMISSIONS.INVENTORY_DELETE,
+    PERMISSIONS.MATERIALS_READ,
+    PERMISSIONS.MATERIALS_CREATE,
+    PERMISSIONS.MATERIALS_UPDATE,
+    PERMISSIONS.MATERIALS_DELETE,
+    PERMISSIONS.PURCHASES_READ,
+    PERMISSIONS.PURCHASES_CREATE,
+    PERMISSIONS.PURCHASES_UPDATE,
+    PERMISSIONS.PURCHASES_DELETE,
+    PERMISSIONS.THREAD_READ,
+    PERMISSIONS.THREAD_CREATE,
+    PERMISSIONS.THREAD_UPDATE,
+    PERMISSIONS.THREAD_DELETE,
+    PERMISSIONS.THREAD_DYE,
+    PERMISSIONS.INK_READ,
+    PERMISSIONS.INK_CREATE,
+    PERMISSIONS.INK_UPDATE,
+    PERMISSIONS.INK_DELETE,
+    PERMISSIONS.MACHINES_READ,
+    PERMISSIONS.MACHINES_CREATE,
+    PERMISSIONS.MACHINES_UPDATE,
+    PERMISSIONS.MACHINES_DELETE,
+    PERMISSIONS.OPERATORS_READ,
+    PERMISSIONS.OPERATORS_CREATE,
+    PERMISSIONS.OPERATORS_UPDATE,
+    PERMISSIONS.OPERATORS_DELETE,
+    PERMISSIONS.WORK_ORDERS_READ,
+    PERMISSIONS.WORK_ORDERS_UPDATE,
+    PERMISSIONS.ANALYTICS_READ,
+    PERMISSIONS.CEO_READ
+  ],
+  accountant: [
+    PERMISSIONS.WORK_ORDERS_READ,
+    PERMISSIONS.WORK_ORDERS_DISPATCH,
+    PERMISSIONS.WORK_ORDERS_UPDATE,
+    PERMISSIONS.CEO_READ,
+    PERMISSIONS.ANALYTICS_READ,
+    PERMISSIONS.PRODUCTION_READ,
+    PERMISSIONS.INVENTORY_READ
+  ]
+};
+function requireRole(...roles) {
+  return (req, res, next) => {
+    if (!req.user) {
+      throw new ForbiddenError("Authentication required");
+    }
+    if (!roles.includes(req.user.role)) {
+      throw new ForbiddenError(
+        `Access denied. Required role: ${roles.join(" or ")}`
+      );
+    }
+    next();
+  };
+}
+function requireProductionManager() {
+  return requireRole("production_manager", "ceo");
+}
+function requireWorkOrderAccess() {
+  return requireRole("office_staff", "production_manager", "accountant", "ceo");
+}
+function requireDispatchAccess() {
+  return requireRole("office_staff", "production_manager", "accountant");
+}
+
 // src/modules/companies/company.routes.ts
 var router2 = Router2();
+router2.use(requireRole("production_manager", "ceo"));
 router2.get("/", validateQuery(listCompaniesQuerySchema), companyController.getCompanies);
 router2.get("/:id", validateParams(idParamsSchema), companyController.getCompany);
 router2.post("/", validateRequest(createCompanySchema), companyController.createCompany);
@@ -2307,6 +2609,7 @@ var updateBrandSchema = z6.object({
 
 // src/modules/brands/brand.routes.ts
 var router3 = Router3();
+router3.use(requireRole("production_manager", "ceo"));
 router3.get("/", brandController.getBrands);
 router3.get("/:id", validateParams(idParamsSchema), brandController.getBrand);
 router3.get("/company/:companyId", validateParams(companyIdParamsSchema), brandController.getBrandsByCompany);
@@ -2351,7 +2654,7 @@ var MaterialRepository = class {
 var materialRepository = new MaterialRepository();
 
 // src/modules/inventory/inventory-roll.repository.ts
-import { eq as eq3, asc as asc3, desc, and as and2, sql as sql4 } from "drizzle-orm";
+import { eq as eq3, asc as asc3, desc, and as and2, sql as sql6 } from "drizzle-orm";
 var LOW_STOCK_ROLLS = 5;
 var InventoryRollRepository = class {
   /** Joined with the material so the list can search and filter on description/type. */
@@ -2386,7 +2689,7 @@ var InventoryRollRepository = class {
    * the stock page to look like it never loaded. Keep this as a single statement.
    */
   async syncMaterialStockLedgers() {
-    await db.execute(sql4`
+    await db.execute(sql6`
       INSERT INTO ${inventoryRolls} (
         material_code, opening_stock, received_rolls, issued_rolls, balance_rolls, roll_per_kg, updated_at
       )
@@ -2443,18 +2746,18 @@ var InventoryRollRepository = class {
     if (filters?.search) {
       const q = `%${filters.search}%`;
       conditions.push(
-        sql4`(${inventoryRolls.materialCode} ILIKE ${q} OR ${materials.description} ILIKE ${q})`
+        sql6`(${inventoryRolls.materialCode} ILIKE ${q} OR ${materials.description} ILIKE ${q})`
       );
     }
     if (filters?.type) conditions.push(eq3(materials.type, filters.type));
-    if (filters?.stockStatus === "out") conditions.push(sql4`${inventoryRolls.balanceRolls} <= 0`);
+    if (filters?.stockStatus === "out") conditions.push(sql6`${inventoryRolls.balanceRolls} <= 0`);
     if (filters?.stockStatus === "low") {
       conditions.push(
-        sql4`${inventoryRolls.balanceRolls} > 0 AND ${inventoryRolls.balanceRolls} < ${LOW_STOCK_ROLLS}`
+        sql6`${inventoryRolls.balanceRolls} > 0 AND ${inventoryRolls.balanceRolls} < ${LOW_STOCK_ROLLS}`
       );
     }
     if (filters?.stockStatus === "in") {
-      conditions.push(sql4`${inventoryRolls.balanceRolls} >= ${LOW_STOCK_ROLLS}`);
+      conditions.push(sql6`${inventoryRolls.balanceRolls} >= ${LOW_STOCK_ROLLS}`);
     }
     const column = {
       materialCode: inventoryRolls.materialCode,
@@ -2478,20 +2781,20 @@ var InventoryRollRepository = class {
     if (filters?.search) {
       const q = `%${filters.search}%`;
       conditions.push(
-        sql4`(${inventoryRolls.materialCode} ILIKE ${q} OR ${materials.description} ILIKE ${q})`
+        sql6`(${inventoryRolls.materialCode} ILIKE ${q} OR ${materials.description} ILIKE ${q})`
       );
     }
     if (filters?.type) conditions.push(eq3(materials.type, filters.type));
-    if (filters?.stockStatus === "out") conditions.push(sql4`${inventoryRolls.balanceRolls} <= 0`);
+    if (filters?.stockStatus === "out") conditions.push(sql6`${inventoryRolls.balanceRolls} <= 0`);
     if (filters?.stockStatus === "low") {
       conditions.push(
-        sql4`${inventoryRolls.balanceRolls} > 0 AND ${inventoryRolls.balanceRolls} < ${LOW_STOCK_ROLLS}`
+        sql6`${inventoryRolls.balanceRolls} > 0 AND ${inventoryRolls.balanceRolls} < ${LOW_STOCK_ROLLS}`
       );
     }
     if (filters?.stockStatus === "in") {
-      conditions.push(sql4`${inventoryRolls.balanceRolls} >= ${LOW_STOCK_ROLLS}`);
+      conditions.push(sql6`${inventoryRolls.balanceRolls} >= ${LOW_STOCK_ROLLS}`);
     }
-    const [row] = await db.select({ count: sql4`count(*)` }).from(inventoryRolls).leftJoin(materials, eq3(inventoryRolls.materialCode, materials.code)).where(conditions.length > 0 ? and2(...conditions) : void 0);
+    const [row] = await db.select({ count: sql6`count(*)` }).from(inventoryRolls).leftJoin(materials, eq3(inventoryRolls.materialCode, materials.code)).where(conditions.length > 0 ? and2(...conditions) : void 0);
     return Number(row?.count ?? 0);
   }
   async findByMaterialCode(materialCode) {
@@ -2718,6 +3021,7 @@ var updateMaterialSchema = z7.object({
 
 // src/modules/inventory/material.routes.ts
 var router4 = Router4();
+router4.use(requireRole("production_manager", "ceo"));
 router4.get("/", validateQuery(listMaterialsQuerySchema), materialController.getMaterials);
 router4.get("/:id", validateParams(idParamsSchema), materialController.getMaterial);
 router4.post("/", validateRequest(createMaterialSchema), materialController.createMaterial);
@@ -3003,6 +3307,7 @@ var updateLabelSheetSchema = z8.object({
 
 // src/modules/material-receipts/material-receipts.routes.ts
 var stickerMaterialsRouter = Router5();
+stickerMaterialsRouter.use(requireRole("production_manager", "ceo"));
 stickerMaterialsRouter.get("/", stickerMaterialController.getAll);
 stickerMaterialsRouter.post("/", validateRequest(createStickerMaterialSchema), stickerMaterialController.create);
 stickerMaterialsRouter.put(
@@ -3013,6 +3318,7 @@ stickerMaterialsRouter.put(
 );
 stickerMaterialsRouter.delete("/:id", validateParams(idParamsSchema), stickerMaterialController.remove);
 var localSheetsRouter = Router5();
+localSheetsRouter.use(requireRole("production_manager", "ceo"));
 localSheetsRouter.get("/", localSheetController.getAll);
 localSheetsRouter.post("/", validateRequest(createLocalSheetSchema), localSheetController.create);
 localSheetsRouter.put(
@@ -3023,6 +3329,7 @@ localSheetsRouter.put(
 );
 localSheetsRouter.delete("/:id", validateParams(idParamsSchema), localSheetController.remove);
 var labelSheetsRouter = Router5();
+labelSheetsRouter.use(requireRole("production_manager", "ceo"));
 labelSheetsRouter.get("/", labelSheetController.getAll);
 labelSheetsRouter.post("/", validateRequest(createLabelSheetSchema), labelSheetController.create);
 labelSheetsRouter.put(
@@ -3068,21 +3375,39 @@ var MachineRepository = class {
 var machineRepository = new MachineRepository();
 
 // src/modules/production/production-orders/production-order.repository.ts
-import { eq as eq6, desc as desc3, and as and4, sql as sql5, inArray as inArray2 } from "drizzle-orm";
+import { eq as eq6, desc as desc3, and as and4, sql as sql7, inArray as inArray2 } from "drizzle-orm";
 var DEFAULT_HISTORY_LIMIT = 200;
 function workOrderStatusFor(productionStatus) {
   return productionStatus === "complete" ? "complete" : "production";
 }
 async function syncWorkOrderStatusTx(tx, productionOrderId, productionStatus) {
   if (!productionStatus) return;
-  const [order] = await tx.select({ workOrderId: productionOrders.workOrderId }).from(productionOrders).where(eq6(productionOrders.id, productionOrderId));
+  const [order] = await tx.select({
+    printedWorkOrderId: productionOrders.printedWorkOrderId,
+    wovenWorkOrderId: productionOrders.wovenWorkOrderId
+  }).from(productionOrders).where(eq6(productionOrders.id, productionOrderId));
   if (!order) return;
-  await tx.update(workOrders).set({ status: workOrderStatusFor(productionStatus), updatedAt: /* @__PURE__ */ new Date() }).where(and4(eq6(workOrders.id, order.workOrderId), sql5`${workOrders.status} <> 'dispatched'`));
+  const updates = [];
+  if (order.printedWorkOrderId) {
+    updates.push({ table: "printed", id: order.printedWorkOrderId });
+  }
+  if (order.wovenWorkOrderId) {
+    updates.push({ table: "woven", id: order.wovenWorkOrderId });
+  }
+  for (const { table, id } of updates) {
+    const target = table === "printed" ? printedLabelWorkOrders : wovenLabelWorkOrders;
+    await tx.update(target).set({ status: workOrderStatusFor(productionStatus), updatedAt: /* @__PURE__ */ new Date() }).where(
+      and4(
+        eq6(target.id, id),
+        sql7`${target.status} <> 'dispatched'`
+      )
+    );
+  }
 }
 var productionOrderSelect = {
   id: productionOrders.id,
   productionNumber: productionOrders.productionNumber,
-  workOrderId: productionOrders.workOrderId,
+  workOrderId: sql7`COALESCE(${productionOrders.printedWorkOrderId}, ${productionOrders.wovenWorkOrderId})`,
   totalQty: productionOrders.totalQty,
   status: productionOrders.status,
   notes: productionOrders.notes,
@@ -3091,21 +3416,21 @@ var productionOrderSelect = {
   completedAt: productionOrders.completedAt,
   createdAt: productionOrders.createdAt,
   updatedAt: productionOrders.updatedAt,
-  soNumber: workOrders.soNumber,
-  poNumber: workOrders.poNumber,
-  orderDate: workOrders.orderDate,
-  dueDate: workOrders.dueDate,
-  salesOrderQty: workOrders.totalQty,
-  priority: workOrders.priority,
-  /** Which workflow this order runs — the dashboard branches on it. */
-  productType: workOrders.productType,
+  soNumber: sql7`COALESCE(${printedLabelWorkOrders.soNumber}, ${wovenLabelWorkOrders.soNumber})`,
+  poNumber: sql7`COALESCE(${printedLabelWorkOrders.poNumber}, ${wovenLabelWorkOrders.poNumber})`,
+  orderDate: sql7`COALESCE(${printedLabelWorkOrders.orderDate}, ${wovenLabelWorkOrders.orderDate})`,
+  dueDate: sql7`COALESCE(${printedLabelWorkOrders.dueDate}, ${wovenLabelWorkOrders.dueDate})`,
+  salesOrderQty: sql7`COALESCE(${printedLabelWorkOrders.totalQty}, ${wovenLabelWorkOrders.totalQty})`,
+  priority: sql7`COALESCE(${printedLabelWorkOrders.priority}, ${wovenLabelWorkOrders.priority})`,
+  /** Which workflow this order runs — `printed` or `woven`. */
+  productType: sql7`CASE WHEN ${productionOrders.printedWorkOrderId} IS NOT NULL THEN 'printed' ELSE 'woven' END`,
   brandId: brands.id,
   brandName: brands.name,
   companyId: companies.id,
   companyName: companies.name,
-  pick: wovenWorkOrderDetails.pick,
-  repeat: wovenWorkOrderDetails.repeat,
-  speed: wovenWorkOrderDetails.speed
+  pick: wovenLabelWorkOrders.pick,
+  repeat: sql7`${wovenLabelWorkOrders.repeat}`,
+  speed: sql7`${wovenLabelWorkOrders.speed}`
 };
 var ProductionOrderRepository = class {
   async findAll(filters) {
@@ -3113,10 +3438,10 @@ var ProductionOrderRepository = class {
     if (filters?.status) {
       conditions.push(eq6(productionOrders.status, filters.status));
     }
-    if (filters?.soNumber) conditions.push(sql5`${workOrders.soNumber} ILIKE ${"%" + filters.soNumber + "%"}`);
-    if (filters?.poNumber) conditions.push(sql5`${workOrders.poNumber} ILIKE ${"%" + filters.poNumber + "%"}`);
-    if (filters?.workOrderId) conditions.push(eq6(productionOrders.workOrderId, filters.workOrderId));
-    const orders = await db.select(productionOrderSelect).from(productionOrders).innerJoin(workOrders, eq6(productionOrders.workOrderId, workOrders.id)).leftJoin(brands, eq6(workOrders.brandId, brands.id)).leftJoin(companies, eq6(brands.companyId, companies.id)).leftJoin(wovenWorkOrderDetails, eq6(wovenWorkOrderDetails.workOrderId, workOrders.id)).where(conditions.length > 0 ? and4(...conditions) : void 0).orderBy(desc3(productionOrders.createdAt));
+    if (filters?.soNumber) conditions.push(sql7`COALESCE(${printedLabelWorkOrders.soNumber}, ${wovenLabelWorkOrders.soNumber}) ILIKE ${"%" + filters.soNumber + "%"}`);
+    if (filters?.poNumber) conditions.push(sql7`COALESCE(${printedLabelWorkOrders.poNumber}, ${wovenLabelWorkOrders.poNumber}) ILIKE ${"%" + filters.poNumber + "%"}`);
+    if (filters?.workOrderId) conditions.push(eq6(sql7`COALESCE(${productionOrders.printedWorkOrderId}, ${productionOrders.wovenWorkOrderId})`, filters.workOrderId));
+    const orders = await db.select(productionOrderSelect).from(productionOrders).leftJoin(printedLabelWorkOrders, eq6(productionOrders.printedWorkOrderId, printedLabelWorkOrders.id)).leftJoin(wovenLabelWorkOrders, eq6(productionOrders.wovenWorkOrderId, wovenLabelWorkOrders.id)).leftJoin(brands, eq6(brands.id, sql7`COALESCE(${printedLabelWorkOrders.brandId}, ${wovenLabelWorkOrders.brandId})`)).leftJoin(companies, eq6(brands.companyId, companies.id)).where(conditions.length > 0 ? and4(...conditions) : void 0).orderBy(desc3(productionOrders.createdAt));
     if (orders.length === 0) return [];
     const orderIds = orders.map((o) => o.id);
     const lineData = await db.select({
@@ -3156,7 +3481,7 @@ var ProductionOrderRepository = class {
     });
   }
   async findById(id) {
-    const [row] = await db.select(productionOrderSelect).from(productionOrders).innerJoin(workOrders, eq6(productionOrders.workOrderId, workOrders.id)).leftJoin(brands, eq6(workOrders.brandId, brands.id)).leftJoin(companies, eq6(brands.companyId, companies.id)).leftJoin(wovenWorkOrderDetails, eq6(wovenWorkOrderDetails.workOrderId, workOrders.id)).where(eq6(productionOrders.id, Number(id)));
+    const [row] = await db.select(productionOrderSelect).from(productionOrders).leftJoin(printedLabelWorkOrders, eq6(productionOrders.printedWorkOrderId, printedLabelWorkOrders.id)).leftJoin(wovenLabelWorkOrders, eq6(productionOrders.wovenWorkOrderId, wovenLabelWorkOrders.id)).leftJoin(brands, eq6(brands.id, sql7`COALESCE(${printedLabelWorkOrders.brandId}, ${wovenLabelWorkOrders.brandId})`)).leftJoin(companies, eq6(brands.companyId, companies.id)).where(eq6(productionOrders.id, Number(id)));
     if (!row) return void 0;
     const rawLines = await db.select({
       printingMachineId: productionOrderLines.printingMachineId,
@@ -3185,7 +3510,7 @@ var ProductionOrderRepository = class {
     return row;
   }
   async findByWorkOrderId(workOrderId) {
-    const [row] = await db.select().from(productionOrders).where(eq6(productionOrders.workOrderId, Number(workOrderId)));
+    const [row] = await db.select().from(productionOrders).where(eq6(sql7`COALESCE(${productionOrders.printedWorkOrderId}, ${productionOrders.wovenWorkOrderId})`, Number(workOrderId)));
     return row;
   }
   async findLastProductionNumber() {
@@ -3205,7 +3530,7 @@ var ProductionOrderRepository = class {
   async createWithWorkOrderStatusTx(data) {
     return db.transaction(async (tx) => {
       const [row] = await tx.insert(productionOrders).values(data).returning();
-      await tx.update(workOrders).set({ status: "production", updatedAt: /* @__PURE__ */ new Date() }).where(eq6(workOrders.id, data.workOrderId));
+      await syncWorkOrderStatusTx(tx, row.id, "production");
       return row;
     });
   }
@@ -3246,8 +3571,8 @@ var ProductionOrderRepository = class {
       actorUserId: actorUserId2 ?? null
     });
     const [stock] = await tx.update(inventoryRolls).set({
-      issuedRolls: sql5`${inventoryRolls.issuedRolls} + ${rolls2}`,
-      balanceRolls: sql5`${inventoryRolls.balanceRolls} - ${rolls2}`,
+      issuedRolls: sql7`${inventoryRolls.issuedRolls} + ${rolls2}`,
+      balanceRolls: sql7`${inventoryRolls.balanceRolls} - ${rolls2}`,
       updatedAt: /* @__PURE__ */ new Date()
     }).where(eq6(inventoryRolls.materialCode, materialCode)).returning();
     if (!stock || Number(stock.balanceRolls) < 0) {
@@ -3260,13 +3585,13 @@ var ProductionOrderRepository = class {
   async releaseLineStockTx(tx, lineId) {
     const drawn = await tx.select({
       materialCode: productionRollIssuances.materialCode,
-      rolls: sql5`sum(${productionRollIssuances.rolls})`
+      rolls: sql7`sum(${productionRollIssuances.rolls})`
     }).from(productionRollIssuances).where(eq6(productionRollIssuances.productionOrderLineId, lineId)).groupBy(productionRollIssuances.materialCode);
     for (const row of drawn) {
       const rolls2 = Number(row.rolls);
       await tx.update(inventoryRolls).set({
-        issuedRolls: sql5`${inventoryRolls.issuedRolls} - ${rolls2}`,
-        balanceRolls: sql5`${inventoryRolls.balanceRolls} + ${rolls2}`,
+        issuedRolls: sql7`${inventoryRolls.issuedRolls} - ${rolls2}`,
+        balanceRolls: sql7`${inventoryRolls.balanceRolls} + ${rolls2}`,
         updatedAt: /* @__PURE__ */ new Date()
       }).where(eq6(inventoryRolls.materialCode, row.materialCode));
     }
@@ -3298,10 +3623,10 @@ var ProductionOrderRepository = class {
       await tx.select({ id: operators.id }).from(operators).where(inArray2(operators.id, operatorSet)).for("update");
     }
     const conditions = [
-      sql5`${productionOrderLines.status} <> 'completed'`,
-      sql5`${productionOrders.status} <> 'complete'`
+      sql7`${productionOrderLines.status} <> 'completed'`,
+      sql7`${productionOrders.status} <> 'complete'`
     ];
-    if (excludeLineId != null) conditions.push(sql5`${productionOrderLines.id} <> ${excludeLineId}`);
+    if (excludeLineId != null) conditions.push(sql7`${productionOrderLines.id} <> ${excludeLineId}`);
     const rows = await tx.select({
       productionNumber: productionOrders.productionNumber,
       labelType: productionOrderLines.labelType,
@@ -3393,7 +3718,7 @@ var ProductionOrderRepository = class {
     return db.transaction(async (tx) => {
       const previous = await tx.select({
         materialCode: productionRollIssuances.materialCode,
-        rolls: sql5`sum(${productionRollIssuances.rolls})`
+        rolls: sql7`sum(${productionRollIssuances.rolls})`
       }).from(productionRollIssuances).innerJoin(
         productionOrderLines,
         eq6(productionRollIssuances.productionOrderLineId, productionOrderLines.id)
@@ -3401,15 +3726,18 @@ var ProductionOrderRepository = class {
       for (const row of previous) {
         const rolls2 = Number(row.rolls);
         await tx.update(inventoryRolls).set({
-          issuedRolls: sql5`${inventoryRolls.issuedRolls} - ${rolls2}`,
-          balanceRolls: sql5`${inventoryRolls.balanceRolls} + ${rolls2}`,
+          issuedRolls: sql7`${inventoryRolls.issuedRolls} - ${rolls2}`,
+          balanceRolls: sql7`${inventoryRolls.balanceRolls} + ${rolls2}`,
           updatedAt: /* @__PURE__ */ new Date()
         }).where(eq6(inventoryRolls.materialCode, row.materialCode));
       }
-      const [order] = await tx.select({ workOrderId: productionOrders.workOrderId }).from(productionOrders).where(eq6(productionOrders.id, productionOrderId));
+      const [order] = await tx.select({ printedWorkOrderId: productionOrders.printedWorkOrderId, wovenWorkOrderId: productionOrders.wovenWorkOrderId }).from(productionOrders).where(eq6(productionOrders.id, productionOrderId));
       await tx.delete(productionOrders).where(eq6(productionOrders.id, productionOrderId));
-      if (order) {
-        await tx.update(workOrders).set({ status: "initiate_production", updatedAt: /* @__PURE__ */ new Date() }).where(eq6(workOrders.id, order.workOrderId));
+      if (order.printedWorkOrderId) {
+        await tx.update(printedLabelWorkOrders).set({ status: "initiate_production", updatedAt: /* @__PURE__ */ new Date() }).where(eq6(printedLabelWorkOrders.id, order.printedWorkOrderId));
+      }
+      if (order.wovenWorkOrderId) {
+        await tx.update(wovenLabelWorkOrders).set({ status: "initiate_production", updatedAt: /* @__PURE__ */ new Date() }).where(eq6(wovenLabelWorkOrders.id, order.wovenWorkOrderId));
       }
     });
   }
@@ -3455,12 +3783,12 @@ var ProductionOrderRepository = class {
         actorUserId: actorUserId2 ?? null
       }).returning();
       await tx.update(productionOrderLines).set({
-        issuedRolls: sql5`${productionOrderLines.issuedRolls} + ${rolls2}`,
+        issuedRolls: sql7`${productionOrderLines.issuedRolls} + ${rolls2}`,
         updatedAt: /* @__PURE__ */ new Date()
       }).where(eq6(productionOrderLines.id, lineId));
       await tx.update(inventoryRolls).set({
-        issuedRolls: sql5`${inventoryRolls.issuedRolls} + ${rolls2}`,
-        balanceRolls: sql5`${inventoryRolls.balanceRolls} - ${rolls2}`,
+        issuedRolls: sql7`${inventoryRolls.issuedRolls} + ${rolls2}`,
+        balanceRolls: sql7`${inventoryRolls.balanceRolls} - ${rolls2}`,
         updatedAt: /* @__PURE__ */ new Date()
       }).where(eq6(inventoryRolls.materialCode, materialCode));
       return issuance;
@@ -3497,12 +3825,12 @@ var ProductionOrderRepository = class {
    */
   async findResourceAssignments(exclude) {
     const conditions = [
-      sql5`${productionOrderLines.status} <> 'completed'`,
-      sql5`${productionOrders.status} <> 'complete'`
+      sql7`${productionOrderLines.status} <> 'completed'`,
+      sql7`${productionOrders.status} <> 'complete'`
     ];
-    if (exclude?.lineId) conditions.push(sql5`${productionOrderLines.id} <> ${exclude.lineId}`);
+    if (exclude?.lineId) conditions.push(sql7`${productionOrderLines.id} <> ${exclude.lineId}`);
     if (exclude?.productionOrderId) {
-      conditions.push(sql5`${productionOrderLines.productionOrderId} <> ${exclude.productionOrderId}`);
+      conditions.push(sql7`${productionOrderLines.productionOrderId} <> ${exclude.productionOrderId}`);
     }
     return db.select({
       lineId: productionOrderLines.id,
@@ -3543,7 +3871,7 @@ var ProductionOrderRepository = class {
   async findOrderIssuanceTotals(productionOrderId) {
     return db.select({
       materialCode: productionRollIssuances.materialCode,
-      rolls: sql5`sum(${productionRollIssuances.rolls})`
+      rolls: sql7`sum(${productionRollIssuances.rolls})`
     }).from(productionRollIssuances).innerJoin(
       productionOrderLines,
       eq6(productionRollIssuances.productionOrderLineId, productionOrderLines.id)
@@ -3551,24 +3879,43 @@ var ProductionOrderRepository = class {
   }
   /** Work orders still in production (not completed) that don't yet have a production order. */
   async findEligibleWorkOrders() {
-    return db.select({
-      id: workOrders.id,
-      soNumber: workOrders.soNumber,
-      poNumber: workOrders.poNumber,
-      orderDate: workOrders.orderDate,
-      dueDate: workOrders.dueDate,
-      totalQty: workOrders.totalQty,
-      productType: workOrders.productType,
+    const printed = await db.select({
+      id: printedLabelWorkOrders.id,
+      soNumber: printedLabelWorkOrders.soNumber,
+      poNumber: printedLabelWorkOrders.poNumber,
+      orderDate: printedLabelWorkOrders.orderDate,
+      dueDate: printedLabelWorkOrders.dueDate,
+      totalQty: printedLabelWorkOrders.totalQty,
+      productType: sql7`'printed'`,
       brandId: brands.id,
       brandName: brands.name,
       companyId: companies.id,
       companyName: companies.name
-    }).from(workOrders).leftJoin(brands, eq6(workOrders.brandId, brands.id)).leftJoin(companies, eq6(brands.companyId, companies.id)).where(
+    }).from(printedLabelWorkOrders).leftJoin(brands, eq6(printedLabelWorkOrders.brandId, brands.id)).leftJoin(companies, eq6(brands.companyId, companies.id)).where(
       and4(
-        eq6(workOrders.status, "initiate_production"),
-        sql5`NOT EXISTS (SELECT 1 FROM ${productionOrders} WHERE ${productionOrders.workOrderId} = ${workOrders.id})`
+        eq6(printedLabelWorkOrders.status, "initiate_production"),
+        sql7`NOT EXISTS (SELECT 1 FROM ${productionOrders} WHERE ${productionOrders.printedWorkOrderId} = ${printedLabelWorkOrders.id})`
       )
-    ).orderBy(desc3(workOrders.createdAt));
+    );
+    const woven = await db.select({
+      id: wovenLabelWorkOrders.id,
+      soNumber: wovenLabelWorkOrders.soNumber,
+      poNumber: wovenLabelWorkOrders.poNumber,
+      orderDate: wovenLabelWorkOrders.orderDate,
+      dueDate: wovenLabelWorkOrders.dueDate,
+      totalQty: wovenLabelWorkOrders.totalQty,
+      productType: sql7`'woven'`,
+      brandId: brands.id,
+      brandName: brands.name,
+      companyId: companies.id,
+      companyName: companies.name
+    }).from(wovenLabelWorkOrders).leftJoin(brands, eq6(wovenLabelWorkOrders.brandId, brands.id)).leftJoin(companies, eq6(brands.companyId, companies.id)).where(
+      and4(
+        eq6(wovenLabelWorkOrders.status, "initiate_production"),
+        sql7`NOT EXISTS (SELECT 1 FROM ${productionOrders} WHERE ${productionOrders.wovenWorkOrderId} = ${wovenLabelWorkOrders.id})`
+      )
+    );
+    return [...printed, ...woven].sort((a, b) => b.id - a.id);
   }
   /**
    * Reconciles stock for a finished production line:
@@ -3779,6 +4126,7 @@ var updateMachineSchema = z9.object({
 
 // src/modules/machines/machine.routes.ts
 var router5 = Router6();
+router5.use(requireRole("production_manager", "ceo"));
 router5.get("/", validateQuery(listMachinesQuerySchema), machineController.getMachines);
 router5.get("/:id", validateParams(idParamsSchema), machineController.getMachine);
 router5.post("/", validateRequest(createMachineSchema), machineController.createMachine);
@@ -3790,7 +4138,7 @@ var machine_routes_default = router5;
 import { Router as Router7 } from "express";
 
 // src/modules/operators/operator.repository.ts
-import { eq as eq7, asc as asc5, and as and5, sql as sql6, inArray as inArray3 } from "drizzle-orm";
+import { eq as eq7, asc as asc5, and as and5, sql as sql8, inArray as inArray3 } from "drizzle-orm";
 var OperatorRepository = class {
   async findAll(filters) {
     const conditions = [];
@@ -3801,7 +4149,7 @@ var OperatorRepository = class {
     }
     if (filters?.search) {
       const q = `%${filters.search}%`;
-      conditions.push(sql6`(${operators.name} ILIKE ${q} OR ${operators.employeeCode} ILIKE ${q})`);
+      conditions.push(sql8`(${operators.name} ILIKE ${q} OR ${operators.employeeCode} ILIKE ${q})`);
     }
     if (!filters?.includeInactive) conditions.push(eq7(operators.isActive, true));
     return db.select().from(operators).where(conditions.length > 0 ? and5(...conditions) : void 0).orderBy(asc5(operators.name));
@@ -3942,6 +4290,7 @@ var updateOperatorSchema = z10.object({
 
 // src/modules/operators/operator.routes.ts
 var router6 = Router7();
+router6.use(requireRole("production_manager", "ceo"));
 router6.get("/", validateQuery(listOperatorsQuerySchema), operatorController.getOperators);
 router6.get("/:id", validateParams(idParamsSchema), operatorController.getOperator);
 router6.post("/", validateRequest(createOperatorSchema), operatorController.createOperator);
@@ -4060,13 +4409,14 @@ var userController = new UserController();
 
 // src/modules/users/user.schema.ts
 import { z as z11 } from "zod";
-var userRoleSchema = z11.enum(["office_staff", "production_manager", "production_operator"]);
+var userRoleSchema = z11.enum(userRoleEnum.enumValues);
 var createUserSchema = z11.object({
   body: z11.object({
     name: z11.string().trim().min(1, "Name is required"),
     employeeCode: z11.string().optional(),
     email: z11.string().email("Must be a valid email").optional(),
-    role: userRoleSchema
+    role: userRoleSchema,
+    passwordHash: z11.string().min(1, "Password hash is required")
   })
 });
 var updateUserSchema = z11.object({
@@ -4081,6 +4431,7 @@ var updateUserSchema = z11.object({
 
 // src/modules/users/users.routes.ts
 var router7 = Router8();
+router7.use(requireRole("production_manager", "ceo"));
 router7.get("/", validateQuery(listUsersQuerySchema), userController.getUsers);
 router7.get("/:id", validateParams(idParamsSchema), userController.getUser);
 router7.post("/", validateRequest(createUserSchema), userController.createUser);
@@ -4092,100 +4443,218 @@ var users_routes_default = router7;
 import { Router as Router9 } from "express";
 
 // src/modules/work-orders/work-order.repository.ts
-import { eq as eq9, desc as desc4, and as and7, sql as sql7 } from "drizzle-orm";
-var workOrderWithBrandSelect = {
-  id: workOrders.id,
-  soNumber: workOrders.soNumber,
-  poNumber: workOrders.poNumber,
-  orderDate: workOrders.orderDate,
-  dueDate: workOrders.dueDate,
-  totalQty: workOrders.totalQty,
-  brandId: workOrders.brandId,
-  comment: workOrders.comment,
-  priority: workOrders.priority,
-  orderType: workOrders.orderType,
-  imageUrl: workOrders.imageUrl,
-  dcImageUrl: workOrders.dcImageUrl,
-  status: workOrders.status,
-  productType: workOrders.productType,
-  dcNumber: workOrders.dcNumber,
-  lcNumber: workOrders.lcNumber,
-  fbrInvoiceNumber: workOrders.fbrInvoiceNumber,
-  dispatchedDate: workOrders.dispatchedDate,
-  dispatchedQty: workOrders.dispatchedQty,
-  createdAt: workOrders.createdAt,
-  updatedAt: workOrders.updatedAt,
+import { eq as eq9, desc as desc4, sql as sql9 } from "drizzle-orm";
+var printedSelect = {
+  id: printedLabelWorkOrders.id,
+  soNumber: printedLabelWorkOrders.soNumber,
+  poNumber: printedLabelWorkOrders.poNumber,
+  orderDate: printedLabelWorkOrders.orderDate,
+  dueDate: printedLabelWorkOrders.dueDate,
+  totalQty: printedLabelWorkOrders.totalQty,
+  brandId: printedLabelWorkOrders.brandId,
+  comment: printedLabelWorkOrders.comment,
+  imageUrl: printedLabelWorkOrders.imageUrl,
+  dcImageUrl: printedLabelWorkOrders.dcImageUrl,
+  status: printedLabelWorkOrders.status,
+  priority: printedLabelWorkOrders.priority,
+  orderType: printedLabelWorkOrders.orderType,
+  dcNumber: printedLabelWorkOrders.dcNumber,
+  lcNumber: printedLabelWorkOrders.lcNumber,
+  fbrInvoiceNumber: printedLabelWorkOrders.fbrInvoiceNumber,
+  dispatchedDate: printedLabelWorkOrders.dispatchedDate,
+  dispatchedQty: printedLabelWorkOrders.dispatchedQty,
+  createdAt: printedLabelWorkOrders.createdAt,
+  updatedAt: printedLabelWorkOrders.updatedAt,
+  productType: sql9`'printed'::text`,
   brandName: brands.name,
   companyId: companies.id,
   companyName: companies.name,
-  designCode: wovenWorkOrderDetails.designCode,
-  pick: wovenWorkOrderDetails.pick,
-  repeat: wovenWorkOrderDetails.repeat,
-  density: wovenWorkOrderDetails.density,
-  speed: wovenWorkOrderDetails.speed,
-  extra: wovenWorkOrderDetails.extra,
-  estimatedWeavingHours: wovenWorkOrderDetails.estimatedWeavingHours,
-  sizeLabels: wovenWorkOrderDetails.sizeLabels
+  designCode: sql9`NULL`,
+  pick: sql9`NULL`,
+  repeat: sql9`NULL`,
+  density: sql9`NULL`,
+  speed: sql9`NULL`,
+  extra: sql9`NULL`,
+  estimatedWeavingHours: sql9`NULL`,
+  sizeLabels: sql9`NULL`
 };
+var wovenSelect = {
+  id: wovenLabelWorkOrders.id,
+  soNumber: wovenLabelWorkOrders.soNumber,
+  poNumber: wovenLabelWorkOrders.poNumber,
+  orderDate: wovenLabelWorkOrders.orderDate,
+  dueDate: wovenLabelWorkOrders.dueDate,
+  totalQty: wovenLabelWorkOrders.totalQty,
+  brandId: wovenLabelWorkOrders.brandId,
+  comment: wovenLabelWorkOrders.comment,
+  imageUrl: wovenLabelWorkOrders.imageUrl,
+  dcImageUrl: wovenLabelWorkOrders.dcImageUrl,
+  status: wovenLabelWorkOrders.status,
+  priority: wovenLabelWorkOrders.priority,
+  orderType: wovenLabelWorkOrders.orderType,
+  dcNumber: wovenLabelWorkOrders.dcNumber,
+  lcNumber: wovenLabelWorkOrders.lcNumber,
+  fbrInvoiceNumber: wovenLabelWorkOrders.fbrInvoiceNumber,
+  dispatchedDate: wovenLabelWorkOrders.dispatchedDate,
+  dispatchedQty: wovenLabelWorkOrders.dispatchedQty,
+  createdAt: wovenLabelWorkOrders.createdAt,
+  updatedAt: wovenLabelWorkOrders.updatedAt,
+  productType: sql9`'woven'::text`,
+  brandName: brands.name,
+  companyId: companies.id,
+  companyName: companies.name,
+  designCode: wovenLabelWorkOrders.designCode,
+  pick: wovenLabelWorkOrders.pick,
+  repeat: sql9`${wovenLabelWorkOrders.repeat}`,
+  density: sql9`${wovenLabelWorkOrders.density}`,
+  speed: sql9`${wovenLabelWorkOrders.speed}`,
+  extra: sql9`${wovenLabelWorkOrders.extra}`,
+  estimatedWeavingHours: sql9`${wovenLabelWorkOrders.estimatedWeavingHours}`,
+  sizeLabels: sql9`${wovenLabelWorkOrders.sizeLabels}`
+};
+function buildConditions(filters) {
+  const conditions = [];
+  if (filters?.soNumber) conditions.push(sql9`"so_number" ILIKE ${"%" + filters.soNumber + "%"}`);
+  if (filters?.poNumber) conditions.push(sql9`"po_number" ILIKE ${"%" + filters.poNumber + "%"}`);
+  if (filters?.dcNumber) conditions.push(sql9`"dc_number" ILIKE ${"%" + filters.dcNumber + "%"}`);
+  if (filters?.lcNumber) conditions.push(sql9`"lc_number" ILIKE ${"%" + filters.lcNumber + "%"}`);
+  if (filters?.status) conditions.push(sql9`"status" = ${filters.status}`);
+  if (filters?.designCode) conditions.push(sql9`"design_code" ILIKE ${"%" + filters.designCode + "%"}`);
+  if (filters?.startDate && filters?.endDate) {
+    conditions.push(sql9`"order_date" BETWEEN ${filters.startDate} AND ${filters.endDate}`);
+  }
+  return conditions;
+}
 var WorkOrderRepository = class {
+  /**
+   * Returns ALL sales orders (both printed and woven). The `productType` filter
+   * narrows to one table; without it, both tables are queried and results merged.
+   */
   async findAll(filters) {
-    const conditions = [];
-    if (filters?.soNumber) conditions.push(sql7`${workOrders.soNumber} ILIKE ${"%" + filters.soNumber + "%"}`);
-    if (filters?.poNumber) conditions.push(sql7`${workOrders.poNumber} ILIKE ${"%" + filters.poNumber + "%"}`);
-    if (filters?.dcNumber) conditions.push(sql7`${workOrders.dcNumber} ILIKE ${"%" + filters.dcNumber + "%"}`);
-    if (filters?.lcNumber) conditions.push(sql7`${workOrders.lcNumber} ILIKE ${"%" + filters.lcNumber + "%"}`);
-    if (filters?.designCode) {
-      conditions.push(sql7`${wovenWorkOrderDetails.designCode} ILIKE ${"%" + filters.designCode + "%"}`);
-    }
-    if (filters?.status) conditions.push(eq9(workOrders.status, filters.status));
-    if (filters?.productType) conditions.push(eq9(workOrders.productType, filters.productType));
-    if (filters?.startDate && filters?.endDate) {
-      conditions.push(sql7`${workOrders.orderDate} BETWEEN ${filters.startDate} AND ${filters.endDate}`);
-    }
-    return db.select(workOrderWithBrandSelect).from(workOrders).leftJoin(brands, eq9(workOrders.brandId, brands.id)).leftJoin(companies, eq9(brands.companyId, companies.id)).leftJoin(wovenWorkOrderDetails, eq9(wovenWorkOrderDetails.workOrderId, workOrders.id)).where(conditions.length > 0 ? and7(...conditions) : void 0).orderBy(desc4(workOrders.createdAt));
-  }
-  async findById(id) {
-    const [workOrder] = await db.select(workOrderWithBrandSelect).from(workOrders).leftJoin(brands, eq9(workOrders.brandId, brands.id)).leftJoin(companies, eq9(brands.companyId, companies.id)).leftJoin(wovenWorkOrderDetails, eq9(wovenWorkOrderDetails.workOrderId, workOrders.id)).where(eq9(workOrders.id, Number(id)));
-    return workOrder;
-  }
-  /** The loom spec for a woven order, or undefined for a printed one. */
-  async findWovenDetail(workOrderId) {
-    const [row] = await db.select().from(wovenWorkOrderDetails).where(eq9(wovenWorkOrderDetails.workOrderId, Number(workOrderId)));
-    return row;
-  }
-  async findByDesignCode(designCode) {
-    const [row] = await db.select().from(wovenWorkOrderDetails).where(eq9(wovenWorkOrderDetails.designCode, designCode));
-    return row;
-  }
-  async findRawById(id) {
-    const [workOrder] = await db.select().from(workOrders).where(eq9(workOrders.id, Number(id)));
-    return workOrder;
-  }
-  async create(data) {
-    const [workOrder] = await db.insert(workOrders).values(data).returning();
-    return workOrder;
+    const printedConditions = buildConditions({ ...filters, designCode: void 0 });
+    const wovenConditions = buildConditions(filters);
+    const queryBoth = !filters?.productType;
+    const queryPrinted = queryBoth || filters?.productType === "printed";
+    const queryWoven = queryBoth || filters?.productType === "woven";
+    const printedWhere = printedConditions.length > 0 ? printedConditions.reduce((a, b) => sql9`${a} AND ${b}`) : void 0;
+    const wovenWhere = wovenConditions.length > 0 ? wovenConditions.reduce((a, b) => sql9`${a} AND ${b}`) : void 0;
+    const [printed, woven] = await Promise.all([
+      queryPrinted ? db.select(printedSelect).from(printedLabelWorkOrders).leftJoin(brands, eq9(printedLabelWorkOrders.brandId, brands.id)).leftJoin(companies, eq9(brands.companyId, companies.id)).where(printedWhere).orderBy(desc4(printedLabelWorkOrders.createdAt)) : Promise.resolve([]),
+      queryWoven ? db.select(wovenSelect).from(wovenLabelWorkOrders).leftJoin(brands, eq9(wovenLabelWorkOrders.brandId, brands.id)).leftJoin(companies, eq9(brands.companyId, companies.id)).where(wovenWhere).orderBy(desc4(wovenLabelWorkOrders.createdAt)) : Promise.resolve([])
+    ]);
+    const merged = [...printed, ...woven].sort((a, b) => {
+      const ta = new Date(a.createdAt).getTime();
+      const tb = new Date(b.createdAt).getTime();
+      return tb - ta;
+    });
+    return merged;
   }
   /**
-   * Creates a woven sales order and its loom specification atomically — a woven order
-   * without its design spec would be unusable, so the two must land together.
+   * Returns a single sales order by ID, from whichever table holds it.
+   * Tries printed first, then woven — exactly one will return a row.
    */
-  async createWithWovenDetail(data, detail) {
-    return db.transaction(async (tx) => {
-      const [workOrder] = await tx.insert(workOrders).values({ ...data, productType: "woven" }).returning();
-      await tx.insert(wovenWorkOrderDetails).values({ ...detail, workOrderId: workOrder.id });
-      return workOrder;
-    });
+  async findById(id) {
+    const numId = Number(id);
+    const [printed] = await db.select(printedSelect).from(printedLabelWorkOrders).leftJoin(brands, eq9(printedLabelWorkOrders.brandId, brands.id)).leftJoin(companies, eq9(brands.companyId, companies.id)).where(eq9(printedLabelWorkOrders.id, numId));
+    if (printed) return printed;
+    const [woven] = await db.select(wovenSelect).from(wovenLabelWorkOrders).leftJoin(brands, eq9(wovenLabelWorkOrders.brandId, brands.id)).leftJoin(companies, eq9(brands.companyId, companies.id)).where(eq9(wovenLabelWorkOrders.id, numId));
+    return woven;
   }
-  async upsertWovenDetail(workOrderId, detail) {
-    const [row] = await db.update(wovenWorkOrderDetails).set({ ...detail, updatedAt: /* @__PURE__ */ new Date() }).where(eq9(wovenWorkOrderDetails.workOrderId, workOrderId)).returning();
+  /** Finds a work-order row by its SO number, from whichever table holds it. */
+  async findBySoNumber(soNumber) {
+    const [printed] = await db.select(printedSelect).from(printedLabelWorkOrders).leftJoin(brands, eq9(printedLabelWorkOrders.brandId, brands.id)).leftJoin(companies, eq9(brands.companyId, companies.id)).where(eq9(printedLabelWorkOrders.soNumber, soNumber));
+    if (printed) return printed;
+    const [woven] = await db.select(wovenSelect).from(wovenLabelWorkOrders).leftJoin(brands, eq9(wovenLabelWorkOrders.brandId, brands.id)).leftJoin(companies, eq9(brands.companyId, companies.id)).where(eq9(wovenLabelWorkOrders.soNumber, soNumber));
+    return woven;
+  }
+  /** Looks up a woven work-order by design code (unique facility-wide). */
+  async findByDesignCode(designCode) {
+    const [woven] = await db.select(wovenSelect).from(wovenLabelWorkOrders).leftJoin(brands, eq9(wovenLabelWorkOrders.brandId, brands.id)).leftJoin(companies, eq9(brands.companyId, companies.id)).where(eq9(wovenLabelWorkOrders.designCode, designCode));
+    return woven;
+  }
+  async findRawById(id) {
+    return this.findById(id);
+  }
+  /** Returns the raw woven loom spec for this order (undefined if not woven). */
+  async findWovenSpec(id) {
+    const [row] = await db.select({
+      id: wovenLabelWorkOrders.id,
+      designCode: wovenLabelWorkOrders.designCode,
+      pick: wovenLabelWorkOrders.pick,
+      repeat: sql9`${wovenLabelWorkOrders.repeat}`,
+      density: sql9`${wovenLabelWorkOrders.density}`,
+      speed: sql9`${wovenLabelWorkOrders.speed}`,
+      extra: sql9`${wovenLabelWorkOrders.extra}`,
+      estimatedWeavingHours: sql9`${wovenLabelWorkOrders.estimatedWeavingHours}`,
+      sizeLabels: sql9`${wovenLabelWorkOrders.sizeLabels}`
+    }).from(wovenLabelWorkOrders).where(eq9(wovenLabelWorkOrders.id, Number(id)));
     return row;
   }
-  async update(id, data) {
-    const [workOrder] = await db.update(workOrders).set({ ...data, updatedAt: /* @__PURE__ */ new Date() }).where(eq9(workOrders.id, Number(id))).returning();
-    return workOrder;
+  /** Creates a printed sales order. */
+  async create(data) {
+    const [row] = await db.insert(printedLabelWorkOrders).values({
+      ...data,
+      poNumber: data.poNumber ?? null,
+      dueDate: data.dueDate ?? null,
+      brandId: data.brandId ?? null,
+      comment: data.comment ?? null,
+      imageUrl: data.imageUrl ?? null,
+      dcImageUrl: data.dcImageUrl ?? null,
+      priority: data.priority ?? "normal",
+      orderType: data.orderType ?? "normal order"
+    }).returning();
+    return row;
   }
+  /** Creates a woven sales order with its loom specification. */
+  async createWithWovenDetail(data, detail) {
+    const [row] = await db.insert(wovenLabelWorkOrders).values({
+      ...data,
+      poNumber: data.poNumber ?? null,
+      dueDate: data.dueDate ?? null,
+      brandId: data.brandId ?? null,
+      comment: data.comment ?? null,
+      imageUrl: data.imageUrl ?? null,
+      dcImageUrl: data.dcImageUrl ?? null,
+      priority: data.priority ?? "normal",
+      orderType: data.orderType ?? "normal order",
+      designCode: detail.designCode,
+      pick: detail.pick,
+      repeat: String(detail.repeat),
+      density: detail.density,
+      speed: String(detail.speed ?? 0),
+      extra: String(detail.extra ?? 0),
+      estimatedWeavingHours: String(detail.estimatedWeavingHours),
+      sizeLabels: detail.sizeLabels ?? []
+    }).returning();
+    return row;
+  }
+  /** Upserts the woven loom specification for an existing woven work-order. */
+  async updateWovenSpec(id, detail) {
+    const [row] = await db.update(wovenLabelWorkOrders).set({
+      ...detail.designCode !== void 0 ? { designCode: detail.designCode } : {},
+      ...detail.pick !== void 0 ? { pick: detail.pick } : {},
+      ...detail.repeat !== void 0 ? { repeat: String(detail.repeat) } : {},
+      ...detail.density !== void 0 ? { density: detail.density } : {},
+      ...detail.speed !== void 0 ? { speed: String(detail.speed) } : {},
+      ...detail.extra !== void 0 ? { extra: String(detail.extra) } : {},
+      ...detail.estimatedWeavingHours !== void 0 ? { estimatedWeavingHours: String(detail.estimatedWeavingHours) } : {},
+      ...detail.sizeLabels !== void 0 ? { sizeLabels: detail.sizeLabels } : {},
+      updatedAt: /* @__PURE__ */ new Date()
+    }).where(eq9(wovenLabelWorkOrders.id, id)).returning();
+    return row;
+  }
+  /** Updates a work-order by ID. Tries woven first, then printed. */
+  async update(id, data) {
+    const [woven] = await db.update(wovenLabelWorkOrders).set({ ...data, updatedAt: /* @__PURE__ */ new Date() }).where(eq9(wovenLabelWorkOrders.id, Number(id))).returning();
+    if (woven) return woven;
+    const [printed] = await db.update(printedLabelWorkOrders).set({ ...data, updatedAt: /* @__PURE__ */ new Date() }).where(eq9(printedLabelWorkOrders.id, Number(id))).returning();
+    return printed;
+  }
+  /** Deletes a work-order from whichever table holds it. */
   async delete(id) {
-    await db.delete(workOrders).where(eq9(workOrders.id, Number(id)));
+    const [woven] = await db.delete(wovenLabelWorkOrders).where(eq9(wovenLabelWorkOrders.id, Number(id))).returning();
+    if (woven) return;
+    await db.delete(printedLabelWorkOrders).where(eq9(printedLabelWorkOrders.id, Number(id)));
   }
 };
 var workOrderRepository = new WorkOrderRepository();
@@ -4333,12 +4802,12 @@ var WorkOrderService = class {
         pick: data.wovenDetail.pick,
         density: data.wovenDetail.density,
         // Decimal columns take strings through Drizzle.
-        repeat: String(data.wovenDetail.repeat),
-        speed: String(data.wovenDetail.speed ?? 0),
-        extra: String(data.wovenDetail.extra ?? 0),
+        repeat: Number(data.wovenDetail.repeat),
+        speed: Number(data.wovenDetail.speed ?? 0),
+        extra: Number(data.wovenDetail.extra ?? 0),
         sizeLabels: data.wovenDetail.sizeLabels ?? [],
         // Derived server-side — never accepted from the client (clinerules §3).
-        estimatedWeavingHours: String(
+        estimatedWeavingHours: Number(
           estimateWeavingHours({
             totalQty: data.totalQty,
             repeat: data.wovenDetail.repeat,
@@ -4348,7 +4817,7 @@ var WorkOrderService = class {
         )
       });
     }
-    return workOrderRepository.create({ ...header, productType: "printed" });
+    return workOrderRepository.create({ ...header });
   }
   /**
    * Completes dispatch and moves the order to `dispatched`.
@@ -4426,42 +4895,42 @@ var WorkOrderService = class {
       }
       if (wovenDetail.designCode) {
         const clash = await workOrderRepository.findByDesignCode(wovenDetail.designCode);
-        if (clash && clash.workOrderId !== Number(id)) {
+        if (clash && clash.id !== Number(id)) {
           throw new ConflictError(`Design code '${wovenDetail.designCode}' is already in use`);
         }
       }
       const loomChanged = wovenDetail.pick !== void 0 || wovenDetail.repeat !== void 0 || wovenDetail.speed !== void 0 || commercial.totalQty !== void 0;
       let estimatedWeavingHoursPatch;
       if (loomChanged) {
-        const current = await workOrderRepository.findWovenDetail(id);
+        const current = await workOrderRepository.findWovenSpec(id);
         const merged = {
           totalQty: commercial.totalQty ?? existing.totalQty,
           pick: wovenDetail.pick ?? current?.pick ?? 0,
-          repeat: wovenDetail.repeat ?? current?.repeat ?? 0,
+          repeat: Number(wovenDetail.repeat ?? current?.repeat ?? 0),
           speed: wovenDetail.speed ?? current?.speed ?? 0
         };
         estimatedWeavingHoursPatch = {
-          estimatedWeavingHours: String(estimateWeavingHours(merged))
+          estimatedWeavingHours: Number(estimateWeavingHours(merged))
         };
       }
-      await workOrderRepository.upsertWovenDetail(Number(id), {
+      await workOrderRepository.updateWovenSpec(Number(id), {
         ...wovenDetail.designCode !== void 0 ? { designCode: wovenDetail.designCode } : {},
         ...wovenDetail.pick !== void 0 ? { pick: wovenDetail.pick } : {},
         ...wovenDetail.density !== void 0 ? { density: wovenDetail.density } : {},
-        ...wovenDetail.repeat !== void 0 ? { repeat: String(wovenDetail.repeat) } : {},
-        ...wovenDetail.speed !== void 0 ? { speed: String(wovenDetail.speed) } : {},
-        ...wovenDetail.extra !== void 0 ? { extra: String(wovenDetail.extra) } : {},
+        ...wovenDetail.repeat !== void 0 ? { repeat: Number(wovenDetail.repeat) } : {},
+        ...wovenDetail.speed !== void 0 ? { speed: Number(wovenDetail.speed) } : {},
+        ...wovenDetail.extra !== void 0 ? { extra: Number(wovenDetail.extra) } : {},
         ...wovenDetail.sizeLabels !== void 0 ? { sizeLabels: wovenDetail.sizeLabels } : {},
         ...estimatedWeavingHoursPatch
       });
     } else if (commercial.totalQty !== void 0 && existing.productType === "woven") {
-      const current = await workOrderRepository.findWovenDetail(id);
+      const current = await workOrderRepository.findWovenSpec(id);
       if (current) {
-        await workOrderRepository.upsertWovenDetail(Number(id), {
-          estimatedWeavingHours: String(
+        await workOrderRepository.updateWovenSpec(Number(id), {
+          estimatedWeavingHours: Number(
             estimateWeavingHours({
               totalQty: commercial.totalQty,
-              repeat: current.repeat,
+              repeat: current.repeat ?? 0,
               pick: current.pick,
               speed: current.speed
             })
@@ -4533,7 +5002,7 @@ var WorkOrderController = class {
 var workOrderController = new WorkOrderController();
 
 // src/modules/production/batch-and-runs/production-run.repository.ts
-import { and as and8, desc as desc5, eq as eq10, gte, isNull, sql as sql8 } from "drizzle-orm";
+import { and as and7, desc as desc5, eq as eq10, gte, isNull, or, sql as sql10 } from "drizzle-orm";
 var ProductionRunRepository = class {
   /** Append-only: only ever inserts, never updates a prior run. */
   async create(data) {
@@ -4544,7 +5013,7 @@ var ProductionRunRepository = class {
   async findBySaleOrderId(saleOrderId) {
     return db.select({
       id: productionRuns.id,
-      saleOrderId: productionRuns.saleOrderId,
+      saleOrderId: sql10`COALESCE(${productionRuns.printedSaleOrderId}, ${productionRuns.wovenSaleOrderId})`,
       productId: productionRuns.productId,
       machineId: productionRuns.machineId,
       machineName: machines.machineName,
@@ -4557,28 +5026,48 @@ var ProductionRunRepository = class {
       createdBy: productionRuns.createdBy,
       createdByName: users.name,
       createdAt: productionRuns.createdAt
-    }).from(productionRuns).leftJoin(machines, eq10(productionRuns.machineId, machines.id)).leftJoin(operators, eq10(productionRuns.operatorId, operators.id)).leftJoin(users, eq10(productionRuns.createdBy, users.id)).where(eq10(productionRuns.saleOrderId, saleOrderId)).orderBy(desc5(productionRuns.producedAt));
+    }).from(productionRuns).leftJoin(machines, eq10(productionRuns.machineId, machines.id)).leftJoin(operators, eq10(productionRuns.operatorId, operators.id)).leftJoin(users, eq10(productionRuns.createdBy, users.id)).where(
+      or(
+        eq10(productionRuns.printedSaleOrderId, saleOrderId),
+        eq10(productionRuns.wovenSaleOrderId, saleOrderId)
+      )
+    ).orderBy(desc5(productionRuns.producedAt));
   }
   /** Derived Total Produced = SUM(quantity_produced) across every run. */
   async getTotalProduced(saleOrderId) {
-    const [row] = await db.select({ total: sql8`coalesce(sum(${productionRuns.quantityProduced}), 0)` }).from(productionRuns).where(eq10(productionRuns.saleOrderId, saleOrderId));
+    const [row] = await db.select({ total: sql10`coalesce(sum(${productionRuns.quantityProduced}), 0)` }).from(productionRuns).where(
+      or(
+        eq10(productionRuns.printedSaleOrderId, saleOrderId),
+        eq10(productionRuns.wovenSaleOrderId, saleOrderId)
+      )
+    );
     return Number(row?.total ?? 0);
   }
   async getMachineBreakdown(saleOrderId) {
     return db.select({
       machineId: productionRuns.machineId,
       machineName: machines.machineName,
-      totalQuantity: sql8`coalesce(sum(${productionRuns.quantityProduced}), 0)`,
-      runCount: sql8`cast(count(*) as int)`
-    }).from(productionRuns).leftJoin(machines, eq10(productionRuns.machineId, machines.id)).where(eq10(productionRuns.saleOrderId, saleOrderId)).groupBy(productionRuns.machineId, machines.machineName);
+      totalQuantity: sql10`coalesce(sum(${productionRuns.quantityProduced}), 0)`,
+      runCount: sql10`cast(count(*) as int)`
+    }).from(productionRuns).leftJoin(machines, eq10(productionRuns.machineId, machines.id)).where(
+      or(
+        eq10(productionRuns.printedSaleOrderId, saleOrderId),
+        eq10(productionRuns.wovenSaleOrderId, saleOrderId)
+      )
+    ).groupBy(productionRuns.machineId, machines.machineName);
   }
   async getOperatorBreakdown(saleOrderId) {
     return db.select({
       operatorId: productionRuns.operatorId,
       operatorName: operators.name,
-      totalQuantity: sql8`coalesce(sum(${productionRuns.quantityProduced}), 0)`,
-      runCount: sql8`cast(count(*) as int)`
-    }).from(productionRuns).leftJoin(operators, eq10(productionRuns.operatorId, operators.id)).where(eq10(productionRuns.saleOrderId, saleOrderId)).groupBy(productionRuns.operatorId, operators.name);
+      totalQuantity: sql10`coalesce(sum(${productionRuns.quantityProduced}), 0)`,
+      runCount: sql10`cast(count(*) as int)`
+    }).from(productionRuns).leftJoin(operators, eq10(productionRuns.operatorId, operators.id)).where(
+      or(
+        eq10(productionRuns.printedSaleOrderId, saleOrderId),
+        eq10(productionRuns.wovenSaleOrderId, saleOrderId)
+      )
+    ).groupBy(productionRuns.operatorId, operators.name);
   }
   async findByIdempotencyKey(key) {
     const [run] = await db.select().from(productionRuns).where(eq10(productionRuns.idempotencyKey, key)).limit(1);
@@ -4591,8 +5080,11 @@ var ProductionRunRepository = class {
   async findRecentDuplicate(params) {
     const since = new Date(Date.now() - (params.windowMs ?? 5e3));
     const [run] = await db.select().from(productionRuns).where(
-      and8(
-        eq10(productionRuns.saleOrderId, params.saleOrderId),
+      and7(
+        eq10(
+          sql10`COALESCE(${productionRuns.printedSaleOrderId}, ${productionRuns.wovenSaleOrderId})`,
+          params.saleOrderId
+        ),
         params.machineId == null ? isNull(productionRuns.machineId) : eq10(productionRuns.machineId, params.machineId),
         params.operatorId == null ? isNull(productionRuns.operatorId) : eq10(productionRuns.operatorId, params.operatorId),
         eq10(productionRuns.quantityProduced, params.quantityProduced),
@@ -4603,8 +5095,11 @@ var ProductionRunRepository = class {
   }
   /** Ordered quantity comes from the sale order (work_orders). */
   async getWorkOrder(saleOrderId) {
-    const [wo] = await db.select().from(workOrders).where(eq10(workOrders.id, saleOrderId)).limit(1);
-    return wo;
+    const [printed] = await db.select().from(printedLabelWorkOrders).where(eq10(printedLabelWorkOrders.id, saleOrderId)).limit(1);
+    if (printed) return { ...printed, productType: "printed" };
+    const [woven] = await db.select().from(wovenLabelWorkOrders).where(eq10(wovenLabelWorkOrders.id, saleOrderId)).limit(1);
+    if (woven) return { ...woven, productType: "woven" };
+    return void 0;
   }
 };
 var productionRunRepository = new ProductionRunRepository();
@@ -4637,7 +5132,7 @@ var ProductionRunService = class {
       );
     }
     return productionRunRepository.create({
-      saleOrderId,
+      ...workOrder.productType === "printed" ? { printedSaleOrderId: saleOrderId } : { wovenSaleOrderId: saleOrderId },
       productId: data.productId,
       machineId: data.machineId,
       operatorId: data.operatorId,
@@ -4799,17 +5294,18 @@ var saleOrderParamsSchema = z13.object({
 
 // src/modules/work-orders/work-orders.routes.ts
 var router8 = Router9();
-router8.get("/", validateQuery(listWorkOrdersQuerySchema), workOrderController.getWorkOrders);
-router8.post("/", validateRequest(createWorkOrderSchema), workOrderController.createWorkOrder);
-router8.get("/:id", validateParams(idParamsSchema), workOrderController.getWorkOrder);
-router8.put("/:id", validateParams(idParamsSchema), validateRequest(updateWorkOrderSchema), workOrderController.updateWorkOrder);
+router8.get("/", validateQuery(listWorkOrdersQuerySchema), requireWorkOrderAccess(), workOrderController.getWorkOrders);
+router8.post("/", validateRequest(createWorkOrderSchema), requireRole("office_staff", "production_manager"), workOrderController.createWorkOrder);
+router8.get("/:id", validateParams(idParamsSchema), requireWorkOrderAccess(), workOrderController.getWorkOrder);
+router8.put("/:id", validateParams(idParamsSchema), validateRequest(updateWorkOrderSchema), requireRole("office_staff", "production_manager"), workOrderController.updateWorkOrder);
 router8.post(
   "/:id/dispatch",
   validateParams(idParamsSchema),
   validateRequest(dispatchWorkOrderSchema),
+  requireDispatchAccess(),
   workOrderController.dispatchWorkOrder
 );
-router8.delete("/:id", validateParams(idParamsSchema), workOrderController.deleteWorkOrder);
+router8.delete("/:id", validateParams(idParamsSchema), requireRole("office_staff", "production_manager"), workOrderController.deleteWorkOrder);
 router8.get(
   "/:saleOrderId/production-summary",
   validateParams(saleOrderParamsSchema),
@@ -4827,7 +5323,7 @@ var work_orders_routes_default = router8;
 import { Router as Router10 } from "express";
 
 // src/modules/production/batch-and-runs/batch-flow.repository.ts
-import { eq as eq11, and as and9, desc as desc6, asc as asc7, inArray as inArray4, sql as sql9 } from "drizzle-orm";
+import { eq as eq11, and as and8, desc as desc6, asc as asc7, inArray as inArray4, sql as sql11 } from "drizzle-orm";
 
 // src/shared/db/size-plans.ts
 function isSizeLabel(labelType) {
@@ -4949,8 +5445,10 @@ function lineFlowOf(planned, batches, kind = "printed", sizes = []) {
     wastedTotal: sumAll((p) => p.wasted),
     cutProduced: sum("cutting", (p) => p.produced),
     cutAvailable: sum("cutting", (p) => p.available),
+    cutWasted: sum("cutting", (p) => p.wasted),
     packagedProduced,
     packagedLabels: sum("packaging", (_p, b) => n(b.packagedQty)),
+    packagedWasted: sum("packaging", (p) => p.wasted),
     remainingRolls: round2(Math.max(0, planned - packagedProduced)),
     /** Per-size tracking from the line's Size Label plan. */
     sizes: lineSizeFlows(sizes, batches, first)
@@ -4960,7 +5458,7 @@ function isReadyForCompletion(lines) {
   if (lines.length === 0) return false;
   return lines.every((l) => {
     const target = l.required && l.required > 0 ? l.required : l.planned;
-    return target > 0 && l.packagedProduced + l.wastedTotal >= target - EPSILON;
+    return target > 0 && l.packagedProduced >= target - EPSILON;
   });
 }
 var STAGE_MACHINE_TYPE = {
@@ -5052,7 +5550,7 @@ var BatchFlowRepository = class {
   async findByLine(line, stage) {
     const conditions = [eq11(lineColumn(line.kind), line.id)];
     if (stage) conditions.push(eq11(productionBatches.stage, stage));
-    const rows = await db.select(batchSelect).from(productionBatches).leftJoin(machines, eq11(productionBatches.machineId, machines.id)).leftJoin(operators, eq11(productionBatches.operatorId, operators.id)).where(and9(...conditions)).orderBy(asc7(productionBatches.stage), asc7(productionBatches.batchNumber));
+    const rows = await db.select(batchSelect).from(productionBatches).leftJoin(machines, eq11(productionBatches.machineId, machines.id)).leftJoin(operators, eq11(productionBatches.operatorId, operators.id)).where(and8(...conditions)).orderBy(asc7(productionBatches.stage), asc7(productionBatches.batchNumber));
     return this.attachSources(rows);
   }
   /**
@@ -5070,20 +5568,20 @@ var BatchFlowRepository = class {
     if (stage) conditions.push(eq11(productionBatches.stage, stage));
     const rows = await db.select({
       ...batchSelect,
-      labelType: sql9`COALESCE(${productionOrderLines.labelType}, ${wovenProductionLines.labelType})`
+      labelType: sql11`COALESCE(${productionOrderLines.labelType}, ${wovenProductionLines.labelType})`
     }).from(productionBatches).leftJoin(
       productionOrderLines,
       eq11(productionBatches.productionOrderLineId, productionOrderLines.id)
     ).leftJoin(
       wovenProductionLines,
       eq11(productionBatches.wovenProductionLineId, wovenProductionLines.id)
-    ).leftJoin(machines, eq11(productionBatches.machineId, machines.id)).leftJoin(operators, eq11(productionBatches.operatorId, operators.id)).where(and9(...conditions)).orderBy(desc6(productionBatches.createdAt));
+    ).leftJoin(machines, eq11(productionBatches.machineId, machines.id)).leftJoin(operators, eq11(productionBatches.operatorId, operators.id)).where(and8(...conditions)).orderBy(desc6(productionBatches.createdAt));
     return this.attachSources(rows);
   }
   async findById(batchId) {
     const [row] = await db.select({
       ...batchSelect,
-      labelType: sql9`COALESCE(${productionOrderLines.labelType}, ${wovenProductionLines.labelType})`
+      labelType: sql11`COALESCE(${productionOrderLines.labelType}, ${wovenProductionLines.labelType})`
     }).from(productionBatches).leftJoin(
       productionOrderLines,
       eq11(productionBatches.productionOrderLineId, productionOrderLines.id)
@@ -5131,19 +5629,19 @@ var BatchFlowRepository = class {
       lineId: productionOrderLines.id,
       labelType: productionOrderLines.labelType,
       planned: productionOrderLines.totalRolls,
-      assignedToPrinting: sql9`COALESCE(SUM(${productionBatches.assignedRolls}) FILTER (WHERE ${productionBatches.stage} = 'printing'), 0)`,
-      printedProduced: sql9`COALESCE(SUM(${productionBatches.producedRolls}) FILTER (WHERE ${productionBatches.stage} = 'printing'), 0)`,
-      printedAvailable: sql9`COALESCE(SUM(${productionBatches.availableRolls}) FILTER (WHERE ${productionBatches.stage} = 'printing'), 0)`,
-      printedWasted: sql9`COALESCE(SUM(${productionBatches.wastedRolls}) FILTER (WHERE ${productionBatches.stage} = 'printing'), 0)`,
-      cutProduced: sql9`COALESCE(SUM(${productionBatches.producedRolls}) FILTER (WHERE ${productionBatches.stage} = 'cutting'), 0)`,
-      cutAvailable: sql9`COALESCE(SUM(${productionBatches.availableRolls}) FILTER (WHERE ${productionBatches.stage} = 'cutting'), 0)`,
-      packagedProduced: sql9`COALESCE(SUM(${productionBatches.producedRolls}) FILTER (WHERE ${productionBatches.stage} = 'packaging'), 0)`,
-      packagedLabels: sql9`COALESCE(SUM(${productionBatches.packagedQty}) FILTER (WHERE ${productionBatches.stage} = 'packaging'), 0)`
+      assignedToPrinting: sql11`COALESCE(SUM(${productionBatches.assignedRolls}) FILTER (WHERE ${productionBatches.stage} = 'printing'), 0)`,
+      printedProduced: sql11`COALESCE(SUM(${productionBatches.producedRolls}) FILTER (WHERE ${productionBatches.stage} = 'printing'), 0)`,
+      printedAvailable: sql11`COALESCE(SUM(${productionBatches.availableRolls}) FILTER (WHERE ${productionBatches.stage} = 'printing'), 0)`,
+      printedWasted: sql11`COALESCE(SUM(${productionBatches.wastedRolls}) FILTER (WHERE ${productionBatches.stage} = 'printing'), 0)`,
+      cutProduced: sql11`COALESCE(SUM(${productionBatches.producedRolls}) FILTER (WHERE ${productionBatches.stage} = 'cutting'), 0)`,
+      cutAvailable: sql11`COALESCE(SUM(${productionBatches.availableRolls}) FILTER (WHERE ${productionBatches.stage} = 'cutting'), 0)`,
+      packagedProduced: sql11`COALESCE(SUM(${productionBatches.producedRolls}) FILTER (WHERE ${productionBatches.stage} = 'packaging'), 0)`,
+      packagedLabels: sql11`COALESCE(SUM(${productionBatches.packagedQty}) FILTER (WHERE ${productionBatches.stage} = 'packaging'), 0)`
     }).from(productionOrderLines).leftJoin(
       productionBatches,
-      and9(
+      and8(
         eq11(productionBatches.productionOrderLineId, productionOrderLines.id),
-        sql9`${productionBatches.status} <> 'CANCELLED'`
+        sql11`${productionBatches.status} <> 'CANCELLED'`
       )
     ).where(eq11(productionOrderLines.id, lineId)).groupBy(productionOrderLines.id);
     return row;
@@ -5153,7 +5651,7 @@ var BatchFlowRepository = class {
    * destination in the recursive term walks downstream instead.
    */
   async findTrace(batchId) {
-    const upstream = await db.execute(sql9`
+    const upstream = await db.execute(sql11`
       WITH RECURSIVE up AS (
         SELECT b.id, b.batch_code, b.stage, b.produced_rolls, 0 AS depth,
                NULL::numeric AS rolls_from_source, NULL::integer AS consumed_by
@@ -5167,7 +5665,7 @@ var BatchFlowRepository = class {
       )
       SELECT * FROM up WHERE depth > 0 ORDER BY depth, batch_code
     `);
-    const downstream = await db.execute(sql9`
+    const downstream = await db.execute(sql11`
       WITH RECURSIVE down AS (
         SELECT b.id, b.batch_code, b.stage, b.produced_rolls, 0 AS depth,
                NULL::numeric AS rolls_to_destination, NULL::integer AS fed_by
@@ -5538,11 +6036,11 @@ var BatchFlowRepository = class {
   async remainingPlannedTx(tx, line, excludeBatchId) {
     const first = STAGES_OF[line.kind][0];
     const col = line.kind === "woven" ? "woven_production_line_id" : "production_order_line_id";
-    const assigned = sql9`COALESCE((
+    const assigned = sql11`COALESCE((
       SELECT SUM(b.assigned_rolls) FROM production_batches b
-      WHERE b.${sql9.raw(col)} = ${line.id}
+      WHERE b.${sql11.raw(col)} = ${line.id}
         AND b.stage = ${first} AND b.status <> 'CANCELLED'
-        ${excludeBatchId ? sql9`AND b.id <> ${excludeBatchId}` : sql9``}
+        ${excludeBatchId ? sql11`AND b.id <> ${excludeBatchId}` : sql11``}
     ), 0)`;
     const [row] = line.kind === "woven" ? await tx.select({ planned: wovenProductionLines.quantity, assigned }).from(wovenProductionLines).where(eq11(wovenProductionLines.id, line.id)).limit(1) : await tx.select({ planned: productionOrderLines.totalRolls, assigned }).from(productionOrderLines).where(eq11(productionOrderLines.id, line.id)).limit(1);
     const planned = Number(row?.planned ?? 0);
@@ -5559,12 +6057,12 @@ var BatchFlowRepository = class {
   async remainingPlannedSizeTx(tx, line, size) {
     if (line.kind !== "woven") return round22(0);
     const [row] = await tx.select({
-      total: sql9`COALESCE((
+      total: sql11`COALESCE((
           SELECT (s->>'quantity')::numeric FROM jsonb_array_elements(sizes) s
           WHERE lower(trim(s->>'size')) = lower(trim(${size}))
           LIMIT 1
         ), 0)`,
-      assigned: sql9`COALESCE((
+      assigned: sql11`COALESCE((
           SELECT SUM(assigned_rolls) FROM production_batches b
           WHERE b.woven_production_line_id = ${line.id}
             AND b.stage = 'weaving' AND b.status <> 'CANCELLED'
@@ -5629,11 +6127,11 @@ var BatchFlowRepository = class {
   async insertBatchTx(tx, scope, input, assignedRolls) {
     this.assertStageResources(input.stage, input.machineId, input.operatorId);
     await this.assertResourcesFreeTx(tx, input.stage, input.machineId, input.operatorId);
-    const scopeClause = and9(
+    const scopeClause = and8(
       eq11(lineColumn(scope.line.kind), scope.line.id),
       eq11(productionBatches.stage, input.stage)
     );
-    const [row] = await tx.select({ max: sql9`COALESCE(MAX(${productionBatches.batchNumber}), 0)` }).from(productionBatches).where(scopeClause);
+    const [row] = await tx.select({ max: sql11`COALESCE(MAX(${productionBatches.batchNumber}), 0)` }).from(productionBatches).where(scopeClause);
     const batchNumber = Number(row?.max ?? 0) + 1;
     const [batch] = await tx.insert(productionBatches).values({
       ...scopeValues(scope),
@@ -5679,9 +6177,9 @@ var BatchFlowRepository = class {
    * batch state, never stored, so it cannot leak.
    */
   async findResourceHolds(excludeBatchId) {
-    const conditions = [sql9`${productionBatches.status} IN ('PLANNED','ASSIGNED','IN_PROGRESS')`];
-    if (excludeBatchId) conditions.push(sql9`${productionBatches.id} <> ${excludeBatchId}`);
-    return db.execute(sql9`
+    const conditions = [sql11`${productionBatches.status} IN ('PLANNED','ASSIGNED','IN_PROGRESS')`];
+    if (excludeBatchId) conditions.push(sql11`${productionBatches.id} <> ${excludeBatchId}`);
+    return db.execute(sql11`
       SELECT
         b.id AS "batchId",
         b.batch_code AS "batchCode",
@@ -5697,7 +6195,7 @@ var BatchFlowRepository = class {
       LEFT JOIN woven_production_lines wpl ON b.woven_production_line_id = wpl.id
       LEFT JOIN production_orders wpo ON wpl.production_order_id = wpo.id
       WHERE b.status IN ('PLANNED','ASSIGNED','IN_PROGRESS')
-      ${excludeBatchId ? sql9`AND b.id <> ${excludeBatchId}` : sql9``}
+      ${excludeBatchId ? sql11`AND b.id <> ${excludeBatchId}` : sql11``}
     `);
   }
   /**
@@ -5713,7 +6211,7 @@ var BatchFlowRepository = class {
     const resClause = "(" + resIds.join(",") + ")";
     const opClause = checkOperator ? " OR b.operator_id IN (" + operatorId + ")" : "";
     const excludeClause = excludeBatchId ? " AND b.id <> " + excludeBatchId : "";
-    const clashes = await tx.execute(sql9`
+    const clashes = await tx.execute(sql11`
       SELECT
         b.batch_code AS "batchCode",
         b.machine_id AS "machineId",
@@ -5730,8 +6228,8 @@ var BatchFlowRepository = class {
       LEFT JOIN machines m ON b.machine_id = m.id
       LEFT JOIN operators o ON b.operator_id = o.id
       WHERE b.status IN ('PLANNED','ASSIGNED','IN_PROGRESS')
-        AND (b.machine_id IN ${sql9.raw(resClause)}${sql9.raw(opClause)})
-        ${sql9.raw(excludeClause)}
+        AND (b.machine_id IN ${sql11.raw(resClause)}${sql11.raw(opClause)})
+        ${sql11.raw(excludeClause)}
     `);
     for (const c of clashes) {
       const where = c.productionNumber + " \xB7 " + c.labelType + " (" + c.batchCode + ")";
@@ -5748,7 +6246,7 @@ var BatchFlowRepository = class {
     if (!locked?.has(sourceBatchId)) {
       await tx.select({ id: productionBatches.id }).from(productionBatches).where(eq11(productionBatches.id, sourceBatchId)).for("update");
     }
-    await tx.update(productionBatches).set({ consumedRolls: sql9`consumed_rolls + ${delta}`, updatedAt: /* @__PURE__ */ new Date() }).where(eq11(productionBatches.id, sourceBatchId));
+    await tx.update(productionBatches).set({ consumedRolls: sql11`consumed_rolls + ${delta}`, updatedAt: /* @__PURE__ */ new Date() }).where(eq11(productionBatches.id, sourceBatchId));
   }
   /** Replaces a batch's whole source set, crediting the old edges back first. */
   async replaceSourcesTx(tx, scope, batch, sources, floor, actorUserId2) {
@@ -5845,21 +6343,21 @@ var BatchFlowRepository = class {
    */
   async flowInTx(tx, line) {
     const [row] = await tx.select({
-      printedProduced: sql9`COALESCE(SUM(produced_rolls) FILTER (WHERE stage = 'printing'), 0)`,
-      printedConsumed: sql9`COALESCE(SUM(consumed_rolls) FILTER (WHERE stage = 'printing'), 0)`,
-      printedAvailable: sql9`COALESCE(SUM(available_rolls) FILTER (WHERE stage = 'printing'), 0)`,
-      wovenProduced: sql9`COALESCE(SUM(produced_rolls) FILTER (WHERE stage = 'weaving'), 0)`,
-      wovenConsumed: sql9`COALESCE(SUM(consumed_rolls) FILTER (WHERE stage = 'weaving'), 0)`,
-      wovenAvailable: sql9`COALESCE(SUM(available_rolls) FILTER (WHERE stage = 'weaving'), 0)`,
-      cutProduced: sql9`COALESCE(SUM(produced_rolls) FILTER (WHERE stage = 'cutting'), 0)`,
-      cutConsumed: sql9`COALESCE(SUM(consumed_rolls) FILTER (WHERE stage = 'cutting'), 0)`,
-      cutAvailable: sql9`COALESCE(SUM(available_rolls) FILTER (WHERE stage = 'cutting'), 0)`,
-      packagedProduced: sql9`COALESCE(SUM(produced_rolls) FILTER (WHERE stage = 'packaging'), 0)`,
-      packagedLabels: sql9`COALESCE(SUM(packaged_qty) FILTER (WHERE stage = 'packaging'), 0)`
+      printedProduced: sql11`COALESCE(SUM(produced_rolls) FILTER (WHERE stage = 'printing'), 0)`,
+      printedConsumed: sql11`COALESCE(SUM(consumed_rolls) FILTER (WHERE stage = 'printing'), 0)`,
+      printedAvailable: sql11`COALESCE(SUM(available_rolls) FILTER (WHERE stage = 'printing'), 0)`,
+      wovenProduced: sql11`COALESCE(SUM(produced_rolls) FILTER (WHERE stage = 'weaving'), 0)`,
+      wovenConsumed: sql11`COALESCE(SUM(consumed_rolls) FILTER (WHERE stage = 'weaving'), 0)`,
+      wovenAvailable: sql11`COALESCE(SUM(available_rolls) FILTER (WHERE stage = 'weaving'), 0)`,
+      cutProduced: sql11`COALESCE(SUM(produced_rolls) FILTER (WHERE stage = 'cutting'), 0)`,
+      cutConsumed: sql11`COALESCE(SUM(consumed_rolls) FILTER (WHERE stage = 'cutting'), 0)`,
+      cutAvailable: sql11`COALESCE(SUM(available_rolls) FILTER (WHERE stage = 'cutting'), 0)`,
+      packagedProduced: sql11`COALESCE(SUM(produced_rolls) FILTER (WHERE stage = 'packaging'), 0)`,
+      packagedLabels: sql11`COALESCE(SUM(packaged_qty) FILTER (WHERE stage = 'packaging'), 0)`
     }).from(productionBatches).where(
-      and9(
+      and8(
         eq11(lineColumn(line.kind), line.id),
-        sql9`${productionBatches.status} <> 'CANCELLED'`
+        sql11`${productionBatches.status} <> 'CANCELLED'`
       )
     );
     const isWoven = line.kind === "woven";
@@ -5918,9 +6416,9 @@ var BatchFlowRepository = class {
       }).where(eq11(wovenProductionLines.id, line.id));
       if (hasProgress2) {
         await tx.update(productionOrders).set({ status: "production", updatedAt: /* @__PURE__ */ new Date() }).where(
-          and9(
+          and8(
             eq11(productionOrders.id, row2.productionOrderId),
-            sql9`${productionOrders.status} = 'planned'`
+            sql11`${productionOrders.status} = 'planned'`
           )
         );
       }
@@ -5943,9 +6441,9 @@ var BatchFlowRepository = class {
     }).where(eq11(productionOrderLines.id, line.id));
     if (hasProgress) {
       await tx.update(productionOrders).set({ status: "production", updatedAt: /* @__PURE__ */ new Date() }).where(
-        and9(
+        and8(
           eq11(productionOrders.id, row.productionOrderId),
-          sql9`${productionOrders.status} = 'planned'`
+          sql11`${productionOrders.status} = 'planned'`
         )
       );
     }
@@ -5958,7 +6456,7 @@ function round22(n2) {
 var batchFlowRepository = new BatchFlowRepository();
 
 // src/modules/inventory/inventory.repository.ts
-import { eq as eq12, desc as desc7, asc as asc8, and as and10, sql as sql10 } from "drizzle-orm";
+import { eq as eq12, desc as desc7, asc as asc8, and as and9, sql as sql12 } from "drizzle-orm";
 var InventoryRepository = class {
   /**
    * Credits/debits a material's received + balance, creating the ledger row if absent.
@@ -5976,8 +6474,8 @@ var InventoryRepository = class {
     let balanceAfter;
     if (existing) {
       const [updated] = await tx.update(inventoryRolls).set({
-        receivedRolls: sql10`${inventoryRolls.receivedRolls} + ${deltaRolls}`,
-        balanceRolls: sql10`${inventoryRolls.balanceRolls} + ${deltaRolls}`,
+        receivedRolls: sql12`${inventoryRolls.receivedRolls} + ${deltaRolls}`,
+        balanceRolls: sql12`${inventoryRolls.balanceRolls} + ${deltaRolls}`,
         updatedAt: /* @__PURE__ */ new Date()
       }).where(eq12(inventoryRolls.materialCode, materialCode)).returning();
       if (!updated || Number(updated.balanceRolls) < 0) {
@@ -6055,15 +6553,15 @@ var InventoryRepository = class {
     if (filters?.vendor) conditions.push(eq12(purchaseRecords.vendor, filters.vendor));
     if (filters?.materialCode) conditions.push(eq12(purchaseRecords.materialCode, filters.materialCode));
     if (filters?.startDate && filters?.endDate) {
-      conditions.push(sql10`${purchaseRecords.reportDate} BETWEEN ${filters.startDate} AND ${filters.endDate}`);
+      conditions.push(sql12`${purchaseRecords.reportDate} BETWEEN ${filters.startDate} AND ${filters.endDate}`);
     }
-    return db.select().from(purchaseRecords).where(conditions.length > 0 ? and10(...conditions) : void 0).orderBy(desc7(purchaseRecords.reportDate));
+    return db.select().from(purchaseRecords).where(conditions.length > 0 ? and9(...conditions) : void 0).orderBy(desc7(purchaseRecords.reportDate));
   }
   async findInventoryRolls(filters) {
     await inventoryRollRepository.syncMaterialStockLedgers();
     const conditions = [];
     if (filters?.materialCode) conditions.push(eq12(inventoryRolls.materialCode, filters.materialCode));
-    return db.select().from(inventoryRolls).where(conditions.length > 0 ? and10(...conditions) : void 0).orderBy(asc8(inventoryRolls.materialCode));
+    return db.select().from(inventoryRolls).where(conditions.length > 0 ? and9(...conditions) : void 0).orderBy(asc8(inventoryRolls.materialCode));
   }
   async findInventoryRollByMaterialCode(materialCode) {
     let [roll] = await db.select().from(inventoryRolls).where(eq12(inventoryRolls.materialCode, materialCode));
@@ -6224,12 +6722,33 @@ function buildProductionOverviewBody(rawLines, allMachines, allOperators, allMat
     else if (b.stage === "cutting") rec.cutting += qty;
     else if (b.stage === "packaging") rec.packaging += qty;
   }
+  const completedBatchesByLineStage = /* @__PURE__ */ new Map();
+  for (const b of orderBatches) {
+    if (b.status !== "COMPLETED") continue;
+    const lineId = b.productionOrderLineId ?? b.wovenProductionLineId;
+    if (lineId == null) continue;
+    const key = `${lineId}:${b.stage}`;
+    const existing = completedBatchesByLineStage.get(key);
+    if (!existing || b.completedAt && (!existing.completedAt || b.completedAt > existing.completedAt)) {
+      completedBatchesByLineStage.set(key, {
+        operatorId: b.operatorId,
+        operatorName: b.operatorName,
+        operatorAvatarUrl: b.operatorAvatarUrl ?? null,
+        machineId: b.machineId,
+        machineName: b.machineName,
+        completedAt: b.completedAt
+      });
+    }
+  }
   const lines = rawLines.map((line) => {
     const n2 = toNumbers(line);
     const target = progressTargetOf(n2.requiredRolls, n2.totalRolls);
     const material = line.materialCode ? materialByCode.get(line.materialCode) : void 0;
     const missing = missingStartRequirements(line);
     const batchRec = inProgressBatchesByLine.get(line.id) ?? { printing: 0, cutting: 0, packaging: 0, activeStages: /* @__PURE__ */ new Set() };
+    const pBatch = completedBatchesByLineStage.get(`${line.id}:printing`);
+    const cBatch = completedBatchesByLineStage.get(`${line.id}:cutting`);
+    const pkBatch = completedBatchesByLineStage.get(`${line.id}:packaging`);
     return {
       id: line.id,
       labelType: line.labelType,
@@ -6265,41 +6784,41 @@ function buildProductionOverviewBody(rawLines, allMachines, allOperators, allMat
       // Each stage carries who did it, their avatar, and when it completed — together these
       // are the traceability record surfaced on a finished order.
       printing: {
-        machineId: line.printingMachineId,
-        machineName: nameOf(machineById, line.printingMachineId),
-        operatorId: line.printingOperatorId,
-        operatorName: nameOf(operatorById, line.printingOperatorId),
-        operatorAvatarUrl: avatarOf(operatorById, line.printingOperatorId),
+        machineId: pBatch?.machineId ?? line.printingMachineId,
+        machineName: pBatch?.machineName ?? nameOf(machineById, line.printingMachineId),
+        operatorId: pBatch?.operatorId ?? line.printingOperatorId,
+        operatorName: pBatch?.operatorName ?? nameOf(operatorById, line.printingOperatorId),
+        operatorAvatarUrl: pBatch?.operatorAvatarUrl ?? avatarOf(operatorById, line.printingOperatorId),
         printedRolls: n2.printedRolls,
         inPrintingRolls: batchRec.printing,
         isPrintingActive: batchRec.activeStages.has("printing"),
         progressPct: completionPct(n2.printedRolls, target),
-        completedAt: line.printingCompletedAt
+        completedAt: pBatch?.completedAt ?? line.printingCompletedAt
       },
       cutting: {
-        machineId: line.cuttingMachineId,
-        machineName: nameOf(machineById, line.cuttingMachineId),
-        operatorId: line.cuttingOperatorId,
-        operatorName: nameOf(operatorById, line.cuttingOperatorId),
-        operatorAvatarUrl: avatarOf(operatorById, line.cuttingOperatorId),
+        machineId: cBatch?.machineId ?? line.cuttingMachineId,
+        machineName: cBatch?.machineName ?? nameOf(machineById, line.cuttingMachineId),
+        operatorId: cBatch?.operatorId ?? line.cuttingOperatorId,
+        operatorName: cBatch?.operatorName ?? nameOf(operatorById, line.cuttingOperatorId),
+        operatorAvatarUrl: cBatch?.operatorAvatarUrl ?? avatarOf(operatorById, line.cuttingOperatorId),
         sentToCuttingRolls: n2.sentToCuttingRolls,
         cutRolls: n2.cutRolls,
         inCuttingRolls: batchRec.cutting,
         isCuttingActive: batchRec.activeStages.has("cutting"),
         progressPct: completionPct(n2.cutRolls, target),
-        completedAt: line.cuttingCompletedAt
+        completedAt: cBatch?.completedAt ?? line.cuttingCompletedAt
       },
       packaging: {
-        operatorId: line.packagingOperatorId,
-        operatorName: nameOf(operatorById, line.packagingOperatorId),
-        operatorAvatarUrl: avatarOf(operatorById, line.packagingOperatorId),
+        operatorId: pkBatch?.operatorId ?? line.packagingOperatorId,
+        operatorName: pkBatch?.operatorName ?? nameOf(operatorById, line.packagingOperatorId),
+        operatorAvatarUrl: pkBatch?.operatorAvatarUrl ?? avatarOf(operatorById, line.packagingOperatorId),
         sentToPackagingRolls: n2.sentToPackagingRolls,
         packagedRolls: n2.packagedRolls,
         packagedQty: n2.packagedQty,
         inPackagingRolls: batchRec.packaging,
         isPackagingActive: batchRec.activeStages.has("packaging"),
         progressPct: completionPct(n2.packagedRolls, target),
-        completedAt: line.packagingCompletedAt
+        completedAt: pkBatch?.completedAt ?? line.packagingCompletedAt
       },
       liveProgress: {
         totalRolls: n2.totalRolls,
@@ -6632,7 +7151,7 @@ var ProductionOrderService = class {
       try {
         return await productionOrderRepository.createWithWorkOrderStatusTx({
           productionNumber,
-          workOrderId: input.workOrderId,
+          ...workOrder.productType === "printed" ? { printedWorkOrderId: Number(input.workOrderId) } : { wovenWorkOrderId: Number(input.workOrderId) },
           totalQty: workOrder.totalQty,
           notes: input.notes,
           createdByUserId
@@ -7302,13 +7821,17 @@ var ProductionOrderService = class {
       materialRepository.findAll(),
       batchFlowRepository.findByOrder(Number(id))
     ]);
+    const normalizedBatches = orderBatches.map((b) => ({
+      ...b,
+      completedAt: b.completedAt ? b.completedAt.toISOString() : null
+    }));
     const { lines, totals } = buildProductionOverviewBody(
       rawLines,
       allMachines,
       allOperators,
       allMaterials,
       order.totalQty,
-      orderBatches
+      normalizedBatches
     );
     return {
       productionOrder: {
@@ -7659,6 +8182,7 @@ var updateBatchSchema = z14.object({
 
 // src/modules/production/production-orders/production-order.routes.ts
 var router9 = Router10();
+router9.use(requireProductionManager());
 router9.get("/", validateQuery(listProductionOrdersQuerySchema), productionOrderController.getProductionOrders);
 router9.get("/eligible-sales-orders", productionOrderController.getEligibleSalesOrders);
 router9.get("/available-resources", productionOrderController.getAvailableResources);
@@ -7719,10 +8243,10 @@ var production_order_routes_default = router9;
 import { Router as Router11 } from "express";
 
 // src/modules/production/woven-production/woven-production.repository.ts
-import { eq as eq14, and as and12, sql as sql12 } from "drizzle-orm";
+import { eq as eq14, and as and11, sql as sql14 } from "drizzle-orm";
 
 // src/modules/thread/thread-inventory/thread-inventory.repository.ts
-import { eq as eq13, desc as desc8, and as and11, sql as sql11, isNull as isNull2, inArray as inArray5 } from "drizzle-orm";
+import { eq as eq13, desc as desc8, and as and10, sql as sql13, isNull as isNull2, inArray as inArray5 } from "drizzle-orm";
 var ThreadInventoryRepository = class {
   /* ============================ Reads ============================ */
   async findStocks(filters) {
@@ -7730,9 +8254,9 @@ var ThreadInventoryRepository = class {
     if (filters?.stockType) conditions.push(eq13(threadStocks.stockType, filters.stockType));
     if (filters?.denier) conditions.push(eq13(threadStocks.denier, filters.denier));
     if (filters?.colorName) {
-      conditions.push(sql11`${threadStocks.colorName} ILIKE ${"%" + filters.colorName + "%"}`);
+      conditions.push(sql13`${threadStocks.colorName} ILIKE ${"%" + filters.colorName + "%"}`);
     }
-    return db.select().from(threadStocks).where(conditions.length ? and11(...conditions) : void 0).orderBy(threadStocks.stockType, threadStocks.denier, threadStocks.colorName);
+    return db.select().from(threadStocks).where(conditions.length ? and10(...conditions) : void 0).orderBy(threadStocks.stockType, threadStocks.denier, threadStocks.colorName);
   }
   async findStockById(id) {
     const [row] = await db.select().from(threadStocks).where(eq13(threadStocks.id, id));
@@ -7743,9 +8267,9 @@ var ThreadInventoryRepository = class {
     if (filters?.stockType) conditions.push(eq13(threadStocks.stockType, filters.stockType));
     if (filters?.denier) conditions.push(eq13(threadStocks.denier, filters.denier));
     if (filters?.colorName) {
-      conditions.push(sql11`${threadStocks.colorName} ILIKE ${"%" + filters.colorName + "%"}`);
+      conditions.push(sql13`${threadStocks.colorName} ILIKE ${"%" + filters.colorName + "%"}`);
     }
-    const [row] = await db.select({ count: sql11`count(*)` }).from(threadStocks).where(conditions.length ? and11(...conditions) : void 0);
+    const [row] = await db.select({ count: sql13`count(*)` }).from(threadStocks).where(conditions.length ? and10(...conditions) : void 0);
     return Number(row?.count ?? 0);
   }
   /** Creates a thread ledger with its opening balance recorded as the first movement. */
@@ -7799,8 +8323,8 @@ var ThreadInventoryRepository = class {
    * only a real production draw or dye run is, because those leave records pointing here.
    */
   async findConsumedByProcessKg(id) {
-    const [row] = await db.select({ total: sql11`coalesce(sum(${threadStockMovements.weightKg}), 0)` }).from(threadStockMovements).where(
-      and11(
+    const [row] = await db.select({ total: sql13`coalesce(sum(${threadStockMovements.weightKg}), 0)` }).from(threadStockMovements).where(
+      and10(
         eq13(threadStockMovements.threadStockId, id),
         inArray5(threadStockMovements.movementType, ["production_issue", "dye_consume"])
       )
@@ -7815,9 +8339,9 @@ var ThreadInventoryRepository = class {
   }
   async findPurchases(filters) {
     const conditions = [];
-    if (filters?.vendor) conditions.push(sql11`${threadPurchases.vendor} ILIKE ${"%" + filters.vendor + "%"}`);
+    if (filters?.vendor) conditions.push(sql13`${threadPurchases.vendor} ILIKE ${"%" + filters.vendor + "%"}`);
     if (filters?.denier) conditions.push(eq13(threadPurchases.denier, filters.denier));
-    return db.select().from(threadPurchases).where(conditions.length ? and11(...conditions) : void 0).orderBy(desc8(threadPurchases.receivedDate));
+    return db.select().from(threadPurchases).where(conditions.length ? and10(...conditions) : void 0).orderBy(desc8(threadPurchases.receivedDate));
   }
   async findPurchaseById(id) {
     const [row] = await db.select().from(threadPurchases).where(eq13(threadPurchases.id, id));
@@ -7836,7 +8360,7 @@ var ThreadInventoryRepository = class {
    * way out so the caller can safely compute against the balance it just read.
    */
   async getOrCreateStockTx(tx, identity) {
-    const match = and11(
+    const match = and10(
       eq13(threadStocks.stockType, identity.stockType),
       eq13(threadStocks.denier, identity.denier),
       eq13(threadStocks.colorName, identity.colorName),
@@ -7968,7 +8492,7 @@ var ThreadInventoryRepository = class {
     let remaining = want.weightKg;
     if (!(remaining > 0)) return slices;
     const [secondary] = await tx.select().from(threadStocks).where(
-      and11(
+      and10(
         eq13(threadStocks.stockType, "secondary"),
         eq13(threadStocks.denier, want.denier),
         eq13(threadStocks.colorName, want.colorName),
@@ -7994,7 +8518,7 @@ var ThreadInventoryRepository = class {
     }
     if (remaining <= 5e-4) return slices;
     const primaries = await tx.select().from(threadStocks).where(
-      and11(
+      and10(
         eq13(threadStocks.stockType, "primary"),
         eq13(threadStocks.denier, want.denier),
         inArray5(threadStocks.colorName, ["White", "Black"])
@@ -8031,9 +8555,9 @@ var ThreadInventoryRepository = class {
   async releaseForPlanTx(tx, referenceType, referenceId, actorUserId2) {
     const issued = await tx.select({
       threadStockId: threadStockMovements.threadStockId,
-      total: sql11`sum(${threadStockMovements.weightKg})`
+      total: sql13`sum(${threadStockMovements.weightKg})`
     }).from(threadStockMovements).where(
-      and11(
+      and10(
         eq13(threadStockMovements.referenceType, referenceType),
         eq13(threadStockMovements.referenceId, referenceId),
         eq13(threadStockMovements.movementType, "production_issue")
@@ -8073,14 +8597,13 @@ var WovenProductionRepository = class {
       productionNumber: productionOrders.productionNumber,
       status: productionOrders.status,
       totalQty: productionOrders.totalQty,
-      workOrderId: workOrders.id,
-      soNumber: workOrders.soNumber,
-      productType: workOrders.productType,
-      pick: wovenWorkOrderDetails.pick,
-      repeat: wovenWorkOrderDetails.repeat,
-      density: wovenWorkOrderDetails.density,
-      speed: wovenWorkOrderDetails.speed
-    }).from(productionOrders).innerJoin(workOrders, eq14(productionOrders.workOrderId, workOrders.id)).leftJoin(wovenWorkOrderDetails, eq14(wovenWorkOrderDetails.workOrderId, workOrders.id)).where(eq14(productionOrders.id, Number(productionOrderId)));
+      productType: sql14`'woven'::text`,
+      soNumber: wovenLabelWorkOrders.soNumber,
+      pick: wovenLabelWorkOrders.pick,
+      repeat: sql14`${wovenLabelWorkOrders.repeat}`,
+      density: wovenLabelWorkOrders.density,
+      speed: sql14`${wovenLabelWorkOrders.speed}`
+    }).from(productionOrders).innerJoin(wovenLabelWorkOrders, eq14(productionOrders.wovenWorkOrderId, wovenLabelWorkOrders.id)).where(eq14(productionOrders.id, Number(productionOrderId)));
     return row;
   }
   /** Machine/operator names for the overview, resolved in one round trip. */
@@ -8217,12 +8740,12 @@ var WovenProductionRepository = class {
     const patch = derive(siblings);
     await tx.update(productionOrders).set({ ...patch, updatedAt: /* @__PURE__ */ new Date() }).where(eq14(productionOrders.id, productionOrderId));
     if (patch.status) {
-      const [order] = await tx.select({ workOrderId: productionOrders.workOrderId }).from(productionOrders).where(eq14(productionOrders.id, productionOrderId));
+      const [order] = await tx.select({ workOrderId: productionOrders.wovenWorkOrderId }).from(productionOrders).where(eq14(productionOrders.id, productionOrderId));
       if (order) {
-        await tx.update(workOrders).set({
+        await tx.update(wovenLabelWorkOrders).set({
           status: patch.status === "complete" ? "complete" : "production",
           updatedAt: /* @__PURE__ */ new Date()
-        }).where(and12(eq14(workOrders.id, order.workOrderId), sql12`${workOrders.status} <> 'dispatched'`));
+        }).where(and11(eq14(wovenLabelWorkOrders.id, order.workOrderId), sql14`${wovenLabelWorkOrders.status} <> 'dispatched'`));
       }
     }
   }
@@ -8303,6 +8826,31 @@ var WovenProductionService = class {
     const ctx = await this.assertWoven(productionOrderId);
     const lines = await wovenProductionRepository.findLines(productionOrderId);
     const { machines: machines2, operators: operators2 } = await wovenProductionRepository.findResourceNames();
+    const batches = await batchFlowRepository.findByOrder(Number(productionOrderId), "woven");
+    const completedBatchByLineStage = /* @__PURE__ */ new Map();
+    for (const b of batches) {
+      if (b.status !== "COMPLETED") continue;
+      const lineId = b.wovenProductionLineId;
+      if (lineId == null) continue;
+      const key = `${lineId}:${b.stage}`;
+      const existing = completedBatchByLineStage.get(key);
+      const completedAtStr = b.completedAt ? b.completedAt.toISOString() : null;
+      if (!existing || completedAtStr && (!existing.completedAt || completedAtStr > existing.completedAt)) {
+        completedBatchByLineStage.set(key, {
+          operatorId: b.operatorId,
+          operatorName: b.operatorName,
+          operatorAvatarUrl: b.operatorAvatarUrl ?? null,
+          machineId: b.machineId,
+          machineName: b.machineName,
+          completedAt: completedAtStr
+        });
+      }
+    }
+    const lineWaste = batches.filter((b) => b.status !== "CANCELLED" && b.wovenProductionLineId != null).reduce((acc, b) => {
+      const id = b.wovenProductionLineId;
+      acc[id] = (acc[id] || 0) + Number(b.wastedRolls ?? 0);
+      return acc;
+    }, {});
     const detailed = await Promise.all(
       lines.map(async (line) => {
         const n2 = toNumbers2(line);
@@ -8325,6 +8873,9 @@ var WovenProductionService = class {
           actualWeavingHours = Math.round(Math.max(0, endTime - startTime) / (3600 * 1e3) * 100) / 100;
         }
         const weavingTimeDiffHours = line.weavingStartedAt || estimatedWeavingHours > 0 ? Math.round((actualWeavingHours - estimatedWeavingHours) * 100) / 100 : 0;
+        const wBatch = completedBatchByLineStage.get(`${line.id}:weaving`);
+        const cBatch = completedBatchByLineStage.get(`${line.id}:cutting`);
+        const pBatch = completedBatchByLineStage.get(`${line.id}:packaging`);
         return {
           id: line.id,
           /** One woven line per label type, exactly like the printed side. */
@@ -8358,19 +8909,33 @@ var WovenProductionService = class {
             status: line.weavingStatus,
             startedAt: line.weavingStartedAt,
             endedAt: line.weavingEndedAt,
-            progressPct: n2.quantity > 0 ? Math.round(n2.wovenQty / n2.quantity * 1e4) / 100 : 0,
-            isComplete: n2.quantity > 0 && n2.wovenQty >= n2.quantity,
+            /** Waste deducts from the line's planned quantity to form the effective target. */
+            wastedTotal: lineWaste[line.id] ?? 0,
+            progressPct: n2.quantity > 0 ? Math.round(n2.wovenQty / Math.max(1, n2.quantity - (lineWaste[line.id] ?? 0)) * 1e4) / 100 : 0,
+            isComplete: n2.quantity > 0 && n2.wovenQty >= n2.quantity - (lineWaste[line.id] ?? 0),
             speedRpm: speedVal,
             estimatedWeavingHours,
             actualWeavingHours,
-            weavingTimeDiffHours
+            weavingTimeDiffHours,
+            operatorId: wBatch?.operatorId ?? null,
+            operatorName: wBatch?.operatorName ?? null,
+            operatorAvatarUrl: wBatch?.operatorAvatarUrl ?? null,
+            machineId: wBatch?.machineId ?? null,
+            machineName: wBatch?.machineName ?? null,
+            completedAt: wBatch?.completedAt ?? null
           },
           cutting: {
             cutQty: n2.cutQty,
             cuttingDate: line.cuttingDate,
             /** Cutting cannot begin until weaving is 100% complete. */
             canStart: canStartCutting(line),
-            isComplete: n2.cutQty > 0 && n2.cutQty >= n2.wovenQty
+            isComplete: n2.cutQty > 0 && n2.cutQty >= n2.wovenQty,
+            operatorId: cBatch?.operatorId ?? null,
+            operatorName: cBatch?.operatorName ?? null,
+            operatorAvatarUrl: cBatch?.operatorAvatarUrl ?? null,
+            machineId: cBatch?.machineId ?? null,
+            machineName: cBatch?.machineName ?? null,
+            completedAt: cBatch?.completedAt ?? null
           },
           packaging: {
             packagedQty: n2.packagedQty,
@@ -8378,7 +8943,13 @@ var WovenProductionService = class {
             packagingDate: line.packagingDate,
             /** Packaging cannot begin until cut quantity equals woven quantity. */
             canStart: canStartPackaging(line),
-            isComplete: n2.quantity > 0 && n2.packagedQty >= n2.quantity
+            isComplete: n2.quantity > 0 && n2.packagedQty >= n2.quantity,
+            operatorId: pBatch?.operatorId ?? null,
+            operatorName: pBatch?.operatorName ?? null,
+            operatorAvatarUrl: pBatch?.operatorAvatarUrl ?? null,
+            machineId: null,
+            machineName: null,
+            completedAt: pBatch?.completedAt ?? null
           }
         };
       })
@@ -8397,6 +8968,12 @@ var WovenProductionService = class {
       totals: {
         lineCount: lines.length,
         quantity: sum((l) => Number(l.quantity)),
+        /** Σ waste across every live (non-cancelled) batch — deducted from the
+         *  plan to form the effective required target the progress bars use. */
+        wastedTotal: batches.reduce(
+          (acc, b) => acc + (b.status !== "CANCELLED" ? Number(b.wastedRolls ?? 0) : 0),
+          0
+        ),
         totalThreadWeightKg: totalThreadIssued,
         remainingThreadReturned,
         threadUsedInPackagedQuantity,
@@ -8433,15 +9010,6 @@ var WovenProductionService = class {
     );
     if (siblings.some((l) => l.labelType.trim().toLowerCase() === labelType.toLowerCase())) {
       throw new ApiError(`Label type '${labelType}' is already planned on this order`, 400);
-    }
-    const plannedBySiblings = siblings.reduce((n2, l) => n2 + Number(l.quantity), 0);
-    const orderQty = Number(order.totalQty);
-    if (orderQty > 0 && plannedBySiblings + input.quantity > orderQty) {
-      const remaining = Math.max(0, orderQty - plannedBySiblings);
-      throw new ApiError(
-        `Cannot plan ${input.quantity} pcs for '${labelType}': only ${remaining} of the order's ${orderQty} pcs remain unplanned`,
-        400
-      );
     }
     const sizes = validateSizePlan(input.sizes, labelType, input.quantity, `'${labelType}'`);
     if (input.threads.length === 0) {
@@ -8755,6 +9323,7 @@ var reconcileRemainingThreadsSchema = z15.object({
 // src/modules/production/woven-production/woven-production.routes.ts
 import { z as z16 } from "zod";
 var router10 = Router11();
+router10.use(requireProductionManager());
 var orderLineParamsSchema = z16.object({
   id: z16.coerce.number().int().positive(),
   lineId: z16.coerce.number().int().positive()
@@ -8908,7 +9477,7 @@ var BatchFlowService = class {
       labelType: l.labelType,
       planned: Number(l.quantity),
       quantity: Number(l.quantity),
-      required: 0,
+      required: Number(l.quantity),
       materialCode: null,
       sizes: l.sizes ?? []
     })) : (await productionOrderRepository.findLines(Number(orderId))).map((l) => ({
@@ -8933,8 +9502,11 @@ var BatchFlowService = class {
       const sumOf = (list, pick) => round2(live(list).reduce((n2, b) => n2 + Number(b[pick] ?? 0), 0));
       const cutProduced = sumOf(ownCutting, "producedRolls");
       const cutConsumed = sumOf(ownCutting, "consumedRolls");
+      const cutWasted = sumOf(ownCutting, "wastedRolls");
       const packagedProduced = sumOf(ownPackaging, "producedRolls");
       const packagedLabels = sumOf(ownPackaging, "packagedQty");
+      const packagedWasted = sumOf(ownPackaging, "wastedRolls");
+      const totalWasted = round2(flow.printedWasted + cutWasted + packagedWasted);
       return {
         lineId: line.id,
         labelType: line.labelType,
@@ -8942,9 +9514,13 @@ var BatchFlowService = class {
         materialCode: line.materialCode,
         kind,
         unit: UNIT_OF[kind],
-        required: line.required,
+        required: round2(Math.max(0, line.required - totalWasted)),
         stages,
         ...flow,
+        /** Correct Σ waste across all three stages (overrides flow's first-stage-only figure). */
+        wastedTotal: totalWasted,
+        cutWasted,
+        packagedWasted,
         cutProduced,
         cutAvailable: round2(Math.max(0, cutProduced - cutConsumed)),
         packagedProduced,
@@ -8963,33 +9539,39 @@ var BatchFlowService = class {
     const totals = perLine.reduce(
       (acc, l) => ({
         planned: acc.planned + l.planned,
+        quantity: acc.quantity + l.quantity,
         required: acc.required + l.required,
         assignedToPrinting: acc.assignedToPrinting + l.assignedToPrinting,
         remainingPlanned: acc.remainingPlanned + l.remainingPlanned,
         printedProduced: acc.printedProduced + l.printedProduced,
         printedAvailable: acc.printedAvailable + l.printedAvailable,
         printedWasted: acc.printedWasted + l.printedWasted,
+        wastedTotal: acc.wastedTotal + l.wastedTotal,
         cutProduced: acc.cutProduced + l.cutProduced,
         cutAvailable: acc.cutAvailable + l.cutAvailable,
+        cutWasted: acc.cutWasted + l.cutWasted,
         packagedProduced: acc.packagedProduced + l.packagedProduced,
         packagedLabels: acc.packagedLabels + l.packagedLabels,
-        remainingRolls: acc.remainingRolls + l.remainingRolls,
-        wastedTotal: acc.wastedTotal + l.wastedTotal
+        packagedWasted: acc.packagedWasted + l.packagedWasted,
+        remainingRolls: acc.remainingRolls + l.remainingRolls
       }),
       {
         planned: 0,
         assignedToPrinting: 0,
         remainingPlanned: 0,
+        quantity: 0,
         required: 0,
         printedProduced: 0,
         printedAvailable: 0,
         printedWasted: 0,
+        wastedTotal: 0,
         cutProduced: 0,
         cutAvailable: 0,
+        cutWasted: 0,
         packagedProduced: 0,
         packagedLabels: 0,
-        remainingRolls: 0,
-        wastedTotal: 0
+        packagedWasted: 0,
+        remainingRolls: 0
       }
     );
     return {
@@ -9380,28 +9962,29 @@ var stageResourcesQuerySchema = z17.object({
 
 // src/modules/production/batch-and-runs/batch-flow.routes.ts
 function stageRouter(controller, stage) {
-  const router20 = Router12({ mergeParams: true });
+  const router26 = Router12({ mergeParams: true });
   const createSchema = stage === "printing" || stage === "weaving" ? createPrintingBatchSchema : createConsumingBatchSchema;
-  router20.get("/lines/:lineId", validateParams(lineIdParamsSchema2), controller.listByLine);
-  router20.get("/lines/:lineId/sources", validateParams(lineIdParamsSchema2), controller.getSources);
-  router20.get(
+  router26.get("/lines/:lineId", validateParams(lineIdParamsSchema2), controller.listByLine);
+  router26.get("/lines/:lineId/sources", validateParams(lineIdParamsSchema2), controller.getSources);
+  router26.get(
     "/lines/:lineId/resources",
     validateParams(lineIdParamsSchema2),
     validateQuery(stageResourcesQuerySchema),
     controller.getResources
   );
-  router20.post("/lines/:lineId", validateRequest(createSchema), controller.create);
-  router20.get("/:batchId", validateParams(batchIdParamsSchema), controller.getOne);
-  router20.get("/:batchId/trace", validateParams(batchIdParamsSchema), controller.getTrace);
-  router20.patch("/:batchId", validateRequest(updateBatchSchema2), controller.update);
-  router20.delete("/:batchId", validateParams(batchIdParamsSchema), controller.remove);
-  router20.post("/:batchId/start", validateRequest(batchActionSchema), controller.start);
-  router20.post("/:batchId/output", validateRequest(recordOutputSchema), controller.recordOutput);
-  router20.post("/:batchId/complete", validateRequest(batchActionSchema), controller.complete);
-  router20.post("/:batchId/cancel", validateRequest(batchActionSchema), controller.cancel);
-  return router20;
+  router26.post("/lines/:lineId", validateRequest(createSchema), controller.create);
+  router26.get("/:batchId", validateParams(batchIdParamsSchema), controller.getOne);
+  router26.get("/:batchId/trace", validateParams(batchIdParamsSchema), controller.getTrace);
+  router26.patch("/:batchId", validateRequest(updateBatchSchema2), controller.update);
+  router26.delete("/:batchId", validateParams(batchIdParamsSchema), controller.remove);
+  router26.post("/:batchId/start", validateRequest(batchActionSchema), controller.start);
+  router26.post("/:batchId/output", validateRequest(recordOutputSchema), controller.recordOutput);
+  router26.post("/:batchId/complete", validateRequest(batchActionSchema), controller.complete);
+  router26.post("/:batchId/cancel", validateRequest(batchActionSchema), controller.cancel);
+  return router26;
 }
 var router11 = Router12();
+router11.use(requireProductionManager());
 router11.use("/weaving-batches", stageRouter(weavingBatchController, "weaving"));
 router11.use("/printing-batches", stageRouter(printingBatchController, "printing"));
 router11.use("/cutting-batches", stageRouter(cuttingBatchController, "cutting"));
@@ -9837,6 +10420,7 @@ var inventory_roll_routes_default = router12;
 
 // src/modules/inventory/inventory.routes.ts
 var router13 = Router14();
+router13.use(requireRole("production_manager", "ceo"));
 router13.use("/rolls", inventory_roll_routes_default);
 router13.post("/purchases", validateRequest(createPurchaseSchema), inventoryController.createPurchase);
 router13.get("/purchases", validateQuery(listPurchasesQuerySchema), inventoryController.getPurchases);
@@ -10187,6 +10771,7 @@ var listThreadMovementsQuerySchema = z20.object({
 
 // src/modules/thread/thread-inventory/thread-inventory.routes.ts
 var router14 = Router15();
+router14.use(requireRole("production_manager", "ceo"));
 router14.get("/stocks", validateQuery(listThreadStocksQuerySchema), threadInventoryController.getStocks);
 router14.get("/stocks/summary", threadInventoryController.getStockSummary);
 router14.post("/stocks", validateRequest(createThreadStockSchema), threadInventoryController.createStock);
@@ -10311,6 +10896,7 @@ var updateThreadServiceProviderSchema = z21.object({
 
 // src/modules/thread/thread-service-provider/thread-service-provider.routes.ts
 var router15 = Router16();
+router15.use(requireRole("production_manager", "ceo"));
 router15.get("/", threadServiceProviderController.getAll);
 router15.post("/", validateRequest(createThreadServiceProviderSchema), threadServiceProviderController.create);
 router15.put(
@@ -10552,6 +11138,7 @@ var receiveDyeingSchema = z22.object({
 
 // src/modules/thread/thread-dyeing/thread-dyeing.routes.ts
 var router16 = Router17();
+router16.use(requireRole("production_manager", "ceo"));
 router16.get("/sends", threadDyeingController.listSends);
 router16.post("/sends", validateRequest(createDyeingSendSchema), threadDyeingController.send);
 router16.post(
@@ -10566,7 +11153,7 @@ var thread_dyeing_routes_default = router16;
 import { Router as Router18 } from "express";
 
 // src/modules/ink/ink.repository.ts
-import { desc as desc11, eq as eq17, sql as sql13 } from "drizzle-orm";
+import { desc as desc11, eq as eq17, sql as sql15 } from "drizzle-orm";
 var InkRepository = class {
   /* ---------------- Purchases ---------------- */
   listPurchases() {
@@ -10617,39 +11204,39 @@ var InkRepository = class {
   async stockLevels() {
     const purchased = db.select({
       materialCode: inkPurchases.materialCode,
-      purchasedQty: sql13`COALESCE(SUM(${inkPurchases.quantity}), 0)`.as("purchased_qty"),
-      purchasedWeight: sql13`COALESCE(SUM(${inkPurchases.totalWeight}), 0)`.as("purchased_weight")
+      purchasedQty: sql15`COALESCE(SUM(${inkPurchases.quantity}), 0)`.as("purchased_qty"),
+      purchasedWeight: sql15`COALESCE(SUM(${inkPurchases.totalWeight}), 0)`.as("purchased_weight")
     }).from(inkPurchases).groupBy(inkPurchases.materialCode).as("purchased");
     const consumed = db.select({
       materialCode: inkConsumptions.materialCode,
-      consumedQty: sql13`COALESCE(SUM(${inkConsumptions.qtyAssigned}), 0)`.as("consumed_qty"),
-      consumedWeight: sql13`COALESCE(SUM(${inkConsumptions.weight}), 0)`.as("consumed_weight")
+      consumedQty: sql15`COALESCE(SUM(${inkConsumptions.qtyAssigned}), 0)`.as("consumed_qty"),
+      consumedWeight: sql15`COALESCE(SUM(${inkConsumptions.weight}), 0)`.as("consumed_weight")
     }).from(inkConsumptions).groupBy(inkConsumptions.materialCode).as("consumed");
     return db.select({
       materialCode: purchased.materialCode,
       purchasedQty: purchased.purchasedQty,
       purchasedWeight: purchased.purchasedWeight,
-      consumedQty: sql13`COALESCE(${consumed.consumedQty}, 0)`,
-      consumedWeight: sql13`COALESCE(${consumed.consumedWeight}, 0)`
+      consumedQty: sql15`COALESCE(${consumed.consumedQty}, 0)`,
+      consumedWeight: sql15`COALESCE(${consumed.consumedWeight}, 0)`
     }).from(purchased).leftJoin(consumed, eq17(purchased.materialCode, consumed.materialCode)).orderBy(purchased.materialCode);
   }
   /** Current balance weight for one material code (purchased − consumed). */
   async balanceWeight(materialCode) {
     const [row] = await db.select({
-      purchased: sql13`COALESCE((SELECT SUM(${inkPurchases.totalWeight}) FROM ${inkPurchases} WHERE ${inkPurchases.materialCode} = ${materialCode}), 0)`,
-      consumed: sql13`COALESCE((SELECT SUM(${inkConsumptions.weight}) FROM ${inkConsumptions} WHERE ${inkConsumptions.materialCode} = ${materialCode}), 0)`
-    }).from(sql13`(SELECT 1) AS one`);
+      purchased: sql15`COALESCE((SELECT SUM(${inkPurchases.totalWeight}) FROM ${inkPurchases} WHERE ${inkPurchases.materialCode} = ${materialCode}), 0)`,
+      consumed: sql15`COALESCE((SELECT SUM(${inkConsumptions.weight}) FROM ${inkConsumptions} WHERE ${inkConsumptions.materialCode} = ${materialCode}), 0)`
+    }).from(sql15`(SELECT 1) AS one`);
     return Number(row?.purchased ?? 0) - Number(row?.consumed ?? 0);
   }
   /** Consumption totals grouped by operator, for the operator-breakdown view. */
   async consumptionByOperator() {
     return db.select({
       operatorId: inkConsumptions.operatorId,
-      operatorName: sql13`COALESCE(${inkConsumptions.operatorName}, ${operators.name}, 'Unassigned')`,
-      entries: sql13`COUNT(*)`,
-      totalQty: sql13`COALESCE(SUM(${inkConsumptions.qtyAssigned}), 0)`,
-      totalWeight: sql13`COALESCE(SUM(${inkConsumptions.weight}), 0)`
-    }).from(inkConsumptions).leftJoin(operators, eq17(inkConsumptions.operatorId, operators.id)).groupBy(inkConsumptions.operatorId, inkConsumptions.operatorName, operators.name).orderBy(sql13`SUM(${inkConsumptions.weight}) DESC`);
+      operatorName: sql15`COALESCE(${inkConsumptions.operatorName}, ${operators.name}, 'Unassigned')`,
+      entries: sql15`COUNT(*)`,
+      totalQty: sql15`COALESCE(SUM(${inkConsumptions.qtyAssigned}), 0)`,
+      totalWeight: sql15`COALESCE(SUM(${inkConsumptions.weight}), 0)`
+    }).from(inkConsumptions).leftJoin(operators, eq17(inkConsumptions.operatorId, operators.id)).groupBy(inkConsumptions.operatorId, inkConsumptions.operatorName, operators.name).orderBy(sql15`SUM(${inkConsumptions.weight}) DESC`);
   }
 };
 var inkRepository = new InkRepository();
@@ -10826,6 +11413,7 @@ var createInkConsumptionSchema = z23.object({
 
 // src/modules/ink/ink.routes.ts
 var router17 = Router18();
+router17.use(requireRole("production_manager", "ceo"));
 router17.get("/purchases", inkController.listPurchases);
 router17.post("/purchases", validateRequest(createInkPurchaseSchema), inkController.createPurchase);
 router17.put(
@@ -10846,47 +11434,49 @@ var ink_routes_default = router17;
 import { Router as Router19 } from "express";
 
 // src/modules/analytics/analytics.repository.ts
-import { eq as eq18, sql as sql14 } from "drizzle-orm";
+import { eq as eq18, sql as sql16 } from "drizzle-orm";
 var AnalyticsRepository = class {
   async countWorkOrders() {
-    const [row] = await db.select({ value: sql14`count(*)` }).from(workOrders);
-    return Number(row?.value ?? 0);
+    const [printedRow] = await db.select({ value: sql16`count(*)` }).from(printedLabelWorkOrders);
+    const [wovenRow] = await db.select({ value: sql16`count(*)` }).from(wovenLabelWorkOrders);
+    return Number(printedRow?.value ?? 0) + Number(wovenRow?.value ?? 0);
   }
   /** Work orders still in production (not yet completed/dispatched). */
   async countSubmittedWorkOrders() {
-    const [row] = await db.select({ value: sql14`count(*)` }).from(workOrders).where(eq18(workOrders.status, "initiate_production"));
-    return Number(row?.value ?? 0);
+    const [printedRow] = await db.select({ value: sql16`count(*)` }).from(printedLabelWorkOrders).where(eq18(printedLabelWorkOrders.status, "initiate_production"));
+    const [wovenRow] = await db.select({ value: sql16`count(*)` }).from(wovenLabelWorkOrders).where(eq18(wovenLabelWorkOrders.status, "initiate_production"));
+    return Number(printedRow?.value ?? 0) + Number(wovenRow?.value ?? 0);
   }
   /* Production counts are per label-type line on a production order. A line is complete
      when every planned roll has been packaged. */
   async countProductionProgress() {
-    const [row] = await db.select({ value: sql14`count(*)` }).from(productionOrderLines);
+    const [row] = await db.select({ value: sql16`count(*)` }).from(productionOrderLines);
     return Number(row?.value ?? 0);
   }
   async countActiveProductionProgress() {
-    const [row] = await db.select({ value: sql14`count(*)` }).from(productionOrderLines).where(sql14`cast(${productionOrderLines.packagedRolls} as numeric) < cast(${productionOrderLines.totalRolls} as numeric)`);
+    const [row] = await db.select({ value: sql16`count(*)` }).from(productionOrderLines).where(sql16`cast(${productionOrderLines.packagedRolls} as numeric) < cast(${productionOrderLines.totalRolls} as numeric)`);
     return Number(row?.value ?? 0);
   }
   async countCompletedProductionProgress() {
-    const [row] = await db.select({ value: sql14`count(*)` }).from(productionOrderLines).where(
-      sql14`cast(${productionOrderLines.packagedRolls} as numeric) >= cast(${productionOrderLines.totalRolls} as numeric) AND cast(${productionOrderLines.totalRolls} as numeric) > 0`
+    const [row] = await db.select({ value: sql16`count(*)` }).from(productionOrderLines).where(
+      sql16`cast(${productionOrderLines.packagedRolls} as numeric) >= cast(${productionOrderLines.totalRolls} as numeric) AND cast(${productionOrderLines.totalRolls} as numeric) > 0`
     );
     return Number(row?.value ?? 0);
   }
   async countMaterials() {
-    const [row] = await db.select({ value: sql14`count(*)` }).from(materials);
+    const [row] = await db.select({ value: sql16`count(*)` }).from(materials);
     return Number(row?.value ?? 0);
   }
   async countLowStock() {
-    const [row] = await db.select({ value: sql14`count(*)` }).from(inventoryRolls).where(sql14`cast(${inventoryRolls.balanceRolls} as numeric) < 5`);
+    const [row] = await db.select({ value: sql16`count(*)` }).from(inventoryRolls).where(sql16`cast(${inventoryRolls.balanceRolls} as numeric) < 5`);
     return Number(row?.value ?? 0);
   }
   async sumBalanceRolls() {
-    const [row] = await db.select({ value: sql14`coalesce(sum(cast(${inventoryRolls.balanceRolls} as numeric)), 0)` }).from(inventoryRolls);
+    const [row] = await db.select({ value: sql16`coalesce(sum(cast(${inventoryRolls.balanceRolls} as numeric)), 0)` }).from(inventoryRolls);
     return Number(row?.value ?? 0);
   }
   async sumIssuedRolls() {
-    const [row] = await db.select({ value: sql14`coalesce(sum(cast(${inventoryRolls.issuedRolls} as numeric)), 0)` }).from(inventoryRolls);
+    const [row] = await db.select({ value: sql16`coalesce(sum(cast(${inventoryRolls.issuedRolls} as numeric)), 0)` }).from(inventoryRolls);
     return Number(row?.value ?? 0);
   }
 };
@@ -10930,6 +11520,7 @@ var analyticsController = new AnalyticsController();
 
 // src/modules/analytics/analytics.routes.ts
 var router18 = Router19();
+router18.use(requireRole("ceo", "production_manager", "accountant"));
 router18.get("/kpis", analyticsController.getKpis);
 var analytics_routes_default = router18;
 
@@ -10937,7 +11528,7 @@ var analytics_routes_default = router18;
 import { Router as Router20 } from "express";
 
 // src/modules/label-types/label-types.repository.ts
-import { eq as eq19, and as and15, asc as asc11 } from "drizzle-orm";
+import { eq as eq19, and as and14, asc as asc11 } from "drizzle-orm";
 var LabelTypesRepository = class {
   async findAll(filters) {
     const conditions = [];
@@ -10949,7 +11540,7 @@ var LabelTypesRepository = class {
         conditions.push(eq19(labelTypes.isActive, true));
       }
     }
-    return db.select().from(labelTypes).where(conditions.length > 0 ? and15(...conditions) : void 0).orderBy(asc11(labelTypes.name));
+    return db.select().from(labelTypes).where(conditions.length > 0 ? and14(...conditions) : void 0).orderBy(asc11(labelTypes.name));
   }
   async findById(id) {
     const [labelType] = await db.select().from(labelTypes).where(eq19(labelTypes.id, Number(id)));
@@ -10957,7 +11548,7 @@ var LabelTypesRepository = class {
   }
   async findByNameAndCategory(name, category) {
     const [labelType] = await db.select().from(labelTypes).where(
-      and15(
+      and14(
         eq19(labelTypes.name, name),
         eq19(labelTypes.category, category)
       )
@@ -11076,12 +11667,1278 @@ var labelTypesQuerySchema = z24.object({
 
 // src/modules/label-types/label-types.routes.ts
 var router19 = Router20();
+router19.use(requireRole("production_manager", "ceo"));
 router19.get("/", validateQuery(labelTypesQuerySchema), labelTypesController.getAll);
 router19.get("/:id", validateParams(labelTypeParamsSchema), labelTypesController.getById);
 router19.post("/", validateRequest(createLabelTypeSchema), labelTypesController.create);
 router19.put("/:id", validateParams(labelTypeParamsSchema), validateRequest(updateLabelTypeSchema), labelTypesController.update);
 router19.delete("/:id", validateParams(labelTypeParamsSchema), labelTypesController.delete);
 var label_types_routes_default = router19;
+
+// src/modules/work-orders/printed/printed-work-order.routes.ts
+import { Router as Router21 } from "express";
+
+// src/modules/work-orders/printed/printed-work-order.repository.ts
+import { eq as eq20, desc as desc13, sql as sql17 } from "drizzle-orm";
+var printedWorkOrderSelect = {
+  id: printedLabelWorkOrders.id,
+  soNumber: printedLabelWorkOrders.soNumber,
+  poNumber: printedLabelWorkOrders.poNumber,
+  orderDate: printedLabelWorkOrders.orderDate,
+  dueDate: printedLabelWorkOrders.dueDate,
+  totalQty: printedLabelWorkOrders.totalQty,
+  brandId: printedLabelWorkOrders.brandId,
+  comment: printedLabelWorkOrders.comment,
+  imageUrl: printedLabelWorkOrders.imageUrl,
+  dcImageUrl: printedLabelWorkOrders.dcImageUrl,
+  status: printedLabelWorkOrders.status,
+  priority: printedLabelWorkOrders.priority,
+  orderType: printedLabelWorkOrders.orderType,
+  productType: sql17`'printed'::text`,
+  dcNumber: printedLabelWorkOrders.dcNumber,
+  lcNumber: printedLabelWorkOrders.lcNumber,
+  fbrInvoiceNumber: printedLabelWorkOrders.fbrInvoiceNumber,
+  dispatchedDate: printedLabelWorkOrders.dispatchedDate,
+  dispatchedQty: printedLabelWorkOrders.dispatchedQty,
+  createdAt: printedLabelWorkOrders.createdAt,
+  updatedAt: printedLabelWorkOrders.updatedAt,
+  brandName: brands.name,
+  companyId: companies.id,
+  companyName: companies.name
+};
+var PrintedWorkOrderRepository = class {
+  async findAll(filters) {
+    const conditions = [];
+    if (filters?.soNumber) conditions.push(sql17`"so_number" ILIKE ${"%" + filters.soNumber + "%"}`);
+    if (filters?.poNumber) conditions.push(sql17`"po_number" ILIKE ${"%" + filters.poNumber + "%"}`);
+    if (filters?.dcNumber) conditions.push(sql17`"dc_number" ILIKE ${"%" + filters.dcNumber + "%"}`);
+    if (filters?.lcNumber) conditions.push(sql17`"lc_number" ILIKE ${"%" + filters.lcNumber + "%"}`);
+    if (filters?.status) conditions.push(eq20(printedLabelWorkOrders.status, filters.status));
+    if (filters?.startDate && filters?.endDate) {
+      conditions.push(sql17`"order_date" BETWEEN ${filters.startDate} AND ${filters.endDate}`);
+    }
+    return db.select(printedWorkOrderSelect).from(printedLabelWorkOrders).leftJoin(brands, eq20(printedLabelWorkOrders.brandId, brands.id)).leftJoin(companies, eq20(brands.companyId, companies.id)).where(conditions.length > 0 ? conditions.reduce((a, b) => sql17`${a} AND ${b}`) : void 0).orderBy(desc13(printedLabelWorkOrders.createdAt));
+  }
+  async findById(id) {
+    const [row] = await db.select(printedWorkOrderSelect).from(printedLabelWorkOrders).leftJoin(brands, eq20(printedLabelWorkOrders.brandId, brands.id)).leftJoin(companies, eq20(brands.companyId, companies.id)).where(eq20(printedLabelWorkOrders.id, Number(id)));
+    return row;
+  }
+  async findBySoNumber(soNumber) {
+    const [row] = await db.select(printedWorkOrderSelect).from(printedLabelWorkOrders).leftJoin(brands, eq20(printedLabelWorkOrders.brandId, brands.id)).leftJoin(companies, eq20(brands.companyId, companies.id)).where(eq20(printedLabelWorkOrders.soNumber, soNumber));
+    return row;
+  }
+  async findRawById(id) {
+    const [row] = await db.select().from(printedLabelWorkOrders).where(eq20(printedLabelWorkOrders.id, Number(id)));
+    return row;
+  }
+  /** Creates a printed sales order (all columns are on the printed table now). */
+  async create(data) {
+    const [row] = await db.insert(printedLabelWorkOrders).values({
+      ...data,
+      poNumber: data.poNumber ?? null,
+      dueDate: data.dueDate ?? null,
+      brandId: data.brandId ?? null,
+      comment: data.comment ?? null,
+      imageUrl: data.imageUrl ?? null,
+      dcImageUrl: data.dcImageUrl ?? null,
+      priority: data.priority ?? "normal",
+      orderType: data.orderType ?? "normal order"
+    }).returning();
+    return row;
+  }
+  async update(id, data) {
+    const [row] = await db.update(printedLabelWorkOrders).set({ ...data, updatedAt: /* @__PURE__ */ new Date() }).where(eq20(printedLabelWorkOrders.id, Number(id))).returning();
+    return row;
+  }
+  async delete(id) {
+    await db.delete(printedLabelWorkOrders).where(eq20(printedLabelWorkOrders.id, Number(id)));
+  }
+};
+var printedWorkOrderRepository = new PrintedWorkOrderRepository();
+
+// src/modules/work-orders/printed/printed-work-order.service.ts
+var PrintedWorkOrderService = class {
+  async getWorkOrders(filters) {
+    return printedWorkOrderRepository.findAll(filters);
+  }
+  async getWorkOrder(id) {
+    const workOrder = await printedWorkOrderRepository.findById(id);
+    if (!workOrder) throw new NotFoundError(Messages.notFound(Entity.WORK_ORDER));
+    const productionOrder = await productionOrderRepository.findByWorkOrderId(id);
+    return { ...workOrder, productionOrder: productionOrder ?? null };
+  }
+  async createWorkOrder(data) {
+    const existing = await printedWorkOrderRepository.findBySoNumber(data.soNumber);
+    if (existing) throw new ConflictError(Messages.alreadyExists(Entity.WORK_ORDER));
+    return printedWorkOrderRepository.create({
+      soNumber: data.soNumber,
+      poNumber: data.poNumber,
+      orderDate: data.orderDate || (/* @__PURE__ */ new Date()).toISOString().split("T")[0],
+      dueDate: data.dueDate,
+      totalQty: data.totalQty,
+      brandId: data.brandId,
+      comment: data.comment,
+      imageUrl: data.imageUrl?.trim() ? data.imageUrl.trim() : null,
+      dcImageUrl: data.dcImageUrl?.trim() ? data.dcImageUrl.trim() : null,
+      priority: data.priority ?? "normal",
+      orderType: data.orderType ?? "normal order"
+    });
+  }
+  async updateWorkOrder(id, data) {
+    const existing = await printedWorkOrderRepository.findById(id);
+    if (!existing) throw new NotFoundError(Messages.notFound(Entity.WORK_ORDER));
+    return printedWorkOrderRepository.update(id, {
+      ...data.poNumber !== void 0 ? { poNumber: data.poNumber || null } : {},
+      ...data.dueDate !== void 0 ? { dueDate: data.dueDate || null } : {},
+      ...data.totalQty !== void 0 ? { totalQty: data.totalQty } : {},
+      ...data.brandId !== void 0 ? { brandId: data.brandId } : {},
+      ...data.comment !== void 0 ? { comment: data.comment || null } : {},
+      ...data.imageUrl !== void 0 ? { imageUrl: data.imageUrl ? data.imageUrl.trim() : null } : {},
+      ...data.dcImageUrl !== void 0 ? { dcImageUrl: data.dcImageUrl ? data.dcImageUrl.trim() : null } : {},
+      ...data.status !== void 0 ? { status: data.status } : {},
+      ...data.priority !== void 0 ? { priority: data.priority } : {},
+      ...data.orderType !== void 0 ? { orderType: data.orderType } : {},
+      ...data.dcNumber !== void 0 ? { dcNumber: data.dcNumber || null } : {},
+      ...data.lcNumber !== void 0 ? { lcNumber: data.lcNumber || null } : {},
+      ...data.fbrInvoiceNumber !== void 0 ? { fbrInvoiceNumber: data.fbrInvoiceNumber || null } : {},
+      ...data.dispatchedDate !== void 0 ? { dispatchedDate: data.dispatchedDate || null } : {},
+      ...data.dispatchedQty !== void 0 ? { dispatchedQty: data.dispatchedQty } : {}
+    });
+  }
+  async dispatchWorkOrder(id, data) {
+    const existing = await printedWorkOrderRepository.findById(id);
+    if (!existing) throw new NotFoundError(Messages.notFound(Entity.WORK_ORDER));
+    if (existing.status !== "complete") {
+      throw new ConflictError("Only a completed work order can be dispatched");
+    }
+    return printedWorkOrderRepository.update(id, {
+      dcNumber: data.dcNumber,
+      lcNumber: data.lcNumber,
+      fbrInvoiceNumber: data.fbrInvoiceNumber,
+      dispatchedDate: data.dispatchedDate,
+      dispatchedQty: data.dispatchedQty,
+      status: "dispatched",
+      ...data.imageUrl !== void 0 ? { imageUrl: data.imageUrl || null } : {},
+      ...data.dcImageUrl !== void 0 ? { dcImageUrl: data.dcImageUrl || null } : {}
+    });
+  }
+  async deleteWorkOrder(id) {
+    const existing = await printedWorkOrderRepository.findRawById(id);
+    if (!existing) throw new NotFoundError(Messages.notFound(Entity.WORK_ORDER));
+    await printedWorkOrderRepository.delete(id);
+  }
+};
+var printedWorkOrderService = new PrintedWorkOrderService();
+
+// src/modules/work-orders/printed/printed-work-order.controller.ts
+var PrintedWorkOrderController = class {
+  getWorkOrders = asyncHandler(async (req, res) => {
+    const query = req.validatedQuery ?? req.query;
+    const data = await printedWorkOrderService.getWorkOrders({
+      soNumber: query.soNumber,
+      poNumber: query.poNumber,
+      status: query.status,
+      dcNumber: query.dcNumber,
+      lcNumber: query.lcNumber,
+      startDate: query.startDate,
+      endDate: query.endDate
+    });
+    res.json({ data });
+  });
+  getWorkOrder = asyncHandler(async (req, res) => {
+    const { id } = req.validatedParams ?? req.params;
+    const data = await printedWorkOrderService.getWorkOrder(id);
+    res.json({ data });
+  });
+  createWorkOrder = asyncHandler(async (req, res) => {
+    const input = req.validatedBody ?? req.body;
+    const data = await printedWorkOrderService.createWorkOrder(input);
+    res.status(201).json({ data });
+  });
+  updateWorkOrder = asyncHandler(async (req, res) => {
+    const { id } = req.validatedParams ?? req.params;
+    const input = req.validatedBody ?? req.body;
+    const data = await printedWorkOrderService.updateWorkOrder(id, input);
+    res.json({ data });
+  });
+  deleteWorkOrder = asyncHandler(async (req, res) => {
+    const { id } = req.validatedParams ?? req.params;
+    await printedWorkOrderService.deleteWorkOrder(id);
+    res.status(204).send();
+  });
+};
+var printedWorkOrderController = new PrintedWorkOrderController();
+
+// src/modules/work-orders/printed/printed-work-order.schema.ts
+import { z as z25 } from "zod";
+var createPrintedWorkOrderSchema = z25.object({
+  body: z25.object({
+    soNumber: z25.string().min(1, "SO Number is required"),
+    poNumber: z25.string().optional(),
+    orderDate: z25.string().optional(),
+    dueDate: z25.string().optional(),
+    totalQty: z25.coerce.number().int().positive("Total quantity must be greater than 0"),
+    brandId: z25.coerce.number().int().positive("Brand ID must be a positive integer").optional(),
+    comment: z25.string().optional(),
+    priority: z25.enum(WORK_ORDER_PRIORITIES).default("normal"),
+    orderType: z25.enum(WORK_ORDER_TYPES).default("normal order"),
+    imageUrl: artworkImageSchema,
+    dcImageUrl: artworkImageSchema,
+    /** Hard-coded: the printed workflow never accepts a woven spec. */
+    productType: z25.literal("printed").default("printed"),
+    /** Rejected on printed orders — the schema strips it so the service never sees it. */
+    wovenDetail: z25.undefined().optional()
+  })
+});
+var updatePrintedWorkOrderSchema = z25.object({
+  body: z25.object({
+    poNumber: z25.string().optional(),
+    dueDate: z25.string().optional(),
+    totalQty: z25.coerce.number().int().positive().optional(),
+    brandId: z25.coerce.number().int().positive().optional(),
+    comment: z25.string().optional(),
+    priority: z25.enum(WORK_ORDER_PRIORITIES).optional(),
+    orderType: z25.enum(WORK_ORDER_TYPES).optional(),
+    imageUrl: artworkImageSchema,
+    dcImageUrl: artworkImageSchema,
+    status: z25.enum(["initiate_production", "production", "complete", "dispatched"]).optional(),
+    dcNumber: z25.string().optional(),
+    lcNumber: z25.string().optional(),
+    fbrInvoiceNumber: z25.string().optional(),
+    dispatchedDate: z25.string().optional(),
+    dispatchedQty: z25.coerce.number().int().positive().optional(),
+    /** Rejected on printed orders. */
+    wovenDetail: z25.undefined().optional()
+  })
+});
+
+// src/modules/work-orders/printed/printed-work-order.routes.ts
+var router20 = Router21();
+router20.get("/", validateQuery(listWorkOrdersQuerySchema), requireWorkOrderAccess(), printedWorkOrderController.getWorkOrders);
+router20.post("/", validateRequest(createPrintedWorkOrderSchema), requireRole("office_staff", "production_manager"), printedWorkOrderController.createWorkOrder);
+router20.get("/:id", validateParams(idParamsSchema), requireWorkOrderAccess(), printedWorkOrderController.getWorkOrder);
+router20.put("/:id", validateParams(idParamsSchema), validateRequest(updatePrintedWorkOrderSchema), requireRole("office_staff", "production_manager"), printedWorkOrderController.updateWorkOrder);
+router20.delete("/:id", validateParams(idParamsSchema), requireRole("office_staff", "production_manager"), printedWorkOrderController.deleteWorkOrder);
+var printed_work_order_routes_default = router20;
+
+// src/modules/work-orders/woven/woven-work-order.routes.ts
+import { Router as Router22 } from "express";
+
+// src/modules/work-orders/woven/woven-work-order.repository.ts
+import { eq as eq21, desc as desc14, sql as sql18 } from "drizzle-orm";
+var wovenWorkOrderSelect = {
+  id: wovenLabelWorkOrders.id,
+  soNumber: wovenLabelWorkOrders.soNumber,
+  poNumber: wovenLabelWorkOrders.poNumber,
+  orderDate: wovenLabelWorkOrders.orderDate,
+  dueDate: wovenLabelWorkOrders.dueDate,
+  totalQty: wovenLabelWorkOrders.totalQty,
+  brandId: wovenLabelWorkOrders.brandId,
+  comment: wovenLabelWorkOrders.comment,
+  imageUrl: wovenLabelWorkOrders.imageUrl,
+  dcImageUrl: wovenLabelWorkOrders.dcImageUrl,
+  status: wovenLabelWorkOrders.status,
+  priority: wovenLabelWorkOrders.priority,
+  orderType: wovenLabelWorkOrders.orderType,
+  productType: sql18`'woven'::text`,
+  dcNumber: wovenLabelWorkOrders.dcNumber,
+  lcNumber: wovenLabelWorkOrders.lcNumber,
+  fbrInvoiceNumber: wovenLabelWorkOrders.fbrInvoiceNumber,
+  dispatchedDate: wovenLabelWorkOrders.dispatchedDate,
+  dispatchedQty: wovenLabelWorkOrders.dispatchedQty,
+  createdAt: wovenLabelWorkOrders.createdAt,
+  updatedAt: wovenLabelWorkOrders.updatedAt,
+  brandName: brands.name,
+  companyId: companies.id,
+  companyName: companies.name,
+  designCode: wovenLabelWorkOrders.designCode,
+  pick: wovenLabelWorkOrders.pick,
+  repeat: sql18`${wovenLabelWorkOrders.repeat}`,
+  density: sql18`${wovenLabelWorkOrders.density}`,
+  speed: sql18`${wovenLabelWorkOrders.speed}`,
+  extra: sql18`${wovenLabelWorkOrders.extra}`,
+  estimatedWeavingHours: sql18`${wovenLabelWorkOrders.estimatedWeavingHours}`,
+  sizeLabels: sql18`${wovenLabelWorkOrders.sizeLabels}`
+};
+var WovenWorkOrderRepository = class {
+  async findAll(filters) {
+    const conditions = [];
+    if (filters?.soNumber) conditions.push(sql18`"so_number" ILIKE ${"%" + filters.soNumber + "%"}`);
+    if (filters?.poNumber) conditions.push(sql18`"po_number" ILIKE ${"%" + filters.poNumber + "%"}`);
+    if (filters?.designCode) conditions.push(sql18`"design_code" ILIKE ${"%" + filters.designCode + "%"}`);
+    if (filters?.status) conditions.push(eq21(wovenLabelWorkOrders.status, filters.status));
+    if (filters?.startDate && filters?.endDate) {
+      conditions.push(sql18`"order_date" BETWEEN ${filters.startDate} AND ${filters.endDate}`);
+    }
+    return db.select(wovenWorkOrderSelect).from(wovenLabelWorkOrders).leftJoin(brands, eq21(wovenLabelWorkOrders.brandId, brands.id)).leftJoin(companies, eq21(brands.companyId, companies.id)).where(conditions.length > 0 ? conditions.reduce((a, b) => sql18`${a} AND ${b}`) : void 0).orderBy(desc14(wovenLabelWorkOrders.createdAt));
+  }
+  async findById(id) {
+    const [row] = await db.select(wovenWorkOrderSelect).from(wovenLabelWorkOrders).leftJoin(brands, eq21(wovenLabelWorkOrders.brandId, brands.id)).leftJoin(companies, eq21(brands.companyId, companies.id)).where(eq21(wovenLabelWorkOrders.id, Number(id)));
+    return row;
+  }
+  async findByDesignCode(designCode) {
+    const [row] = await db.select(wovenWorkOrderSelect).from(wovenLabelWorkOrders).leftJoin(brands, eq21(wovenLabelWorkOrders.brandId, brands.id)).leftJoin(companies, eq21(brands.companyId, companies.id)).where(eq21(wovenLabelWorkOrders.designCode, designCode));
+    return row;
+  }
+  async findRawById(id) {
+    const [row] = await db.select().from(wovenLabelWorkOrders).where(eq21(wovenLabelWorkOrders.id, Number(id)));
+    return row;
+  }
+  /** Creates a woven sales order with its loom specification. */
+  async createWithWovenDetail(data, detail) {
+    const [row] = await db.insert(wovenLabelWorkOrders).values({
+      ...data,
+      poNumber: data.poNumber ?? null,
+      dueDate: data.dueDate ?? null,
+      brandId: data.brandId ?? null,
+      comment: data.comment ?? null,
+      imageUrl: data.imageUrl ?? null,
+      dcImageUrl: data.dcImageUrl ?? null,
+      priority: data.priority ?? "normal",
+      orderType: data.orderType ?? "normal order",
+      designCode: detail.designCode,
+      pick: detail.pick,
+      repeat: String(detail.repeat),
+      density: detail.density,
+      speed: String(detail.speed ?? 0),
+      extra: String(detail.extra ?? 0),
+      estimatedWeavingHours: String(detail.estimatedWeavingHours),
+      sizeLabels: detail.sizeLabels ?? []
+    }).returning();
+    return row;
+  }
+  async update(id, data) {
+    const [row] = await db.update(wovenLabelWorkOrders).set({ ...data, updatedAt: /* @__PURE__ */ new Date() }).where(eq21(wovenLabelWorkOrders.id, Number(id))).returning();
+    return row;
+  }
+  /** Updates the woven loom specification for an existing woven work-order. */
+  async updateWovenSpec(id, detail) {
+    const [row] = await db.update(wovenLabelWorkOrders).set({
+      ...detail.designCode !== void 0 ? { designCode: detail.designCode } : {},
+      ...detail.pick !== void 0 ? { pick: detail.pick } : {},
+      ...detail.repeat !== void 0 ? { repeat: String(detail.repeat) } : {},
+      ...detail.density !== void 0 ? { density: detail.density } : {},
+      ...detail.speed !== void 0 ? { speed: String(detail.speed) } : {},
+      ...detail.extra !== void 0 ? { extra: String(detail.extra) } : {},
+      ...detail.estimatedWeavingHours !== void 0 ? { estimatedWeavingHours: String(detail.estimatedWeavingHours) } : {},
+      ...detail.sizeLabels !== void 0 ? { sizeLabels: detail.sizeLabels } : {},
+      updatedAt: /* @__PURE__ */ new Date()
+    }).where(eq21(wovenLabelWorkOrders.id, id)).returning();
+    return row;
+  }
+  async delete(id) {
+    await db.delete(wovenLabelWorkOrders).where(eq21(wovenLabelWorkOrders.id, Number(id)));
+  }
+};
+var wovenWorkOrderRepository = new WovenWorkOrderRepository();
+
+// src/modules/work-orders/woven/woven-work-order.service.ts
+var WovenWorkOrderService = class {
+  async getWorkOrders(filters) {
+    return wovenWorkOrderRepository.findAll(filters);
+  }
+  async getWorkOrder(id) {
+    const workOrder = await wovenWorkOrderRepository.findById(id);
+    if (!workOrder) throw new NotFoundError(Messages.notFound(Entity.WORK_ORDER));
+    const productionOrder = await productionOrderRepository.findByWorkOrderId(id);
+    return { ...workOrder, productionOrder: productionOrder ?? null };
+  }
+  async createWorkOrder(data) {
+    const existingByDesign = await wovenWorkOrderRepository.findByDesignCode(data.wovenDetail.designCode);
+    if (existingByDesign) {
+      throw new ConflictError(`Design code '${data.wovenDetail.designCode}' is already in use`);
+    }
+    const totalQty = data.totalQty;
+    const estimatedWeavingHours = estimateWeavingHours({
+      totalQty,
+      repeat: data.wovenDetail.repeat,
+      pick: data.wovenDetail.pick,
+      speed: data.wovenDetail.speed
+    });
+    return wovenWorkOrderRepository.createWithWovenDetail(
+      {
+        soNumber: data.soNumber,
+        poNumber: data.poNumber,
+        orderDate: data.orderDate || (/* @__PURE__ */ new Date()).toISOString().split("T")[0],
+        dueDate: data.dueDate,
+        totalQty,
+        brandId: data.brandId,
+        comment: data.comment,
+        imageUrl: data.imageUrl?.trim() ? data.imageUrl.trim() : null,
+        dcImageUrl: data.dcImageUrl?.trim() ? data.dcImageUrl.trim() : null,
+        priority: data.priority ?? "normal",
+        orderType: data.orderType ?? "normal order"
+      },
+      {
+        designCode: data.wovenDetail.designCode,
+        pick: data.wovenDetail.pick,
+        repeat: data.wovenDetail.repeat,
+        density: data.wovenDetail.density,
+        speed: data.wovenDetail.speed,
+        extra: data.wovenDetail.extra,
+        sizeLabels: data.wovenDetail.sizeLabels,
+        estimatedWeavingHours
+      }
+    );
+  }
+  async updateWorkOrder(id, data) {
+    const existing = await wovenWorkOrderRepository.findById(id);
+    if (!existing) throw new NotFoundError(Messages.notFound(Entity.WORK_ORDER));
+    const commercialUpdate = {};
+    if (data.poNumber !== void 0) commercialUpdate.poNumber = data.poNumber || null;
+    if (data.dueDate !== void 0) commercialUpdate.dueDate = data.dueDate || null;
+    if (data.totalQty !== void 0) commercialUpdate.totalQty = data.totalQty;
+    if (data.brandId !== void 0) commercialUpdate.brandId = data.brandId;
+    if (data.comment !== void 0) commercialUpdate.comment = data.comment || null;
+    if (data.imageUrl !== void 0) commercialUpdate.imageUrl = data.imageUrl ? data.imageUrl.trim() : null;
+    if (data.dcImageUrl !== void 0) commercialUpdate.dcImageUrl = data.dcImageUrl ? data.dcImageUrl.trim() : null;
+    if (data.status !== void 0) commercialUpdate.status = data.status;
+    if (data.priority !== void 0) commercialUpdate.priority = data.priority;
+    if (data.orderType !== void 0) commercialUpdate.orderType = data.orderType;
+    if (data.dcNumber !== void 0) commercialUpdate.dcNumber = data.dcNumber || null;
+    if (data.lcNumber !== void 0) commercialUpdate.lcNumber = data.lcNumber || null;
+    if (data.fbrInvoiceNumber !== void 0) commercialUpdate.fbrInvoiceNumber = data.fbrInvoiceNumber || null;
+    if (data.dispatchedDate !== void 0) commercialUpdate.dispatchedDate = data.dispatchedDate || null;
+    if (data.dispatchedQty !== void 0) commercialUpdate.dispatchedQty = data.dispatchedQty;
+    if (Object.keys(commercialUpdate).length > 0) {
+      await wovenWorkOrderRepository.update(id, commercialUpdate);
+    }
+    if (data.wovenDetail) {
+      const detail = {};
+      if (data.wovenDetail.designCode !== void 0) detail.designCode = data.wovenDetail.designCode;
+      if (data.wovenDetail.pick !== void 0) detail.pick = data.wovenDetail.pick;
+      if (data.wovenDetail.repeat !== void 0) detail.repeat = String(data.wovenDetail.repeat);
+      if (data.wovenDetail.density !== void 0) detail.density = data.wovenDetail.density;
+      if (data.wovenDetail.speed !== void 0) detail.speed = String(data.wovenDetail.speed);
+      if (data.wovenDetail.extra !== void 0) detail.extra = String(data.wovenDetail.extra);
+      if (data.wovenDetail.sizeLabels !== void 0) detail.sizeLabels = data.wovenDetail.sizeLabels;
+      const loomChanged = data.wovenDetail.pick !== void 0 || data.wovenDetail.repeat !== void 0 || data.wovenDetail.speed !== void 0 || data.totalQty !== void 0;
+      if (loomChanged) {
+        detail.estimatedWeavingHours = Number(
+          estimateWeavingHours({
+            totalQty: data.totalQty ?? Number(existing.totalQty),
+            repeat: data.wovenDetail.repeat ?? Number(existing.repeat ?? 0),
+            pick: data.wovenDetail.pick ?? Number(existing.pick ?? 0),
+            speed: data.wovenDetail.speed ?? Number(existing.speed ?? 0)
+          })
+        );
+      }
+      if (Object.keys(detail).length > 0) {
+        await wovenWorkOrderRepository.updateWovenSpec(Number(id), detail);
+      }
+    }
+    return wovenWorkOrderRepository.findById(id);
+  }
+  async dispatchWorkOrder(id, data) {
+    const existing = await wovenWorkOrderRepository.findById(id);
+    if (!existing) throw new NotFoundError(Messages.notFound(Entity.WORK_ORDER));
+    if (existing.status !== "complete") {
+      throw new ConflictError("Only a completed work order can be dispatched");
+    }
+    return wovenWorkOrderRepository.update(id, {
+      dcNumber: data.dcNumber,
+      lcNumber: data.lcNumber,
+      fbrInvoiceNumber: data.fbrInvoiceNumber,
+      dispatchedDate: data.dispatchedDate,
+      dispatchedQty: data.dispatchedQty,
+      status: "dispatched",
+      imageUrl: data.imageUrl?.trim() ? data.imageUrl.trim() : null,
+      dcImageUrl: data.dcImageUrl?.trim() ? data.dcImageUrl.trim() : null
+    });
+  }
+  async deleteWorkOrder(id) {
+    const existing = await wovenWorkOrderRepository.findById(id);
+    if (!existing) throw new NotFoundError(Messages.notFound(Entity.WORK_ORDER));
+    await wovenWorkOrderRepository.delete(id);
+  }
+};
+var wovenWorkOrderService = new WovenWorkOrderService();
+
+// src/modules/work-orders/woven/woven-work-order.controller.ts
+var WovenWorkOrderController = class {
+  getWorkOrders = asyncHandler(async (req, res) => {
+    const query = req.validatedQuery ?? req.query;
+    const data = await wovenWorkOrderService.getWorkOrders({
+      soNumber: query.soNumber,
+      poNumber: query.poNumber,
+      status: query.status,
+      designCode: query.designCode,
+      startDate: query.startDate,
+      endDate: query.endDate
+    });
+    res.json({ data });
+  });
+  getWorkOrder = asyncHandler(async (req, res) => {
+    const { id } = req.validatedParams ?? req.params;
+    const data = await wovenWorkOrderService.getWorkOrder(id);
+    res.json({ data });
+  });
+  createWorkOrder = asyncHandler(async (req, res) => {
+    const input = req.validatedBody ?? req.body;
+    const data = await wovenWorkOrderService.createWorkOrder(input);
+    res.status(201).json({ data });
+  });
+  updateWorkOrder = asyncHandler(async (req, res) => {
+    const { id } = req.validatedParams ?? req.params;
+    const input = req.validatedBody ?? req.body;
+    const data = await wovenWorkOrderService.updateWorkOrder(id, input);
+    res.json({ data });
+  });
+  deleteWorkOrder = asyncHandler(async (req, res) => {
+    const { id } = req.validatedParams ?? req.params;
+    await wovenWorkOrderService.deleteWorkOrder(id);
+    res.status(204).send();
+  });
+};
+var wovenWorkOrderController = new WovenWorkOrderController();
+
+// src/modules/work-orders/woven/woven-work-order.schema.ts
+import { z as z26 } from "zod";
+var createWovenWorkOrderSchema = z26.object({
+  body: z26.object({
+    soNumber: z26.string().min(1, "SO Number is required"),
+    poNumber: z26.string().optional(),
+    orderDate: z26.string().optional(),
+    dueDate: z26.string().optional(),
+    totalQty: z26.coerce.number().int().positive("Total quantity must be greater than 0"),
+    brandId: z26.coerce.number().int().positive("Brand ID must be a positive integer").optional(),
+    comment: z26.string().optional(),
+    priority: z26.enum(WORK_ORDER_PRIORITIES).default("normal"),
+    orderType: z26.enum(WORK_ORDER_TYPES).default("normal order"),
+    imageUrl: artworkImageSchema,
+    dcImageUrl: artworkImageSchema,
+    /** Hard-coded: the woven workflow. */
+    productType: z26.literal("woven").default("woven"),
+    /** Required for woven orders. */
+    wovenDetail: wovenDetailSchema
+  })
+});
+var updateWovenWorkOrderSchema = z26.object({
+  body: z26.object({
+    poNumber: z26.string().optional(),
+    dueDate: z26.string().optional(),
+    totalQty: z26.coerce.number().int().positive().optional(),
+    brandId: z26.coerce.number().int().positive().optional(),
+    comment: z26.string().optional(),
+    priority: z26.enum(WORK_ORDER_PRIORITIES).optional(),
+    orderType: z26.enum(WORK_ORDER_TYPES).optional(),
+    imageUrl: artworkImageSchema,
+    dcImageUrl: artworkImageSchema,
+    status: z26.enum(["initiate_production", "production", "complete", "dispatched"]).optional(),
+    dcNumber: z26.string().optional(),
+    lcNumber: z26.string().optional(),
+    fbrInvoiceNumber: z26.string().optional(),
+    dispatchedDate: z26.string().optional(),
+    dispatchedQty: z26.coerce.number().int().positive().optional(),
+    /** Loom-spec edits — partial update of the woven extension. */
+    wovenDetail: wovenDetailSchema.partial().optional()
+  })
+});
+
+// src/modules/work-orders/woven/woven-work-order.routes.ts
+var router21 = Router22();
+router21.get("/", validateQuery(listWorkOrdersQuerySchema), requireWorkOrderAccess(), wovenWorkOrderController.getWorkOrders);
+router21.post("/", validateRequest(createWovenWorkOrderSchema), requireRole("office_staff", "production_manager"), wovenWorkOrderController.createWorkOrder);
+router21.get("/:id", validateParams(idParamsSchema), requireWorkOrderAccess(), wovenWorkOrderController.getWorkOrder);
+router21.put("/:id", validateParams(idParamsSchema), validateRequest(updateWovenWorkOrderSchema), requireRole("office_staff", "production_manager"), wovenWorkOrderController.updateWorkOrder);
+router21.delete("/:id", validateParams(idParamsSchema), requireRole("office_staff", "production_manager"), wovenWorkOrderController.deleteWorkOrder);
+var woven_work_order_routes_default = router21;
+
+// src/modules/production/printed/printed-production-order.routes.ts
+import { Router as Router23 } from "express";
+
+// src/modules/production/printed/printed-production-order.repository.ts
+import { eq as eq22, desc as desc15, and as and15, sql as sql19 } from "drizzle-orm";
+var printedProductionOrderSelect = {
+  id: productionOrders.id,
+  productionNumber: productionOrders.productionNumber,
+  workOrderId: productionOrders.printedWorkOrderId,
+  totalQty: productionOrders.totalQty,
+  status: productionOrders.status,
+  notes: productionOrders.notes,
+  createdByUserId: productionOrders.createdByUserId,
+  plannedAt: productionOrders.plannedAt,
+  completedAt: productionOrders.completedAt,
+  createdAt: productionOrders.createdAt,
+  updatedAt: productionOrders.updatedAt,
+  soNumber: printedLabelWorkOrders.soNumber,
+  poNumber: printedLabelWorkOrders.poNumber,
+  orderDate: printedLabelWorkOrders.orderDate,
+  dueDate: printedLabelWorkOrders.dueDate,
+  priority: printedLabelWorkOrders.priority,
+  brandName: brands.name,
+  companyName: companies.name
+};
+var PrintedProductionOrderRepository = class {
+  async findAll(filters) {
+    const conditions = [];
+    if (filters?.status) conditions.push(eq22(productionOrders.status, filters.status));
+    if (filters?.soNumber) conditions.push(sql19`${printedLabelWorkOrders.soNumber} ILIKE ${"%" + filters.soNumber + "%"}`);
+    if (filters?.poNumber) conditions.push(sql19`${printedLabelWorkOrders.poNumber} ILIKE ${"%" + filters.poNumber + "%"}`);
+    return db.select(printedProductionOrderSelect).from(productionOrders).leftJoin(printedLabelProductionOrders, eq22(printedLabelProductionOrders.productionOrderId, productionOrders.id)).leftJoin(printedLabelWorkOrders, eq22(printedLabelWorkOrders.id, productionOrders.printedWorkOrderId)).leftJoin(brands, eq22(brands.id, printedLabelWorkOrders.brandId)).leftJoin(companies, eq22(companies.id, brands.companyId)).where(conditions.length > 0 ? and15(...conditions) : void 0).orderBy(desc15(productionOrders.createdAt));
+  }
+  async findById(id) {
+    const [row] = await db.select(printedProductionOrderSelect).from(productionOrders).leftJoin(printedLabelProductionOrders, eq22(printedLabelProductionOrders.productionOrderId, productionOrders.id)).leftJoin(printedLabelWorkOrders, eq22(printedLabelWorkOrders.id, productionOrders.printedWorkOrderId)).leftJoin(brands, eq22(brands.id, printedLabelWorkOrders.brandId)).leftJoin(companies, eq22(companies.id, brands.companyId)).where(eq22(productionOrders.id, Number(id)));
+    return row;
+  }
+  async findLines(productionOrderId) {
+    return db.select().from(productionOrderLines).where(eq22(productionOrderLines.productionOrderId, Number(productionOrderId))).orderBy(productionOrderLines.id);
+  }
+};
+var printedProductionOrderRepository = new PrintedProductionOrderRepository();
+
+// src/modules/production/printed/printed-production-order.routes.ts
+var router22 = Router23();
+router22.use(requireProductionManager());
+router22.get(
+  "/",
+  asyncHandler(async (req, res) => {
+    const data = await printedProductionOrderRepository.findAll({
+      status: req.query.status,
+      soNumber: req.query.soNumber,
+      poNumber: req.query.poNumber
+    });
+    res.json({ data });
+  })
+);
+router22.get(
+  "/:id",
+  asyncHandler(async (req, res) => {
+    const data = await printedProductionOrderRepository.findById(req.params.id);
+    if (!data) throw new NotFoundError(Messages.notFound(Entity.PRODUCTION_ORDER));
+    const lines = await printedProductionOrderRepository.findLines(req.params.id);
+    res.json({ data, lines });
+  })
+);
+router22.get(
+  "/:id/overview",
+  asyncHandler(async (req, res) => {
+    const order = await printedProductionOrderRepository.findById(req.params.id);
+    if (!order) throw new NotFoundError(Messages.notFound(Entity.PRODUCTION_ORDER));
+    const lines = await printedProductionOrderRepository.findLines(Number(req.params.id));
+    res.json({ data: { ...order, lines } });
+  })
+);
+var printed_production_order_routes_default = router22;
+
+// src/modules/production/woven/woven-production-order.routes.ts
+import { Router as Router24 } from "express";
+
+// src/modules/production/woven/woven-production-order.repository.ts
+import { eq as eq23, desc as desc16, and as and16, sql as sql20 } from "drizzle-orm";
+var wovenProductionOrderSelect = {
+  id: productionOrders.id,
+  productionNumber: productionOrders.productionNumber,
+  workOrderId: productionOrders.wovenWorkOrderId,
+  totalQty: productionOrders.totalQty,
+  status: productionOrders.status,
+  notes: productionOrders.notes,
+  createdByUserId: productionOrders.createdByUserId,
+  plannedAt: productionOrders.plannedAt,
+  completedAt: productionOrders.completedAt,
+  createdAt: productionOrders.createdAt,
+  updatedAt: productionOrders.updatedAt,
+  soNumber: wovenLabelWorkOrders.soNumber,
+  poNumber: wovenLabelWorkOrders.poNumber,
+  orderDate: wovenLabelWorkOrders.orderDate,
+  dueDate: wovenLabelWorkOrders.dueDate,
+  priority: wovenLabelWorkOrders.priority,
+  brandName: brands.name,
+  companyName: companies.name
+};
+var WovenProductionOrderRepository = class {
+  async findAll(filters) {
+    const conditions = [];
+    if (filters?.status) conditions.push(eq23(productionOrders.status, filters.status));
+    if (filters?.soNumber) conditions.push(sql20`${wovenLabelWorkOrders.soNumber} ILIKE ${"%" + filters.soNumber + "%"}`);
+    if (filters?.poNumber) conditions.push(sql20`${wovenLabelWorkOrders.poNumber} ILIKE ${"%" + filters.poNumber + "%"}`);
+    return db.select(wovenProductionOrderSelect).from(productionOrders).leftJoin(wovenLabelProductionOrders, eq23(wovenLabelProductionOrders.productionOrderId, productionOrders.id)).innerJoin(wovenLabelWorkOrders, eq23(wovenLabelWorkOrders.id, productionOrders.wovenWorkOrderId)).leftJoin(brands, eq23(brands.id, wovenLabelWorkOrders.brandId)).leftJoin(companies, eq23(companies.id, brands.companyId)).where(conditions.length > 0 ? and16(...conditions) : void 0).orderBy(desc16(productionOrders.createdAt));
+  }
+  async findById(id) {
+    const [row] = await db.select(wovenProductionOrderSelect).from(productionOrders).leftJoin(wovenLabelProductionOrders, eq23(wovenLabelProductionOrders.productionOrderId, productionOrders.id)).leftJoin(wovenLabelWorkOrders, eq23(wovenLabelWorkOrders.id, productionOrders.wovenWorkOrderId)).leftJoin(brands, eq23(brands.id, wovenLabelWorkOrders.brandId)).leftJoin(companies, eq23(companies.id, brands.companyId)).where(eq23(productionOrders.id, Number(id)));
+    return row;
+  }
+  async findLines(productionOrderId) {
+    return db.select().from(productionOrderLines).where(eq23(productionOrderLines.productionOrderId, Number(productionOrderId))).orderBy(productionOrderLines.id);
+  }
+};
+var wovenProductionOrderRepository = new WovenProductionOrderRepository();
+
+// src/modules/production/woven/woven-production-order.routes.ts
+var router23 = Router24();
+router23.use(requireProductionManager());
+router23.get(
+  "/",
+  asyncHandler(async (req, res) => {
+    const data = await wovenProductionOrderRepository.findAll({
+      status: req.query.status,
+      soNumber: req.query.soNumber,
+      poNumber: req.query.poNumber
+    });
+    res.json({ data });
+  })
+);
+router23.get(
+  "/:id",
+  asyncHandler(async (req, res) => {
+    const data = await wovenProductionOrderRepository.findById(req.params.id);
+    if (!data) throw new NotFoundError(Messages.notFound(Entity.PRODUCTION_ORDER));
+    const lines = await wovenProductionOrderRepository.findLines(req.params.id);
+    res.json({ data, lines });
+  })
+);
+router23.get(
+  "/:id/overview",
+  asyncHandler(async (req, res) => {
+    const order = await wovenProductionOrderRepository.findById(req.params.id);
+    if (!order) throw new NotFoundError(Messages.notFound(Entity.PRODUCTION_ORDER));
+    const lines = await wovenProductionRepository.findLines(Number(req.params.id));
+    res.json({ data: { ...order, lines } });
+  })
+);
+var woven_production_order_routes_default = router23;
+
+// src/modules/ceo-dashboard/ceo-dashboard.routes.ts
+import { Router as Router25 } from "express";
+
+// src/modules/ceo-dashboard/ceo-dashboard.repository.ts
+import { sql as sql21, eq as eq24, desc as desc17, and as and17 } from "drizzle-orm";
+var CeoDashboardRepository = class {
+  /* --- 1. Roll stock --- */
+  /** Roll inventory by material, with low-stock flag. */
+  async getRollStock() {
+    const rows = await db.select({
+      materialCode: materials.code,
+      materialType: materials.type,
+      description: materials.description,
+      weightPerRoll: materials.weightPerRoll,
+      minStockLevel: materials.minStockLevel,
+      openingStock: inventoryRolls.openingStock,
+      receivedRolls: inventoryRolls.receivedRolls,
+      issuedRolls: inventoryRolls.issuedRolls,
+      balanceRolls: inventoryRolls.balanceRolls,
+      rollPerKg: inventoryRolls.rollPerKg
+    }).from(inventoryRolls).innerJoin(materials, eq24(inventoryRolls.materialCode, materials.code));
+    return rows.map((r) => ({
+      materialCode: r.materialCode,
+      materialType: r.materialType,
+      description: r.description,
+      weightPerRoll: Number(r.weightPerRoll),
+      minStockLevel: Number(r.minStockLevel),
+      openingStock: Number(r.openingStock),
+      receivedRolls: Number(r.receivedRolls),
+      issuedRolls: Number(r.issuedRolls),
+      balanceRolls: Number(r.balanceRolls),
+      rollPerKg: Number(r.rollPerKg),
+      isLowStock: Number(r.balanceRolls) < Number(r.minStockLevel)
+    }));
+  }
+  /** Roll stock summary figures. */
+  async getRollStockSummary() {
+    const [row] = await db.select({
+      totalMaterials: sql21`count(*)`,
+      totalBalanceRolls: sql21`coalesce(sum(cast(${inventoryRolls.balanceRolls} as numeric)), 0)`,
+      totalIssuedRolls: sql21`coalesce(sum(cast(${inventoryRolls.issuedRolls} as numeric)), 0)`,
+      lowStockCount: sql21`count(*) filter (where cast(${inventoryRolls.balanceRolls} as numeric) < cast(${materials.minStockLevel} as numeric))`
+    }).from(inventoryRolls).innerJoin(materials, eq24(inventoryRolls.materialCode, materials.code));
+    return {
+      totalMaterials: Number(row?.totalMaterials ?? 0),
+      totalBalanceRolls: Number(row?.totalBalanceRolls ?? 0),
+      totalIssuedRolls: Number(row?.totalIssuedRolls ?? 0),
+      lowStockCount: Number(row?.lowStockCount ?? 0)
+    };
+  }
+  /* --- 2. Thread stock --- */
+  /** Thread stock by type/colour/denier with balance weight. */
+  async getThreadStock() {
+    const rows = await db.select({
+      stockType: threadStocks.stockType,
+      denier: threadStocks.denier,
+      colorName: threadStocks.colorName,
+      colorCode: threadStocks.colorCode,
+      balanceKg: threadStocks.balanceKg,
+      receivedKg: threadStocks.receivedKg,
+      consumedKg: threadStocks.consumedKg
+    }).from(threadStocks);
+    return rows.map((r) => ({
+      stockType: r.stockType,
+      denier: r.denier,
+      colorName: r.colorName,
+      colorCode: r.colorCode,
+      balanceKg: Number(r.balanceKg),
+      receivedKg: Number(r.receivedKg),
+      consumedKg: Number(r.consumedKg)
+    }));
+  }
+  async getThreadStockSummary() {
+    const [primary, secondary] = await Promise.all([
+      db.select({
+        totalKg: sql21`coalesce(sum(cast(${threadStocks.balanceKg} as numeric)), 0)`
+      }).from(threadStocks).where(eq24(threadStocks.stockType, "primary")),
+      db.select({
+        totalKg: sql21`coalesce(sum(cast(${threadStocks.balanceKg} as numeric)), 0)`
+      }).from(threadStocks).where(eq24(threadStocks.stockType, "secondary"))
+    ]);
+    return {
+      undyedKg: Number(primary[0]?.totalKg ?? 0),
+      dyedKg: Number(secondary[0]?.totalKg ?? 0),
+      totalKg: Number(primary[0]?.totalKg ?? 0) + Number(secondary[0]?.totalKg ?? 0)
+    };
+  }
+  /* --- 3. Work orders --- */
+  async getWorkOrders() {
+    const [printed, woven] = await Promise.all([
+      db.select({
+        id: printedLabelWorkOrders.id,
+        soNumber: printedLabelWorkOrders.soNumber,
+        poNumber: printedLabelWorkOrders.poNumber,
+        orderDate: printedLabelWorkOrders.orderDate,
+        dueDate: printedLabelWorkOrders.dueDate,
+        totalQty: printedLabelWorkOrders.totalQty,
+        priority: printedLabelWorkOrders.priority,
+        orderType: printedLabelWorkOrders.orderType,
+        status: printedLabelWorkOrders.status,
+        productType: sql21`'printed'::text`,
+        brandName: brands.name,
+        companyName: companies.name,
+        createdAt: printedLabelWorkOrders.createdAt
+      }).from(printedLabelWorkOrders).leftJoin(brands, eq24(printedLabelWorkOrders.brandId, brands.id)).leftJoin(companies, eq24(brands.companyId, companies.id)),
+      db.select({
+        id: wovenLabelWorkOrders.id,
+        soNumber: wovenLabelWorkOrders.soNumber,
+        poNumber: wovenLabelWorkOrders.poNumber,
+        orderDate: wovenLabelWorkOrders.orderDate,
+        dueDate: wovenLabelWorkOrders.dueDate,
+        totalQty: wovenLabelWorkOrders.totalQty,
+        priority: wovenLabelWorkOrders.priority,
+        orderType: wovenLabelWorkOrders.orderType,
+        status: wovenLabelWorkOrders.status,
+        productType: sql21`'woven'::text`,
+        brandName: brands.name,
+        companyName: companies.name,
+        createdAt: wovenLabelWorkOrders.createdAt
+      }).from(wovenLabelWorkOrders).leftJoin(brands, eq24(wovenLabelWorkOrders.brandId, brands.id)).leftJoin(companies, eq24(brands.companyId, companies.id))
+    ]);
+    return [...printed, ...woven].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+  async getWorkOrdersSummary() {
+    const [
+      printedTotal,
+      wovenTotal,
+      printedByStatus,
+      wovenByStatus
+    ] = await Promise.all([
+      db.select({ value: sql21`count(*)` }).from(printedLabelWorkOrders),
+      db.select({ value: sql21`count(*)` }).from(wovenLabelWorkOrders),
+      db.select({ status: printedLabelWorkOrders.status, count: sql21`count(*)` }).from(printedLabelWorkOrders).groupBy(printedLabelWorkOrders.status),
+      db.select({ status: wovenLabelWorkOrders.status, count: sql21`count(*)` }).from(wovenLabelWorkOrders).groupBy(wovenLabelWorkOrders.status)
+    ]);
+    const statusMap = /* @__PURE__ */ new Map();
+    for (const r of [...printedByStatus, ...wovenByStatus]) {
+      statusMap.set(r.status, (statusMap.get(r.status) ?? 0) + Number(r.count));
+    }
+    const printedCount = Number(printedTotal[0]?.value ?? 0);
+    const wovenCount = Number(wovenTotal[0]?.value ?? 0);
+    return {
+      total: printedCount + wovenCount,
+      byStatus: Array.from(statusMap.entries()).map(([status, count2]) => ({ status, count: count2 })),
+      byProductType: [
+        { productType: "printed", count: printedCount },
+        { productType: "woven", count: wovenCount }
+      ]
+    };
+  }
+  /* --- 4. Production --- */
+  async getProductionOrders() {
+    const rows = await db.select({
+      id: productionOrders.id,
+      productionNumber: productionOrders.productionNumber,
+      soNumber: sql21`COALESCE(${printedLabelWorkOrders.soNumber}, ${wovenLabelWorkOrders.soNumber})`,
+      poNumber: sql21`COALESCE(${printedLabelWorkOrders.poNumber}, ${wovenLabelWorkOrders.poNumber})`,
+      totalQty: productionOrders.totalQty,
+      status: productionOrders.status,
+      productType: sql21`CASE WHEN ${productionOrders.printedWorkOrderId} IS NOT NULL THEN 'printed' ELSE 'woven' END`,
+      plannedAt: productionOrders.plannedAt,
+      completedAt: productionOrders.completedAt,
+      brandName: brands.name,
+      companyName: companies.name,
+      createdAt: productionOrders.createdAt
+    }).from(productionOrders).leftJoin(printedLabelWorkOrders, eq24(printedLabelWorkOrders.id, productionOrders.printedWorkOrderId)).leftJoin(wovenLabelWorkOrders, eq24(wovenLabelWorkOrders.id, productionOrders.wovenWorkOrderId)).leftJoin(brands, eq24(brands.id, sql21`COALESCE(${printedLabelWorkOrders.brandId}, ${wovenLabelWorkOrders.brandId})`)).leftJoin(companies, eq24(brands.companyId, companies.id)).orderBy(desc17(productionOrders.createdAt));
+    return rows;
+  }
+  async getProductionSummary() {
+    const total = await db.select({ value: sql21`count(*)` }).from(productionOrders);
+    const byStatus = await db.select({ status: productionOrders.status, count: sql21`count(*)` }).from(productionOrders).groupBy(productionOrders.status);
+    const byProductType = await db.select({
+      productType: sql21`CASE WHEN ${productionOrders.printedWorkOrderId} IS NOT NULL THEN 'printed' ELSE 'woven' END`,
+      count: sql21`count(*)`
+    }).from(productionOrders).groupBy(sql21`CASE WHEN ${productionOrders.printedWorkOrderId} IS NOT NULL THEN 'printed' ELSE 'woven' END`);
+    return {
+      total: Number(total[0]?.value ?? 0),
+      byStatus: byStatus.map((r) => ({ status: r.status, count: Number(r.count) })),
+      byProductType: byProductType.map((r) => ({ productType: r.productType, count: Number(r.count) }))
+    };
+  }
+  /* --- 5. Operators --- */
+  async getOperators() {
+    return db.select({
+      id: operators.id,
+      name: operators.name,
+      employeeCode: operators.employeeCode,
+      designation: operators.designation,
+      operatorType: operators.operatorType,
+      shift: operators.shift,
+      status: operators.status,
+      isActive: operators.isActive,
+      avatarUrl: operators.avatarUrl,
+      createdAt: operators.createdAt
+    }).from(operators).orderBy(operators.name);
+  }
+  /** Active production batches with assigned operator. */
+  async getOperatorUtilization() {
+    return db.select({
+      operatorId: productionBatches.operatorId,
+      operatorName: operators.name,
+      operatorDesignation: operators.designation,
+      stage: productionBatches.stage,
+      batchCode: productionBatches.batchCode,
+      productionNumber: productionOrders.productionNumber,
+      batchStatus: productionBatches.status,
+      batchStartedAt: productionBatches.startedAt,
+      machineName: machines.name
+    }).from(productionBatches).innerJoin(operators, eq24(operators.id, productionBatches.operatorId)).leftJoin(machines, eq24(machines.id, productionBatches.machineId)).innerJoin(productionOrders, eq24(productionOrders.id, productionBatches.productionOrderId)).where(
+      and17(
+        eq24(productionBatches.status, "IN_PROGRESS"),
+        sql21`${productionBatches.operatorId} IS NOT NULL`
+      )
+    );
+  }
+  /* --- 6. Machines --- */
+  async getMachines() {
+    return db.select({
+      id: machines.id,
+      name: machines.name,
+      machineCode: machines.machineCode,
+      machineName: machines.machineName,
+      machineType: machines.machineType,
+      productType: machines.productType,
+      capacityPerHour: machines.capacityPerHour,
+      status: machines.status,
+      isActive: machines.isActive,
+      operatorName: operators.name,
+      createdAt: machines.createdAt
+    }).from(machines).leftJoin(operators, eq24(operators.id, machines.machineOperatorId)).orderBy(machines.name);
+  }
+  /** Active production batches per machine. */
+  async getMachineUtilization() {
+    return db.select({
+      machineId: productionBatches.machineId,
+      machineName: machines.name,
+      machineType: machines.machineType,
+      stage: productionBatches.stage,
+      batchCode: productionBatches.batchCode,
+      productionNumber: productionOrders.productionNumber,
+      batchStatus: productionBatches.status,
+      batchStartedAt: productionBatches.startedAt,
+      assignedRolls: productionBatches.assignedRolls,
+      producedRolls: productionBatches.producedRolls,
+      operatorName: operators.name
+    }).from(productionBatches).innerJoin(machines, eq24(machines.id, productionBatches.machineId)).leftJoin(operators, eq24(operators.id, productionBatches.operatorId)).innerJoin(productionOrders, eq24(productionOrders.id, productionBatches.productionOrderId)).where(
+      and17(
+        eq24(productionBatches.status, "IN_PROGRESS"),
+        sql21`${productionBatches.machineId} IS NOT NULL`
+      )
+    );
+  }
+};
+var ceoDashboardRepository = new CeoDashboardRepository();
+
+// src/modules/ceo-dashboard/ceo-dashboard.service.ts
+var CeoDashboardService = class {
+  /* --- 1. Roll stock --- */
+  async getRollStock() {
+    const [items, summary] = await Promise.all([
+      ceoDashboardRepository.getRollStock(),
+      ceoDashboardRepository.getRollStockSummary()
+    ]);
+    return { items, summary };
+  }
+  /* --- 2. Thread stock --- */
+  async getThreadStock() {
+    const [items, summary] = await Promise.all([
+      ceoDashboardRepository.getThreadStock(),
+      ceoDashboardRepository.getThreadStockSummary()
+    ]);
+    return { items, summary };
+  }
+  /* --- 3. Work orders --- */
+  async getWorkOrders() {
+    const [items, summary] = await Promise.all([
+      ceoDashboardRepository.getWorkOrders(),
+      ceoDashboardRepository.getWorkOrdersSummary()
+    ]);
+    return { items, summary };
+  }
+  /* --- 4. Production --- */
+  async getProductionOrders() {
+    const [items, summary] = await Promise.all([
+      ceoDashboardRepository.getProductionOrders(),
+      ceoDashboardRepository.getProductionSummary()
+    ]);
+    return { items, summary };
+  }
+  /* --- 5. Operators --- */
+  async getOperators() {
+    const [items, utilization] = await Promise.all([
+      ceoDashboardRepository.getOperators(),
+      ceoDashboardRepository.getOperatorUtilization()
+    ]);
+    return { items, utilization };
+  }
+  /* --- 6. Machines --- */
+  async getMachines() {
+    const [items, utilization] = await Promise.all([
+      ceoDashboardRepository.getMachines(),
+      ceoDashboardRepository.getMachineUtilization()
+    ]);
+    return { items, utilization };
+  }
+};
+var ceoDashboardService = new CeoDashboardService();
+
+// src/modules/ceo-dashboard/ceo-dashboard.controller.ts
+var CeoDashboardController = class {
+  getRollStock = asyncHandler(async (_req, res) => {
+    const data = await ceoDashboardService.getRollStock();
+    res.json({ data });
+  });
+  getThreadStock = asyncHandler(async (_req, res) => {
+    const data = await ceoDashboardService.getThreadStock();
+    res.json({ data });
+  });
+  getWorkOrders = asyncHandler(async (_req, res) => {
+    const data = await ceoDashboardService.getWorkOrders();
+    res.json({ data });
+  });
+  getProduction = asyncHandler(async (_req, res) => {
+    const data = await ceoDashboardService.getProductionOrders();
+    res.json({ data });
+  });
+  getOperators = asyncHandler(async (_req, res) => {
+    const data = await ceoDashboardService.getOperators();
+    res.json({ data });
+  });
+  getMachines = asyncHandler(async (_req, res) => {
+    const data = await ceoDashboardService.getMachines();
+    res.json({ data });
+  });
+};
+var ceoDashboardController = new CeoDashboardController();
+
+// src/modules/ceo-dashboard/ceo-dashboard.routes.ts
+var router24 = Router25();
+router24.use(requireRole("ceo", "accountant", "production_manager"));
+router24.get("/roll-stock", ceoDashboardController.getRollStock);
+router24.get("/thread-stock", ceoDashboardController.getThreadStock);
+router24.get("/work-orders", ceoDashboardController.getWorkOrders);
+router24.get("/production", ceoDashboardController.getProduction);
+router24.get("/operators", ceoDashboardController.getOperators);
+router24.get("/machines", ceoDashboardController.getMachines);
+var ceo_dashboard_routes_default = router24;
+
+// src/modules/auth/auth.routes.ts
+import { Router as Router26 } from "express";
+
+// src/modules/auth/auth.service.ts
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
+
+// src/modules/auth/auth.repository.ts
+import { eq as eq25 } from "drizzle-orm";
+var AuthRepository = class {
+  async findByEmail(email) {
+    const [user] = await db.select().from(users).where(eq25(users.email, email.toLowerCase())).limit(1);
+    return user;
+  }
+  async findById(id) {
+    const [user] = await db.select().from(users).where(eq25(users.id, id)).limit(1);
+    return user;
+  }
+  async createUser(data) {
+    const [user] = await db.insert(users).values({
+      name: data.name,
+      email: data.email.toLowerCase(),
+      passwordHash: data.passwordHash,
+      role: data.role,
+      isActive: true
+    }).returning();
+    return user;
+  }
+};
+var authRepository = new AuthRepository();
+
+// src/modules/auth/auth.service.ts
+var SALT_ROUNDS = 12;
+var AuthService = class {
+  generateTokens(payload) {
+    const secret = env.JWT_SECRET;
+    const accessToken = jwt.sign(payload, secret, {
+      expiresIn: env.JWT_EXPIRES_IN
+    });
+    const refreshToken = jwt.sign(payload, secret, {
+      expiresIn: env.JWT_REFRESH_EXPIRES_IN
+    });
+    return { accessToken, refreshToken };
+  }
+  verifyToken(token) {
+    try {
+      const payload = jwt.verify(token, env.JWT_SECRET);
+      return payload;
+    } catch {
+      throw new UnauthorizedError("Invalid or expired token");
+    }
+  }
+  async register(data) {
+    const existing = await authRepository.findByEmail(data.email);
+    if (existing) {
+      throw new ConflictError("Email already registered");
+    }
+    const passwordHash = await bcrypt.hash(data.password, SALT_ROUNDS);
+    const user = await authRepository.createUser({
+      name: data.name,
+      email: data.email,
+      passwordHash,
+      role: data.role
+    });
+    const tokens = this.generateTokens({
+      sub: user.id,
+      email: user.email,
+      role: user.role
+    });
+    return { user: this.sanitizeUser(user), ...tokens };
+  }
+  async login(email, password) {
+    const user = await authRepository.findByEmail(email);
+    if (!user) {
+      throw new UnauthorizedError("Invalid email or password");
+    }
+    if (!user.isActive) {
+      throw new UnauthorizedError("Account is deactivated");
+    }
+    const isValid = await bcrypt.compare(password, user.passwordHash);
+    if (!isValid) {
+      throw new UnauthorizedError("Invalid email or password");
+    }
+    const tokens = this.generateTokens({
+      sub: user.id,
+      email: user.email,
+      role: user.role
+    });
+    return { user: this.sanitizeUser(user), ...tokens };
+  }
+  async refresh(refreshToken) {
+    const payload = this.verifyToken(refreshToken);
+    const user = await authRepository.findById(payload.sub);
+    if (!user || !user.isActive) {
+      throw new UnauthorizedError("User not found or deactivated");
+    }
+    const tokens = this.generateTokens({
+      sub: user.id,
+      email: user.email,
+      role: user.role
+    });
+    return { user: this.sanitizeUser(user), ...tokens };
+  }
+  async getProfile(userId) {
+    const user = await authRepository.findById(userId);
+    if (!user) {
+      throw new ApiError("User not found", 404);
+    }
+    return this.sanitizeUser(user);
+  }
+  sanitizeUser(user) {
+    const { passwordHash, ...safe } = user;
+    return safe;
+  }
+};
+var authService = new AuthService();
+
+// src/modules/auth/auth.controller.ts
+var AuthController = class {
+  register = asyncHandler(async (req, res) => {
+    const data = req.body;
+    const result = await authService.register(data);
+    res.status(201).json({ data: result });
+  });
+  login = asyncHandler(async (req, res) => {
+    const { email, password } = req.body;
+    const result = await authService.login(email, password);
+    res.json({ data: result });
+  });
+  refresh = asyncHandler(async (req, res) => {
+    const { refreshToken } = req.body;
+    const result = await authService.refresh(refreshToken);
+    res.json({ data: result });
+  });
+  me = asyncHandler(async (req, res) => {
+    const user = await authService.getProfile(req.user.sub);
+    res.json({ data: user });
+  });
+};
+var authController = new AuthController();
+
+// src/modules/auth/auth.schema.ts
+import { z as z27 } from "zod";
+var registerSchema = z27.object({
+  body: z27.object({
+    name: z27.string().min(2, "Name must be at least 2 characters").max(255),
+    email: z27.string().email("Invalid email address").toLowerCase(),
+    password: z27.string().min(8, "Password must be at least 8 characters").max(100),
+    role: z27.enum(userRoleEnum.enumValues)
+  })
+});
+var loginSchema = z27.object({
+  body: z27.object({
+    email: z27.string().email("Invalid email address").toLowerCase(),
+    password: z27.string().min(1, "Password is required")
+  })
+});
+var refreshSchema = z27.object({
+  body: z27.object({
+    refreshToken: z27.string().min(1, "Refresh token is required")
+  })
+});
+
+// src/shared/middleware/auth.ts
+import jwt2 from "jsonwebtoken";
+function authenticate(req, res, next) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    throw new UnauthorizedError("Authorization header missing or invalid");
+  }
+  const token = authHeader.slice(7);
+  try {
+    const payload = jwt2.verify(token, env.JWT_SECRET);
+    req.user = payload;
+    next();
+  } catch (error) {
+    if (error instanceof jwt2.TokenExpiredError) {
+      throw new UnauthorizedError("Token expired");
+    }
+    if (error instanceof jwt2.JsonWebTokenError) {
+      throw new UnauthorizedError("Invalid token");
+    }
+    throw new UnauthorizedError("Authentication failed");
+  }
+}
+
+// src/modules/auth/auth.routes.ts
+var router25 = Router26();
+router25.post("/register", validateRequest(registerSchema), authController.register);
+router25.post("/login", validateRequest(loginSchema), authController.login);
+router25.post("/refresh", validateRequest(refreshSchema), authController.refresh);
+router25.get("/me", authenticate, authController.me);
+var auth_routes_default = router25;
 
 // src/app.ts
 var app = express();
@@ -11103,8 +12960,8 @@ app.use((req, res, next) => {
 app.get("/health", (req, res) => {
   res.json({ status: "ok", timestamp: (/* @__PURE__ */ new Date()).toISOString() });
 });
-var apiRouter = Router21();
-var indexRouter = Router21();
+var apiRouter = Router27();
+var indexRouter = Router27();
 indexRouter.get("/", (req, res) => {
   res.json({ message: "API is running" });
 });
@@ -11119,7 +12976,6 @@ apiRouter.use("/materials", material_routes_default);
 apiRouter.use("/machines", machine_routes_default);
 apiRouter.use("/operators", operator_routes_default);
 apiRouter.use("/users", users_routes_default);
-apiRouter.use("/work-orders", work_orders_routes_default);
 apiRouter.use("/production-orders", production_order_routes_default);
 apiRouter.use("/woven-production", woven_production_routes_default);
 apiRouter.use("/production", batch_flow_routes_default);
@@ -11130,6 +12986,14 @@ apiRouter.use("/thread-dyeing", thread_dyeing_routes_default);
 apiRouter.use("/ink", ink_routes_default);
 apiRouter.use("/label-types", label_types_routes_default);
 apiRouter.use("/analytics", analytics_routes_default);
+apiRouter.use("/work-orders/printed", printed_work_order_routes_default);
+apiRouter.use("/work-orders/woven", woven_work_order_routes_default);
+apiRouter.use("/work-orders", work_orders_routes_default);
+apiRouter.use("/production/printed", printed_production_order_routes_default);
+apiRouter.use("/production/woven/orders", woven_production_order_routes_default);
+apiRouter.use("/ceo", ceo_dashboard_routes_default);
+apiRouter.use("/auth", auth_routes_default);
+apiRouter.use(authenticate);
 app.use("/api", apiRateLimiter, apiRouter);
 app.use(notFound);
 app.use(errorHandler);

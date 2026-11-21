@@ -17,11 +17,12 @@ import {
   machines,
   operators,
   users,
-  workOrders,
+  printedLabelWorkOrders,
   purchaseRecords,
   inventoryRolls,
   productionOrderLines,
 } from "@db/schema";
+import bcrypt from "bcryptjs";
 import { calculateTotalRollPer200m, calculateInvoiceWeight } from "@shared/formulas/purchase-formula";
 import { MATERIALS, OPERATORS, MACHINES, COMPANIES, USERS, VENDORS, PURCHASE_SEEDS } from "./seed-data";
 
@@ -214,11 +215,12 @@ async function realignExistingLines(operatorIds: Map<string, number>) {
 }
 
 async function seedUsers() {
+  const passwordHash = await bcrypt.hash("Seed123!@#", 12);
   for (const row of USERS) {
     const email = `${row.name.toLowerCase().replace(/[^a-z]+/g, ".")}@3q.test`;
     await db
       .insert(users)
-      .values({ name: row.name, role: row.role, email })
+      .values({ name: row.name, role: row.role, email, passwordHash })
       .onConflictDoUpdate({ target: users.email, set: { name: row.name, role: row.role, updatedAt: new Date() } });
   }
   console.log(`users          ${USERS.length} upserted`);
@@ -359,7 +361,7 @@ async function seedWorkOrders() {
     const dueDate = new Date(Date.now() + spec.days * 86400000).toISOString().slice(0, 10);
 
     const result = await db
-      .insert(workOrders)
+      .insert(printedLabelWorkOrders)
       .values({
         soNumber: spec.so,
         poNumber: spec.po,

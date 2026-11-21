@@ -35,6 +35,11 @@ export * from "./tables/product-type.enum";
 export * from "./tables/woven-work-order-details.table";
 export * from "./tables/woven-production-lines.table";
 export * from "./tables/woven-thread-plan-items.table";
+/* ---------- Workflow-separated extension tables (0029) ---------- */
+export * from "./tables/printed-label-work-orders.table";
+export * from "./tables/woven-label-work-orders.table";
+export * from "./tables/printed-label-production-orders.table";
+export * from "./tables/woven-label-production-orders.table";
 /* ---------- Thread inventory ---------- */
 export * from "./tables/thread.enums";
 export * from "./tables/thread-stocks.table";
@@ -52,7 +57,6 @@ import { materials } from "./tables/materials.table";
 import { machines } from "./tables/machines.table";
 import { operators } from "./tables/operators.table";
 import { users } from "./tables/users.table";
-import { workOrders } from "./tables/work-orders.table";
 import { productionOrders } from "./tables/production-orders.table";
 import { productionOrderLines } from "./tables/production-order-lines.table";
 import { productionStageEvents } from "./tables/production-stage-events.table";
@@ -65,9 +69,12 @@ import { inventoryRolls } from "./tables/inventory-rolls.table";
 import { inventoryRollMovements } from "./tables/inventory-roll-movements.table";
 import { inkPurchases } from "./tables/ink-purchases.table";
 import { inkConsumptions } from "./tables/ink-consumptions.table";
-import { wovenWorkOrderDetails } from "./tables/woven-work-order-details.table";
 import { wovenProductionLines } from "./tables/woven-production-lines.table";
 import { wovenThreadPlanItems } from "./tables/woven-thread-plan-items.table";
+import { printedLabelWorkOrders } from "./tables/printed-label-work-orders.table";
+import { wovenLabelWorkOrders } from "./tables/woven-label-work-orders.table";
+import { printedLabelProductionOrders } from "./tables/printed-label-production-orders.table";
+import { wovenLabelProductionOrders } from "./tables/woven-label-production-orders.table";
 import { threadStocks } from "./tables/thread-stocks.table";
 import { threadPurchases } from "./tables/thread-purchases.table";
 import { threadDyeBatches } from "./tables/thread-dye-batches.table";
@@ -96,8 +103,9 @@ export type Operator = typeof operators.$inferSelect;
 export type NewOperator = typeof operators.$inferInsert;
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
-export type WorkOrder = typeof workOrders.$inferSelect;
-export type NewWorkOrder = typeof workOrders.$inferInsert;
+// WorkOrder / NewWorkOrder are now shared interfaces (see work-orders.table.ts),
+// not derived from a Drizzle table — the unified `work_orders` table was removed in 0030.
+export type { WorkOrder, NewWorkOrder } from "./tables/work-orders.table";
 export type ProductionOrder = typeof productionOrders.$inferSelect;
 export type NewProductionOrder = typeof productionOrders.$inferInsert;
 export type ProductionOrderLine = typeof productionOrderLines.$inferSelect;
@@ -124,8 +132,6 @@ export type InkConsumption = typeof inkConsumptions.$inferSelect;
 export type NewInkConsumption = typeof inkConsumptions.$inferInsert;
 
 /* ---------- Woven Labels workflow ---------- */
-export type WovenWorkOrderDetail = typeof wovenWorkOrderDetails.$inferSelect;
-export type NewWovenWorkOrderDetail = typeof wovenWorkOrderDetails.$inferInsert;
 export type WovenProductionLine = typeof wovenProductionLines.$inferSelect;
 export type NewWovenProductionLine = typeof wovenProductionLines.$inferInsert;
 export type WovenThreadPlanItem = typeof wovenThreadPlanItems.$inferSelect;
@@ -166,3 +172,13 @@ export type NewThreadDyeingReceive = typeof threadDyeingReceives.$inferInsert;
 /* ---------- Label Types (Master Data) ---------- */
 export type LabelType = typeof labelTypes.$inferSelect;
 export type NewLabelType = typeof labelTypes.$inferInsert;
+
+/* ---------- Workflow-separated extension tables (0029) ---------- */
+export type PrintedLabelWorkOrder = typeof printedLabelWorkOrders.$inferSelect;
+export type NewPrintedLabelWorkOrder = typeof printedLabelWorkOrders.$inferInsert;
+export type WovenLabelWorkOrder = typeof wovenLabelWorkOrders.$inferSelect;
+export type NewWovenLabelWorkOrder = typeof wovenLabelWorkOrders.$inferInsert;
+export type PrintedLabelProductionOrder = typeof printedLabelProductionOrders.$inferSelect;
+export type NewPrintedLabelProductionOrder = typeof printedLabelProductionOrders.$inferInsert;
+export type WovenLabelProductionOrder = typeof wovenLabelProductionOrders.$inferSelect;
+export type NewWovenLabelProductionOrder = typeof wovenLabelProductionOrders.$inferInsert;

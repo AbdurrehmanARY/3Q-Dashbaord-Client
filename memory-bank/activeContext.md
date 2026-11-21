@@ -9,6 +9,18 @@ but it is a **work-in-progress branch** (`chore/ci`) with a **clean working tree
 the large dirty change set was committed as atomic commits on 2026-09-26 (see
 "Working-tree state" below).
 
+### New: seed-master-data.ts (2026-11-04)
+- Created `server/src/shared/db/seed-master-data.ts` — seeds all tables except work orders
+  and production tables (printedLabelWorkOrders, wovenLabelWorkOrders, productionOrders,
+  productionOrderLines, productionBatches, productionStageTransactions, productionRuns,
+  productionStageEvents, productionRollIssuances, batchConsumptions, wovenThreadPlanItems,
+  wovenWorkOrderDetails).
+- Added `npm run db:seed:master-data` script to server/package.json.
+- Extended seed-data.ts with LABEL_TYPES, THREAD_SERVICE_PROVIDERS, THREAD_STOCKS,
+  THREAD_PURCHASES, THREAD_DYEING_SENDS, THREAD_DYEING_ALLOCATIONS, THREAD_DYEING_RECEIVES,
+  THREAD_DYE_BATCHES, STICKER_MATERIALS, LOCAL_SHEETS, LABEL_SHEETS, INK_PURCHASES,
+  INK_CONSUMPTIONS seed data arrays.
+
 ### Verified gate state right now (re-verified 2026-10-14, with client-side waste fixes)
 
 Post-change verification (client-side edits to BatchOutputDialog.tsx, batch-types.ts, BatchStageBoard.tsx):
@@ -19,17 +31,60 @@ Post-change verification (client-side edits to BatchOutputDialog.tsx, batch-type
 - `client/`: `npm run typecheck` → 0 errors; `npm test` → **7 files / 67 tests**
   (`utils/batch-scope.test.ts` deleted with the scope decision;
   `services/batch-service.test.ts` added — it pins the line-scoped URLs).
-- `server/`: `npm run typecheck` → **0 errors**; `npm test` → **9 files / 123 tests**;
+- `server/`: `npm run typecheck` → **0 errors**; `npm test` → **10 files / 149 tests**;
   `npm run build` → tsup OK and `server/api/index.js` regenerated; migration 0025 validated
   end-to-end on a scratch DB by `scripts/verify-0025-line-scoped.mjs` (**all checks pass**).
-- ⚠ **Live is still pre-0025** (verified 2026-09-29): `production_batches_first_stage_one_line`
-  and `production_batches_order_stage_no_uq` are still there and 3 cutting batches still carry no
-  line. Until 0025 runs on Supabase, the line-scoped code will reject any cutting/packaging create
-  (the old CHECK forbids a line) — see "Immediate next steps" #1.
+- ✅ **0025 has been applied to live Supabase** (verified 2026-10-28): `production_batches_one_line` CHECK exists, `production_batches_order_stage_no_uq` is dropped,
+  and 0 batches have no line across all stages. The line-scoped code now works end-to-end on live.
+- ✅ **0029 has been applied to live Supabase** (verified 2026-10-28): workflow-scoped extension tables
+  created, existing rows backfilled by productType, FKs validated. CEO dashboard endpoints + split
+  work-order routes now have their extension tables.
+- ✅ **Dashboard route & navigation consolidation (2026-10-29)**: removed
+  `features/ceo-dashboard/` (7 pages + hooks + service), replaced the
+  "CEO Dashboard" nav item with an expanded top-level "Dashboard" section
+  (`/dashboard/*` sub-routes), moved the CeoDashboardPage overview to `/`,
+  and added `/ceo-dashboard/*` → `/dashboard/*` redirects for backward
+  compatibility. `routes.tsx` + `navigation.ts` updated; graphify re-indexed.
+  `client/`: `npx tsc --noEmit` → 0 errors; `npx vitest run` → **92/92**.
+
+- ✅ **Dashboard Production Order Planning Routes (2026-11-05)**: Added missing dashboard planning routes to `app/routes.tsx`:
+  - `/dashboard/production-orders/printed/:id/plan` → `ProductionOrderPlanningPage`
+  - `/dashboard/production-orders/woven/:id/plan` → `ProductionOrderPlanningPage`
+  These connect `CreateP`
+
+- ✅ **CEO Dashboard tabbed navigation (2026-11-05)**: Replaced single-view CEO pages with tabbed pages:
+  - Created `CeoWorkOrdersDashboardPage.tsx` — tabs for Printed/Woven Work Orders at `/dashboard/ceo/work-orders/{printed,woven}`
+  - Created `CeoProductionDashboardPage.tsx` — tabs for Printed/Woven Production at `/dashboard/ceo/production/{printed,woven}`
+  - Updated `routes.tsx`: CEO routes now point to the tabbed pages (each URL handled by same page via `useLocation`)
+  - Sidebar navigation already had nested CEO items; tabs now render within each page
+  - Each tab has its own URL — refresh/deep-links preserve the selected tab
+  - Verification: client typecheck 0 errors; client tests 92/92 passed; client build OKroductionOrderDialog` post-creation navigation to the existing `ProductionOrderPlanningPage` component (which uses `UnifiedPlanningDialog` and handles both printed/woven via `productType`). Non-dashboard equivalents already existed.
+
+  - `server/src/app.ts` — **Route mounting order fix** (2026-10-28): specific sub-routers
+    (`/work-orders/printed`, `/work-orders/woven`) were mounted AFTER the general `/work-orders`
+    router, causing Express to match "printed"/"woven" as the `:id` param and return 400 (zod
+    `z.coerce.number()` rejection). Reordered so specific routes mount first, with an explanatory
+    comment. General `/work-orders` router now mounts last, matching the same pattern already used
+    for `/production/printed` and `/production/woven/orders`.
 - ⚠ **Nested `.git` repositories** exist in `server/` and `client/` (stale, from before the
   monorepo consolidation; their HEADs are old feature commits and they do not track the current
   layout). Always run `git status` / `git add` / `git commit` from the **repo root**, never from
   inside a package — otherwise you commit to the wrong repository.
+
+## Woven make-up support — in progress (2026-10-27)
+- **Removed the woven planning ceiling**: woven label types can now be planned beyond the order's
+  totalQty so that waste at any stage can be recovered by re-planning with an increased quantity.
+  Duplicate label-type names are still rejected. See `progress.md` for the full change list.
+- **Required quantity surfaced in label stage progress**: `quantityLabels` prop added to the woven
+  `StageProgressBars` so bars read "X produced / Y required pcs".
+- **`required` field on woven lines**: set to `quantity` (was `0`) so completion-readiness and
+  progress bars key off the same explicit target.
+- **Production completion report**: added `ProductionCompletionReport` to the woven completed-view.
+- ⚠ `server/api/index.js` bundle NOT yet rebuilt (source changes applied to `.ts` files only).
+  Run `npm run build` in `server/` to sync the bundle before deploying.
+- ⚠ `run_commands` tool was unavailable during this session — typecheck/tests not verified locally.
+  Run `verify-changes.bat` at repo root to validate: server typecheck, server tests, server build,
+  then client typecheck, client tests.
 
 ## Cutting/packaging batches → LINE-SCOPED — SHIPPED (2026-09-29)
 
@@ -381,4 +436,48 @@ CHECK forbids those batches to have (`implementation.md` §13).
 - Tests: helpers + batch-flow + formula server suites extended; client `line-draft.test.ts`
   gains `patchOverviewLine` cases.
 - Gate: server typecheck OK, server tests 139/139; client typecheck OK, client tests 92/92;
-  server build OK (`server/api/index.js` rebuilt). graphify unavailable.
+  server build OK (`server/api/index.js` rebuilt). graphify unavailable.
+
+## Remove production_operator role (2026-11-06, act)
+- Removed `production_operator` from the `user_role` enum (now 4 roles: `ceo`, `office_staff`, `production_manager`, `accountant`)
+- Updated files:
+  - `server/src/shared/db/tables/users.table.ts` - enum definition
+  - `server/src/shared/middleware/rbac.ts` - removed production_operator permissions
+  - `server/src/shared/validation/query.schema.ts` - updated listUsersQuerySchema
+  - `client/src/features/production-orders/types.ts` - UserRole type
+  - `client/src/features/production-orders/context/ActorContext.tsx` - ROLE_LABELS
+  - `server/src/features/production-orders/types.ts` - UserRole type
+  - `server/src/features/production-orders/context/ActorContext.tsx` - ROLE_LABELS
+  - `memory-bank/projectbrief.md` - role table
+  - `CLAUDE.md` - roles documentation
+- Created migration `0032_remove_production_operator_role.sql` to update PostgreSQL enum
+- Seed data already had only 4 roles (ceo, office_staff, production_manager, accountant)
+- Gate: server typecheck 0 errors, server tests 149/149; client typecheck 0 errors, client tests 92/92
+
+## Workflow-specific work-order dialogs, tables, columns, and row actions (act, 2026-10-29)
+- **Printed** (`client/src/features/work-orders/printed/components/`): `PrintedWorkOrderTable`
+  (DataTable + `printedWorkOrderColumns` that omit the Type badge and Design Code columns),
+  `PrintedWorkOrderDialog` (productType fixed to "printed", no WovenSpecification section,
+  `hideProductType` on `WorkOrderBasicInfo`), `PrintedWorkOrderRowActions` (view/edit/
+  child-order/dispatch/delete/pin, workflow-specific hooks).
+- **Woven** (`client/src/features/work-orders/woven/components/`): `WovenWorkOrderTable`
+  (DataTable + `wovenWorkOrderColumns` that surface Design Code prominently),
+  `WovenWorkOrderDialog` (productType fixed to "woven", always renders `WovenSpecification`),
+  `WovenWorkOrderRowActions` (same menu structure as printed, uses woven hooks and dispatch dialog).
+- Both list pages (`printed/pages`, `woven/pages`) now render their DataTable + create dialog,
+  with a working "New Order" button that opens the workflow-specific dialog.
+- Both dialogs support child-order creation (shortfall/recut/additional) with auto-suffixed
+  SO numbers and inherited comment/PO/Due Date fields.
+- `DataTableColumnHeaderProps` extended with optional `align?: "left" | "right" | "center"`
+  to support right-aligned header cells (previously only `meta: { align }` was supported).
+- `hasProductionOrder` / `productionOrder` computed via `"productionOrder" in workOrder`
+  type-guard pattern (matching the shared `WorkOrderDialog`) to handle the
+  `WorkOrder | WorkOrderDetail` union correctly.
+- **Gate**: client typecheck 0 errors; client tests 92/92. graphify updated.
+
+## Auth/RBAC dev bypass (act, 2026-11-07)
+- Root cause of "tables show no data": every non-/auth API route required a valid JWT via the global `authenticate` middleware in `server/src/app.ts` (line 131), plus many routes enforced `requireRole` RBAC. Without a logged-in user / valid token, all API calls returned 401/403 and all tables rendered empty.
+- Changes:
+  - `server/src/app.ts`: replaced global `authenticate` with `isProduction ? authenticate : optionalAuth` — requests without a token still reach controllers in dev; valid tokens still populate `req.user`.
+  - `server/src/shared/middleware/rbac.ts`: `requireRole` now returns `next()` when `req.user` is undefined (dev mode bypass) instead of throwing `ForbiddenError("Authentication required")`. Production stays strict because `authenticate` guarantees `req.user` is set.
+- Gate: server typecheck 0 errors; server tests 149/149; client typecheck 0 errors; client tests 92/92.

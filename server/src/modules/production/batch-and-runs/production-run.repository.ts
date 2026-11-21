@@ -1,6 +1,6 @@
 import { db } from "@db/index";
-import { productionRuns, machines, operators, users, workOrders } from "@db/schema";
-import { and, desc, eq, gte, isNull, sql } from "drizzle-orm";
+import { productionRuns, machines, operators, users, printedLabelWorkOrders, wovenLabelWorkOrders } from "@db/schema";
+import { and, desc, eq, gte, isNull, or, sql } from "drizzle-orm";
 import type { NewProductionRun } from "@db/schema";
 
 export class ProductionRunRepository {
@@ -15,7 +15,7 @@ export class ProductionRunRepository {
     return db
       .select({
         id: productionRuns.id,
-        saleOrderId: productionRuns.saleOrderId,
+        saleOrderId: sql<number | null>`COALESCE(${productionRuns.printedSaleOrderId}, ${productionRuns.wovenSaleOrderId})`,
         productId: productionRuns.productId,
         machineId: productionRuns.machineId,
         machineName: machines.machineName,
@@ -33,7 +33,12 @@ export class ProductionRunRepository {
       .leftJoin(machines, eq(productionRuns.machineId, machines.id))
       .leftJoin(operators, eq(productionRuns.operatorId, operators.id))
       .leftJoin(users, eq(productionRuns.createdBy, users.id))
-      .where(eq(productionRuns.saleOrderId, saleOrderId))
+      .where(
+        or(
+          eq(productionRuns.printedSaleOrderId, saleOrderId),
+          eq(productionRuns.wovenSaleOrderId, saleOrderId)
+        )
+      )
       .orderBy(desc(productionRuns.producedAt));
   }
 
@@ -42,7 +47,12 @@ export class ProductionRunRepository {
     const [row] = await db
       .select({ total: sql<string>`coalesce(sum(${productionRuns.quantityProduced}), 0)` })
       .from(productionRuns)
-      .where(eq(productionRuns.saleOrderId, saleOrderId));
+      .where(
+        or(
+          eq(productionRuns.printedSaleOrderId, saleOrderId),
+          eq(productionRuns.wovenSaleOrderId, saleOrderId)
+        )
+      );
     return Number(row?.total ?? 0);
   }
 
@@ -56,7 +66,12 @@ export class ProductionRunRepository {
       })
       .from(productionRuns)
       .leftJoin(machines, eq(productionRuns.machineId, machines.id))
-      .where(eq(productionRuns.saleOrderId, saleOrderId))
+      .where(
+        or(
+          eq(productionRuns.printedSaleOrderId, saleOrderId),
+          eq(productionRuns.wovenSaleOrderId, saleOrderId)
+        )
+      )
       .groupBy(productionRuns.machineId, machines.machineName);
   }
 
@@ -70,7 +85,12 @@ export class ProductionRunRepository {
       })
       .from(productionRuns)
       .leftJoin(operators, eq(productionRuns.operatorId, operators.id))
-      .where(eq(productionRuns.saleOrderId, saleOrderId))
+      .where(
+        or(
+          eq(productionRuns.printedSaleOrderId, saleOrderId),
+          eq(productionRuns.wovenSaleOrderId, saleOrderId)
+        )
+      )
       .groupBy(productionRuns.operatorId, operators.name);
   }
 
@@ -100,7 +120,10 @@ export class ProductionRunRepository {
       .from(productionRuns)
       .where(
         and(
-          eq(productionRuns.saleOrderId, params.saleOrderId),
+          eq(
+            sql`COALESCE(${productionRuns.printedSaleOrderId}, ${productionRuns.wovenSaleOrderId})`,
+            params.saleOrderId
+          ),
           params.machineId == null
             ? isNull(productionRuns.machineId)
             : eq(productionRuns.machineId, params.machineId),
@@ -117,8 +140,21 @@ export class ProductionRunRepository {
 
   /** Ordered quantity comes from the sale order (work_orders). */
   async getWorkOrder(saleOrderId: number) {
-    const [wo] = await db.select().from(workOrders).where(eq(workOrders.id, saleOrderId)).limit(1);
-    return wo;
+    const [printed] = await db
+      .select()
+      .from(printedLabelWorkOrders)
+      .where(eq(printedLabelWorkOrders.id, saleOrderId))
+      .limit(1);
+    if (printed) return { ...printed, productType: "printed" as const };
+
+    const [woven] = await db
+      .select()
+      .from(wovenLabelWorkOrders)
+      .where(eq(wovenLabelWorkOrders.id, saleOrderId))
+      .limit(1);
+    if (woven) return { ...woven, productType: "woven" as const };
+
+    return undefined;
   }
 }
 

@@ -152,6 +152,8 @@ export interface LinePrinting {
   /** Avatar of the operator who ran this stage. */
   operatorAvatarUrl: string | null;
   printedRolls: number;
+  /** Rolls wasted at this stage. */
+  wastedRolls: number;
   progressPct: number;
   /** Stamped when printing first reached the planned roll count; null while in progress. */
   completedAt: string | null;
@@ -165,6 +167,8 @@ export interface LineCutting {
   operatorAvatarUrl: string | null;
   sentToCuttingRolls: number;
   cutRolls: number;
+  /** Rolls wasted at this stage. */
+  wastedRolls: number;
   progressPct: number;
   completedAt: string | null;
 }
@@ -176,6 +180,8 @@ export interface LinePackaging {
   sentToPackagingRolls: number;
   packagedRolls: number;
   packagedQty: number;
+  /** Rolls wasted at this stage. */
+  wastedRolls: number;
   progressPct: number;
   completedAt: string | null;
 }

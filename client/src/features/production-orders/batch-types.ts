@@ -168,8 +168,10 @@ export interface LineFlow {
   wastedTotal: number;
   cutProduced: number;
   cutAvailable: number;
+  cutWasted: number;
   packagedProduced: number;
   packagedLabels: number;
+  packagedWasted: number;
     remainingRolls: number;
   /** Per-size breakdown — populated for woven Size Label lines, empty elsewhere. */
   sizes: SizeAssignment[];
@@ -181,7 +183,7 @@ export interface OrderFlow {
   lines: LineFlow[];
   totals: Omit<
     LineFlow,
-    "lineId" | "labelType" | "quantity" | "materialCode" | "batchCounts" | "running" | "kind" | "unit" | "stages"
+    "lineId" | "labelType" | "materialCode" | "batchCounts" | "running" | "kind" | "unit" | "stages"
   >;
   kind: LineKind;
   unit: string;

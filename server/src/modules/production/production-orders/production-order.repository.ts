@@ -8,12 +8,12 @@ import {
   productionStageTransactions,
   inventoryRolls,
   inventoryRollMovements,
-  workOrders,
+  printedLabelWorkOrders,
+  wovenLabelWorkOrders,
   brands,
   companies,
   machines,
   operators,
-  wovenWorkOrderDetails,
 } from "@db/schema";
 import { eq, desc, and, sql, inArray } from "drizzle-orm";
 import { BadRequestError, NotFoundError } from "@shared/errors/ApiError";
@@ -30,20 +30,26 @@ import type {
   NewProductionOrder,
   NewProductionOrderLine,
   NewProductionStageEvent,
-  WorkOrder,
 } from "@db/schema";
+
+/** The status type used to sync the sales-order side of a production order. */
+export type WorkOrderStatus = "initiate_production" | "production" | "complete" | "dispatched";
 
 /**
  * Work order status mirrors its production order and is never set by hand:
  * `planned`/`production` -> `production`, `complete` -> `complete`.
  */
-function workOrderStatusFor(productionStatus: ProductionOrder["status"]): WorkOrder["status"] {
+function workOrderStatusFor(productionStatus: ProductionOrder["status"]): WorkOrderStatus {
   return productionStatus === "complete" ? "complete" : "production";
 }
 
 /**
  * Propagates a production order's status to its sales order inside the caller's
  * transaction, so the two can never be observed disagreeing.
+ *
+ * The production_orders table now has two nullable FK columns (`printedWorkOrderId`
+ * and `wovenWorkOrderId`) — exactly one is set per row — so we update whichever
+ * side the order points to.
  */
 async function syncWorkOrderStatusTx(
   tx: Tx,
@@ -52,17 +58,36 @@ async function syncWorkOrderStatusTx(
 ) {
   if (!productionStatus) return;
   const [order] = await tx
-    .select({ workOrderId: productionOrders.workOrderId })
+    .select({
+      printedWorkOrderId: productionOrders.printedWorkOrderId,
+      wovenWorkOrderId: productionOrders.wovenWorkOrderId,
+    })
     .from(productionOrders)
     .where(eq(productionOrders.id, productionOrderId));
   if (!order) return;
 
-  await tx
-    .update(workOrders)
-    .set({ status: workOrderStatusFor(productionStatus), updatedAt: new Date() })
-    // `dispatched` is terminal and owned by dispatch, not production. Without this guard a
-    // later progress edit would silently drag a shipped order back to `complete`.
-    .where(and(eq(workOrders.id, order.workOrderId), sql`${workOrders.status} <> 'dispatched'`));
+  const updates: { table: "printed" | "woven"; id: number }[] = [];
+  if (order.printedWorkOrderId) {
+    updates.push({ table: "printed", id: order.printedWorkOrderId });
+  }
+  if (order.wovenWorkOrderId) {
+    updates.push({ table: "woven", id: order.wovenWorkOrderId });
+  }
+
+  for (const { table, id } of updates) {
+    const target = table === "printed" ? printedLabelWorkOrders : wovenLabelWorkOrders;
+    await tx
+      .update(target)
+      .set({ status: workOrderStatusFor(productionStatus), updatedAt: new Date() })
+      // `dispatched` is terminal and owned by dispatch, not production. Without this guard a
+      // later progress edit would silently drag a shipped order back to `complete`.
+      .where(
+        and(
+          eq(target.id, id),
+          sql`${target.status} <> 'dispatched'`
+        )
+      );
+  }
 }
 
 /**
@@ -72,7 +97,7 @@ async function syncWorkOrderStatusTx(
 const productionOrderSelect = {
   id: productionOrders.id,
   productionNumber: productionOrders.productionNumber,
-  workOrderId: productionOrders.workOrderId,
+  workOrderId: sql<number | null>`COALESCE(${productionOrders.printedWorkOrderId}, ${productionOrders.wovenWorkOrderId})`,
   totalQty: productionOrders.totalQty,
   status: productionOrders.status,
   notes: productionOrders.notes,
@@ -81,21 +106,21 @@ const productionOrderSelect = {
   completedAt: productionOrders.completedAt,
   createdAt: productionOrders.createdAt,
   updatedAt: productionOrders.updatedAt,
-  soNumber: workOrders.soNumber,
-  poNumber: workOrders.poNumber,
-  orderDate: workOrders.orderDate,
-  dueDate: workOrders.dueDate,
-  salesOrderQty: workOrders.totalQty,
-  priority: workOrders.priority,
-  /** Which workflow this order runs — the dashboard branches on it. */
-  productType: workOrders.productType,
+  soNumber: sql<string | null>`COALESCE(${printedLabelWorkOrders.soNumber}, ${wovenLabelWorkOrders.soNumber})`,
+  poNumber: sql<string | null>`COALESCE(${printedLabelWorkOrders.poNumber}, ${wovenLabelWorkOrders.poNumber})`,
+  orderDate: sql<string | null>`COALESCE(${printedLabelWorkOrders.orderDate}, ${wovenLabelWorkOrders.orderDate})`,
+  dueDate: sql<string | null>`COALESCE(${printedLabelWorkOrders.dueDate}, ${wovenLabelWorkOrders.dueDate})`,
+  salesOrderQty: sql<number | null>`COALESCE(${printedLabelWorkOrders.totalQty}, ${wovenLabelWorkOrders.totalQty})`,
+  priority: sql<string | null>`COALESCE(${printedLabelWorkOrders.priority}, ${wovenLabelWorkOrders.priority})`,
+  /** Which workflow this order runs — `printed` or `woven`. */
+  productType: sql<"printed" | "woven" | null>`CASE WHEN ${productionOrders.printedWorkOrderId} IS NOT NULL THEN 'printed' ELSE 'woven' END`,
   brandId: brands.id,
   brandName: brands.name,
   companyId: companies.id,
   companyName: companies.name,
-  pick: wovenWorkOrderDetails.pick,
-  repeat: wovenWorkOrderDetails.repeat,
-  speed: wovenWorkOrderDetails.speed,
+  pick: wovenLabelWorkOrders.pick,
+  repeat: sql<string | null>`${wovenLabelWorkOrders.repeat}`,
+  speed: sql<string | null>`${wovenLabelWorkOrders.speed}`,
 };
 
 /**
@@ -114,17 +139,17 @@ export class ProductionOrderRepository {
       conditions.push(eq(productionOrders.status, filters.status as ProductionOrder["status"]));
     }
     // Partial, case-insensitive search on SO / PO number.
-    if (filters?.soNumber) conditions.push(sql`${workOrders.soNumber} ILIKE ${"%" + filters.soNumber + "%"}`);
-    if (filters?.poNumber) conditions.push(sql`${workOrders.poNumber} ILIKE ${"%" + filters.poNumber + "%"}`);
-    if (filters?.workOrderId) conditions.push(eq(productionOrders.workOrderId, filters.workOrderId));
+    if (filters?.soNumber) conditions.push(sql`COALESCE(${printedLabelWorkOrders.soNumber}, ${wovenLabelWorkOrders.soNumber}) ILIKE ${"%" + filters.soNumber + "%"}`);
+    if (filters?.poNumber) conditions.push(sql`COALESCE(${printedLabelWorkOrders.poNumber}, ${wovenLabelWorkOrders.poNumber}) ILIKE ${"%" + filters.poNumber + "%"}`);
+    if (filters?.workOrderId) conditions.push(eq(sql`COALESCE(${productionOrders.printedWorkOrderId}, ${productionOrders.wovenWorkOrderId})`, filters.workOrderId));
 
     const orders = await db
       .select(productionOrderSelect)
       .from(productionOrders)
-      .innerJoin(workOrders, eq(productionOrders.workOrderId, workOrders.id))
-      .leftJoin(brands, eq(workOrders.brandId, brands.id))
+      .leftJoin(printedLabelWorkOrders, eq(productionOrders.printedWorkOrderId, printedLabelWorkOrders.id))
+      .leftJoin(wovenLabelWorkOrders, eq(productionOrders.wovenWorkOrderId, wovenLabelWorkOrders.id))
+      .leftJoin(brands, eq(brands.id, sql`COALESCE(${printedLabelWorkOrders.brandId}, ${wovenLabelWorkOrders.brandId})`))
       .leftJoin(companies, eq(brands.companyId, companies.id))
-      .leftJoin(wovenWorkOrderDetails, eq(wovenWorkOrderDetails.workOrderId, workOrders.id))
       .where(conditions.length > 0 ? and(...conditions) : undefined)
       .orderBy(desc(productionOrders.createdAt));
 
@@ -185,10 +210,10 @@ export class ProductionOrderRepository {
     const [row] = await db
       .select(productionOrderSelect)
       .from(productionOrders)
-      .innerJoin(workOrders, eq(productionOrders.workOrderId, workOrders.id))
-      .leftJoin(brands, eq(workOrders.brandId, brands.id))
+      .leftJoin(printedLabelWorkOrders, eq(productionOrders.printedWorkOrderId, printedLabelWorkOrders.id))
+      .leftJoin(wovenLabelWorkOrders, eq(productionOrders.wovenWorkOrderId, wovenLabelWorkOrders.id))
+      .leftJoin(brands, eq(brands.id, sql`COALESCE(${printedLabelWorkOrders.brandId}, ${wovenLabelWorkOrders.brandId})`))
       .leftJoin(companies, eq(brands.companyId, companies.id))
-      .leftJoin(wovenWorkOrderDetails, eq(wovenWorkOrderDetails.workOrderId, workOrders.id))
       .where(eq(productionOrders.id, Number(id)));
     if (!row) return undefined;
 
@@ -234,7 +259,7 @@ export class ProductionOrderRepository {
     const [row] = await db
       .select()
       .from(productionOrders)
-      .where(eq(productionOrders.workOrderId, Number(workOrderId)));
+      .where(eq(sql`COALESCE(${productionOrders.printedWorkOrderId}, ${productionOrders.wovenWorkOrderId})`, Number(workOrderId)));
     return row;
   }
 
@@ -261,10 +286,7 @@ export class ProductionOrderRepository {
   async createWithWorkOrderStatusTx(data: NewProductionOrder) {
     return db.transaction(async (tx) => {
       const [row] = await tx.insert(productionOrders).values(data).returning();
-      await tx
-        .update(workOrders)
-        .set({ status: "production", updatedAt: new Date() })
-        .where(eq(workOrders.id, data.workOrderId));
+      await syncWorkOrderStatusTx(tx, row.id, "production");
       return row;
     });
   }
@@ -593,18 +615,24 @@ export class ProductionOrderRepository {
       }
 
       const [order] = await tx
-        .select({ workOrderId: productionOrders.workOrderId })
+        .select({ printedWorkOrderId: productionOrders.printedWorkOrderId, wovenWorkOrderId: productionOrders.wovenWorkOrderId })
         .from(productionOrders)
         .where(eq(productionOrders.id, productionOrderId));
 
       await tx.delete(productionOrders).where(eq(productionOrders.id, productionOrderId));
 
       // With no production order left, the sales order goes back to being freely editable.
-      if (order) {
+      if (order.printedWorkOrderId) {
         await tx
-          .update(workOrders)
+          .update(printedLabelWorkOrders)
           .set({ status: "initiate_production", updatedAt: new Date() })
-          .where(eq(workOrders.id, order.workOrderId));
+          .where(eq(printedLabelWorkOrders.id, order.printedWorkOrderId));
+      }
+      if (order.wovenWorkOrderId) {
+        await tx
+          .update(wovenLabelWorkOrders)
+          .set({ status: "initiate_production", updatedAt: new Date() })
+          .where(eq(wovenLabelWorkOrders.id, order.wovenWorkOrderId));
       }
     });
   }
@@ -839,30 +867,55 @@ export class ProductionOrderRepository {
 
   /** Work orders still in production (not completed) that don't yet have a production order. */
   async findEligibleWorkOrders() {
-    return db
+    const printed = await db
       .select({
-        id: workOrders.id,
-        soNumber: workOrders.soNumber,
-        poNumber: workOrders.poNumber,
-        orderDate: workOrders.orderDate,
-        dueDate: workOrders.dueDate,
-        totalQty: workOrders.totalQty,
-        productType: workOrders.productType,
+        id: printedLabelWorkOrders.id,
+        soNumber: printedLabelWorkOrders.soNumber,
+        poNumber: printedLabelWorkOrders.poNumber,
+        orderDate: printedLabelWorkOrders.orderDate,
+        dueDate: printedLabelWorkOrders.dueDate,
+        totalQty: printedLabelWorkOrders.totalQty,
+        productType: sql<"printed">`'printed'`,
         brandId: brands.id,
         brandName: brands.name,
         companyId: companies.id,
         companyName: companies.name,
       })
-      .from(workOrders)
-      .leftJoin(brands, eq(workOrders.brandId, brands.id))
+      .from(printedLabelWorkOrders)
+      .leftJoin(brands, eq(printedLabelWorkOrders.brandId, brands.id))
       .leftJoin(companies, eq(brands.companyId, companies.id))
       .where(
         and(
-          eq(workOrders.status, "initiate_production"),
-          sql`NOT EXISTS (SELECT 1 FROM ${productionOrders} WHERE ${productionOrders.workOrderId} = ${workOrders.id})`
+          eq(printedLabelWorkOrders.status, "initiate_production"),
+          sql`NOT EXISTS (SELECT 1 FROM ${productionOrders} WHERE ${productionOrders.printedWorkOrderId} = ${printedLabelWorkOrders.id})`
         )
-      )
-      .orderBy(desc(workOrders.createdAt));
+      );
+
+    const woven = await db
+      .select({
+        id: wovenLabelWorkOrders.id,
+        soNumber: wovenLabelWorkOrders.soNumber,
+        poNumber: wovenLabelWorkOrders.poNumber,
+        orderDate: wovenLabelWorkOrders.orderDate,
+        dueDate: wovenLabelWorkOrders.dueDate,
+        totalQty: wovenLabelWorkOrders.totalQty,
+        productType: sql<"woven">`'woven'`,
+        brandId: brands.id,
+        brandName: brands.name,
+        companyId: companies.id,
+        companyName: companies.name,
+      })
+      .from(wovenLabelWorkOrders)
+      .leftJoin(brands, eq(wovenLabelWorkOrders.brandId, brands.id))
+      .leftJoin(companies, eq(brands.companyId, companies.id))
+      .where(
+        and(
+          eq(wovenLabelWorkOrders.status, "initiate_production"),
+          sql`NOT EXISTS (SELECT 1 FROM ${productionOrders} WHERE ${productionOrders.wovenWorkOrderId} = ${wovenLabelWorkOrders.id})`
+        )
+      );
+
+    return [...printed, ...woven].sort((a, b) => b.id - a.id);
   }
 
   /**
@@ -944,3 +997,7 @@ export class ProductionOrderRepository {
 }
 
 export const productionOrderRepository = new ProductionOrderRepository();
+
+
+
+

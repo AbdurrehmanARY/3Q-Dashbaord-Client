@@ -3,8 +3,11 @@ import { brandController } from "./brand.controller";
 import { validateRequest, validateParams } from "@shared/middleware/validateRequest";
 import { createBrandSchema, updateBrandSchema } from "./brand.schema";
 import { idParamsSchema, companyIdParamsSchema } from "@shared/validation/common.schema";
+import { requireRole } from "@shared/middleware/rbac";
 
 const router = Router();
+
+router.use(requireRole("production_manager", "ceo"));
 
 router.get("/", brandController.getBrands);
 router.get("/:id", validateParams(idParamsSchema), brandController.getBrand);

@@ -26,11 +26,18 @@ export function buildProductionOverviewBody(
   totalQty: number,
   orderBatches: {
     productionOrderLineId: number | null;
+    wovenProductionLineId: number | null;
     stage: string;
     assignedRolls: string | number;
     producedRolls: string | number;
     wastedRolls: string | number;
     status: string;
+    operatorId: number | null;
+    operatorName: string | null;
+    operatorAvatarUrl?: string | null;
+    machineId: number | null;
+    machineName: string | null;
+    completedAt: string | null;
   }[] = []
 ) {
   const machineById = new Map(allMachines.map((m) => [m.id, m]));
@@ -56,6 +63,29 @@ export function buildProductionOverviewBody(
     else if (b.stage === "packaging") rec.packaging += qty;
   }
 
+  /** Completed batches per (line, stage): who ran each stage and when it finished.
+   * In the batch-based workflow operators/machines live on batches, not on the line row.
+   * We prefer the most recently completed batch for each stage. */
+  const completedBatchesByLineStage = new Map<string, { operatorId: number | null; operatorName: string | null; operatorAvatarUrl: string | null; machineId: number | null; machineName: string | null; completedAt: string | null }>();
+  for (const b of orderBatches) {
+    if (b.status !== "COMPLETED") continue;
+    const lineId = b.productionOrderLineId ?? b.wovenProductionLineId;
+    if (lineId == null) continue;
+    const key = `${lineId}:${b.stage}`;
+    // Keep the latest completed batch per stage
+    const existing = completedBatchesByLineStage.get(key);
+    if (!existing || (b.completedAt && (!existing.completedAt || b.completedAt > existing.completedAt))) {
+      completedBatchesByLineStage.set(key, {
+        operatorId: b.operatorId,
+        operatorName: b.operatorName,
+        operatorAvatarUrl: b.operatorAvatarUrl ?? null,
+        machineId: b.machineId,
+        machineName: b.machineName,
+        completedAt: b.completedAt,
+      });
+    }
+  }
+
   const lines = rawLines.map((line) => {
     const n = toNumbers(line);
     /** Required rolls are the progress/completion target; totalRolls is the issued ceiling. */
@@ -63,6 +93,10 @@ export function buildProductionOverviewBody(
     const material = line.materialCode ? materialByCode.get(line.materialCode) : undefined;
     const missing = missingStartRequirements(line);
     const batchRec = inProgressBatchesByLine.get(line.id) ?? { printing: 0, cutting: 0, packaging: 0, activeStages: new Set() };
+    // Prefer batch traceability (operators live on batches); fall back to line row.
+    const pBatch = completedBatchesByLineStage.get(`${line.id}:printing`);
+    const cBatch = completedBatchesByLineStage.get(`${line.id}:cutting`);
+    const pkBatch = completedBatchesByLineStage.get(`${line.id}:packaging`);
 
     return {
       id: line.id,
@@ -102,41 +136,41 @@ export function buildProductionOverviewBody(
       // Each stage carries who did it, their avatar, and when it completed — together these
       // are the traceability record surfaced on a finished order.
       printing: {
-        machineId: line.printingMachineId,
-        machineName: nameOf(machineById, line.printingMachineId),
-        operatorId: line.printingOperatorId,
-        operatorName: nameOf(operatorById, line.printingOperatorId),
-        operatorAvatarUrl: avatarOf(operatorById, line.printingOperatorId),
+        machineId: pBatch?.machineId ?? line.printingMachineId,
+        machineName: pBatch?.machineName ?? nameOf(machineById, line.printingMachineId),
+        operatorId: pBatch?.operatorId ?? line.printingOperatorId,
+        operatorName: pBatch?.operatorName ?? nameOf(operatorById, line.printingOperatorId),
+        operatorAvatarUrl: pBatch?.operatorAvatarUrl ?? avatarOf(operatorById, line.printingOperatorId),
         printedRolls: n.printedRolls,
         inPrintingRolls: batchRec.printing,
         isPrintingActive: batchRec.activeStages.has("printing"),
         progressPct: completionPct(n.printedRolls, target),
-        completedAt: line.printingCompletedAt,
+        completedAt: pBatch?.completedAt ?? line.printingCompletedAt,
       },
       cutting: {
-        machineId: line.cuttingMachineId,
-        machineName: nameOf(machineById, line.cuttingMachineId),
-        operatorId: line.cuttingOperatorId,
-        operatorName: nameOf(operatorById, line.cuttingOperatorId),
-        operatorAvatarUrl: avatarOf(operatorById, line.cuttingOperatorId),
+        machineId: cBatch?.machineId ?? line.cuttingMachineId,
+        machineName: cBatch?.machineName ?? nameOf(machineById, line.cuttingMachineId),
+        operatorId: cBatch?.operatorId ?? line.cuttingOperatorId,
+        operatorName: cBatch?.operatorName ?? nameOf(operatorById, line.cuttingOperatorId),
+        operatorAvatarUrl: cBatch?.operatorAvatarUrl ?? avatarOf(operatorById, line.cuttingOperatorId),
         sentToCuttingRolls: n.sentToCuttingRolls,
         cutRolls: n.cutRolls,
         inCuttingRolls: batchRec.cutting,
         isCuttingActive: batchRec.activeStages.has("cutting"),
         progressPct: completionPct(n.cutRolls, target),
-        completedAt: line.cuttingCompletedAt,
+        completedAt: cBatch?.completedAt ?? line.cuttingCompletedAt,
       },
       packaging: {
-        operatorId: line.packagingOperatorId,
-        operatorName: nameOf(operatorById, line.packagingOperatorId),
-        operatorAvatarUrl: avatarOf(operatorById, line.packagingOperatorId),
+        operatorId: pkBatch?.operatorId ?? line.packagingOperatorId,
+        operatorName: pkBatch?.operatorName ?? nameOf(operatorById, line.packagingOperatorId),
+        operatorAvatarUrl: pkBatch?.operatorAvatarUrl ?? avatarOf(operatorById, line.packagingOperatorId),
         sentToPackagingRolls: n.sentToPackagingRolls,
         packagedRolls: n.packagedRolls,
         packagedQty: n.packagedQty,
         inPackagingRolls: batchRec.packaging,
         isPackagingActive: batchRec.activeStages.has("packaging"),
         progressPct: completionPct(n.packagedRolls, target),
-        completedAt: line.packagingCompletedAt,
+        completedAt: pkBatch?.completedAt ?? line.packagingCompletedAt,
       },
 
       liveProgress: {

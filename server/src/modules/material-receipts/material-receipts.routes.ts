@@ -14,10 +14,12 @@ import {
   updateLabelSheetSchema,
 } from "./material-receipts.schema";
 import { idParamsSchema } from "@shared/validation/common.schema";
+import { requireRole } from "@shared/middleware/rbac";
 
 /* Mounted at /materials/stickers, /materials/local-sheets, /materials/label-sheets — see routes/index.ts. */
 
 export const stickerMaterialsRouter = Router();
+stickerMaterialsRouter.use(requireRole("production_manager", "ceo"));
 stickerMaterialsRouter.get("/", stickerMaterialController.getAll);
 stickerMaterialsRouter.post("/", validateRequest(createStickerMaterialSchema), stickerMaterialController.create);
 stickerMaterialsRouter.put(
@@ -29,6 +31,7 @@ stickerMaterialsRouter.put(
 stickerMaterialsRouter.delete("/:id", validateParams(idParamsSchema), stickerMaterialController.remove);
 
 export const localSheetsRouter = Router();
+localSheetsRouter.use(requireRole("production_manager", "ceo"));
 localSheetsRouter.get("/", localSheetController.getAll);
 localSheetsRouter.post("/", validateRequest(createLocalSheetSchema), localSheetController.create);
 localSheetsRouter.put(
@@ -40,6 +43,7 @@ localSheetsRouter.put(
 localSheetsRouter.delete("/:id", validateParams(idParamsSchema), localSheetController.remove);
 
 export const labelSheetsRouter = Router();
+labelSheetsRouter.use(requireRole("production_manager", "ceo"));
 labelSheetsRouter.get("/", labelSheetController.getAll);
 labelSheetsRouter.post("/", validateRequest(createLabelSheetSchema), labelSheetController.create);
 labelSheetsRouter.put(

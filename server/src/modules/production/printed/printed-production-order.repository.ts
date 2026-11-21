@@ -1,0 +1,83 @@
+import { db } from "@db/index";
+import {
+  productionOrders,
+  printedLabelProductionOrders,
+  productionOrderLines,
+  inventoryRolls,
+  materials,
+  printedLabelWorkOrders,
+  brands,
+  companies,
+} from "@db/schema";
+import { eq, desc, and, sql, count, ilike, ne } from "drizzle-orm";
+
+/**
+ * Printed production-order repository.
+ *
+ * Queries join `printed_label_production_orders` (the printed extension) to
+ * scope reads: only production orders whose parent work order is `product_type = 'printed'`
+ * are ever returned.
+ */
+
+const printedProductionOrderSelect = {
+  id: productionOrders.id,
+  productionNumber: productionOrders.productionNumber,
+  workOrderId: productionOrders.printedWorkOrderId,
+  totalQty: productionOrders.totalQty,
+  status: productionOrders.status,
+  notes: productionOrders.notes,
+  createdByUserId: productionOrders.createdByUserId,
+  plannedAt: productionOrders.plannedAt,
+  completedAt: productionOrders.completedAt,
+  createdAt: productionOrders.createdAt,
+  updatedAt: productionOrders.updatedAt,
+  soNumber: printedLabelWorkOrders.soNumber,
+  poNumber: printedLabelWorkOrders.poNumber,
+  orderDate: printedLabelWorkOrders.orderDate,
+  dueDate: printedLabelWorkOrders.dueDate,
+  priority: printedLabelWorkOrders.priority,
+  brandName: brands.name,
+  companyName: companies.name,
+};
+
+export class PrintedProductionOrderRepository {
+  async findAll(filters?: { status?: string; soNumber?: string; poNumber?: string }) {
+    const conditions = [];
+
+    if (filters?.status) conditions.push(eq(productionOrders.status, filters.status as any));
+    if (filters?.soNumber) conditions.push(sql`${printedLabelWorkOrders.soNumber} ILIKE ${"%" + filters.soNumber + "%"}`);
+    if (filters?.poNumber) conditions.push(sql`${printedLabelWorkOrders.poNumber} ILIKE ${"%" + filters.poNumber + "%"}`);
+
+    return db
+      .select(printedProductionOrderSelect)
+      .from(productionOrders)
+      .leftJoin(printedLabelProductionOrders, eq(printedLabelProductionOrders.productionOrderId, productionOrders.id))
+      .leftJoin(printedLabelWorkOrders, eq(printedLabelWorkOrders.id, productionOrders.printedWorkOrderId))
+      .leftJoin(brands, eq(brands.id, printedLabelWorkOrders.brandId))
+      .leftJoin(companies, eq(companies.id, brands.companyId))
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(productionOrders.createdAt));
+  }
+
+  async findById(id: number | string) {
+    const [row] = await db
+      .select(printedProductionOrderSelect)
+      .from(productionOrders)
+      .leftJoin(printedLabelProductionOrders, eq(printedLabelProductionOrders.productionOrderId, productionOrders.id))
+      .leftJoin(printedLabelWorkOrders, eq(printedLabelWorkOrders.id, productionOrders.printedWorkOrderId))
+      .leftJoin(brands, eq(brands.id, printedLabelWorkOrders.brandId))
+      .leftJoin(companies, eq(companies.id, brands.companyId))
+      .where(eq(productionOrders.id, Number(id)));
+    return row;
+  }
+
+  async findLines(productionOrderId: number | string) {
+    return db
+      .select()
+      .from(productionOrderLines)
+      .where(eq(productionOrderLines.productionOrderId, Number(productionOrderId)))
+      .orderBy(productionOrderLines.id);
+  }
+}
+
+export const printedProductionOrderRepository = new PrintedProductionOrderRepository();

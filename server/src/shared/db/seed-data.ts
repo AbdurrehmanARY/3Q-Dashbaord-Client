@@ -26,6 +26,22 @@ export const MATERIALS: MaterialSeed[] = [
   // — Paper Label / Taffeta —
   { code: "10mm NT65 PL", description: "Paper Label", type: "Taffeta", weight: 0.1901 },
   { code: "15mm NT65 PL", description: "Paper Label", type: "Taffeta", weight: 0.1901 },
+  { code: "PVC001", description: "PVC Material", type: "Sheets", weight: 1.0 },
+  { code: "GLD001", description: "Gold Ribbon", type: "Satin", weight: 1.0 },
+  { code: "LAB002", description: "Lab Labels", type: "Sheets", weight: 1.0 },
+  { code: "REC005", description: "Recycled Film", type: "Recycle", weight: 1.0 },
+  { code: "KRAF010", description: "Kraft Paper", type: "Sheets", weight: 1.0 },
+  { code: "YEL001", description: "Yellow Paper", type: "Sheets", weight: 1.0 },
+  { code: "TAG001", description: "Tags", type: "Sheets", weight: 1.0 },
+  { code: "ADH001", description: "Adhesive Labels", type: "Sheets", weight: 1.0 },
+  { code: "PVC001", description: "PVC Material", type: "Sheets", weight: 1.0 },
+  { code: "GLD001", description: "Gold Ribbon", type: "Satin", weight: 1.0 },
+  { code: "LAB002", description: "Lab Labels", type: "Sheets", weight: 1.0 },
+  { code: "REC005", description: "Recycled Film", type: "Recycle", weight: 1.0 },
+  { code: "KRAF010", description: "Kraft Paper", type: "Sheets", weight: 1.0 },
+  { code: "YEL001", description: "Yellow Paper", type: "Sheets", weight: 1.0 },
+  { code: "TAG001", description: "Tags", type: "Sheets", weight: 1.0 },
+  { code: "ADH001", description: "Adhesive Labels", type: "Sheets", weight: 1.0 },
   { code: "20mm NT65 PL", description: "Paper Label", type: "Taffeta", weight: 0.255 },
   { code: "25mm NT65 PL", description: "Paper Label", type: "Taffeta", weight: 0.3404 },
   { code: "30mm NT65 PL", description: "Paper Label", type: "Taffeta", weight: 0.4048 },
@@ -447,13 +463,10 @@ export const COMPANIES: CompanySeed[] = [
 ];
 
 export const USERS = [
-  { name: "Ayesha Siddiqui", role: "office_staff" as const },
-  { name: "Bilal Hussain", role: "office_staff" as const },
-  { name: "Rizwan Ali", role: "production_manager" as const },
-  { name: "Nabeel Ahmed", role: "production_manager" as const },
-  { name: "Saleem", role: "production_operator" as const },
-  { name: "Aleem", role: "production_operator" as const },
-  { name: "Mudassar", role: "production_operator" as const },
+  { name: "CEO", role: "ceo" as const, email: "ceo@3q.test" },
+  { name: "Office Staff", role: "office_staff" as const, email: "office.staff@3q.test" },
+  { name: "Production Manager", role: "production_manager" as const, email: "production.manager@3q.test" },
+  { name: "Accountant", role: "accountant" as const, email: "accountant@3q.test" },
 ];
 
 export const VENDORS = [
@@ -550,4 +563,218 @@ export const PURCHASE_SEEDS: PurchaseSeed[] = [
   { reportDate: "2024-12-22", itemName: "Double Side Simple Satin", vendor: "HUZHOU ZHENMIN SILK RIBBON CO., LTD.", invoiceNumber: "ZVG002575", gdNumber: "GD-ZM-2024-2575", description: "Satin", cartonQty: 33, rollsPerCarton: 22, totalRoll: 726, rollLength: 200, netWeight: 784.08, totalRollPer200m: 726, isEfs: false, invoiceWeight: 1.08, localWeight: 1.10, materialCode: "30mm PST510 SS" },
   { reportDate: "2024-12-23", itemName: "Tearaway Fabric 20% Recycle", vendor: "HUZHOU ZHENMIN SILK RIBBON CO., LTD.", invoiceNumber: "ZVG002575", gdNumber: "GD-ZM-2024-2575", description: "Tearaway", cartonQty: 43, rollsPerCarton: 12, totalRoll: 516, rollLength: 400, netWeight: 614.04, totalRollPer200m: 1032, isEfs: false, invoiceWeight: 0.59, localWeight: 0.6151, materialCode: "40mm NT65 PL" },
   { reportDate: "2024-12-24", itemName: "Tearaway Fabric 20% Recycle", vendor: "HUZHOU ZHENMIN SILK RIBBON CO., LTD.", invoiceNumber: "ZVG002575", gdNumber: "GD-ZM-2024-2575", description: "Tearaway", cartonQty: 83, rollsPerCarton: 12, totalRoll: 996, rollLength: 400, netWeight: 1155.36, totalRollPer200m: 1992, isEfs: false, invoiceWeight: 0.58, localWeight: 0.6151, materialCode: "40mm NT65 PL" },
+];
+
+export interface LabelTypeSeed {
+  name: string;
+  category: "woven" | "printed";
+}
+
+export const LABEL_TYPES: LabelTypeSeed[] = [
+  { name: "Barcode Label", category: "printed" },
+  { name: "QR Code Label", category: "printed" },
+  { name: "Care Label", category: "printed" },
+  { name: "Size Label", category: "printed" },
+  { name: "Price Label", category: "printed" },
+  { name: "Composition Label", category: "printed" },
+  { name: "Woven Brand Label", category: "woven" },
+  { name: "Woven Size Label", category: "woven" },
+  { name: "Woven Care Label", category: "woven" },
+  { name: "Woven Edge Label", category: "woven" },
+];
+
+export interface ThreadServiceProviderSeed {
+  name: string;
+  contact?: string;
+  address?: string;
+  notes?: string;
+}
+
+export const THREAD_SERVICE_PROVIDERS: ThreadServiceProviderSeed[] = [
+  { name: "Silk Dye Works", contact: "Ahmed Raza", address: "Sheikhupura Road, Lahore", notes: "Primary dyeing partner for 75D/100D" },
+  { name: "Colourfast Textiles", contact: "Sara Malik", address: "Sundar Industrial Estate, Lahore", notes: "Express dyeing, 3-day turnaround" },
+  { name: "Rainbow Dyers", contact: "Imran Qureshi", address: "Faisalabad Industrial Area", notes: "Specialist in secondary colours" },
+];
+
+export interface ThreadStockSeed {
+  stockType: "primary" | "secondary";
+  denier: "45" | "75" | "100" | "150";
+  colorName: string;
+  colorCode?: string;
+  balanceKg: number;
+  receivedKg: number;
+  consumedKg: number;
+}
+
+export const THREAD_STOCKS: ThreadStockSeed[] = [
+  { stockType: "primary", denier: "45", colorName: "White", balanceKg: 250, receivedKg: 300, consumedKg: 50 },
+  { stockType: "primary", denier: "75", colorName: "White", balanceKg: 500, receivedKg: 600, consumedKg: 100 },
+  { stockType: "primary", denier: "100", colorName: "White", balanceKg: 400, receivedKg: 450, consumedKg: 50 },
+  { stockType: "primary", denier: "150", colorName: "White", balanceKg: 300, receivedKg: 350, consumedKg: 50 },
+  { stockType: "primary", denier: "75", colorName: "Black", balanceKg: 200, receivedKg: 250, consumedKg: 50 },
+  { stockType: "secondary", denier: "75", colorName: "Brown", colorCode: "22783", balanceKg: 80, receivedKg: 95, consumedKg: 15 },
+  { stockType: "secondary", denier: "75", colorName: "Navy", colorCode: "19-4052", balanceKg: 60, receivedKg: 70, consumedKg: 10 },
+  { stockType: "secondary", denier: "100", colorName: "Red", colorCode: "18-1664", balanceKg: 45, receivedKg: 55, consumedKg: 10 },
+  { stockType: "secondary", denier: "100", colorName: "Green", colorCode: "19-5513", balanceKg: 35, receivedKg: 40, consumedKg: 5 },
+  { stockType: "secondary", denier: "150", colorName: "Yellow", colorCode: "13-0755", balanceKg: 25, receivedKg: 30, consumedKg: 5 },
+];
+
+export interface ThreadPurchaseSeed {
+  receivedDate: string;
+  denier: "45" | "75" | "100" | "150";
+  threadColor: "White" | "Black";
+  vendor: string;
+  invoiceNumber: string;
+  totalCtns: number;
+  weightPerCtnKg: number;
+  notes?: string;
+}
+
+export const THREAD_PURCHASES: ThreadPurchaseSeed[] = [
+  { receivedDate: "2024-12-01", denier: "75", threadColor: "White", vendor: "HUZHOU ZHENMIN SILK RIBBON CO., LTD.", invoiceNumber: "TP-2024-001", totalCtns: 50, weightPerCtnKg: 12, notes: "White undyed 75D cone stock" },
+  { receivedDate: "2024-12-05", denier: "100", threadColor: "White", vendor: "Shaoxing Weaving Supplies Co.", invoiceNumber: "TP-2024-002", totalCtns: 40, weightPerCtnKg: 11.5, notes: "White undyed 100D cone stock" },
+  { receivedDate: "2024-12-10", denier: "75", threadColor: "Black", vendor: "Dongguan Label Materials Ltd.", invoiceNumber: "TP-2024-003", totalCtns: 30, weightPerCtnKg: 12, notes: "Black undyed 75D cone stock" },
+  { receivedDate: "2024-12-15", denier: "150", threadColor: "White", vendor: "Karachi Ribbon Traders", invoiceNumber: "TP-2024-004", totalCtns: 25, weightPerCtnKg: 10.5, notes: "White undyed 150D cone stock" },
+];
+
+export interface ThreadDyeingSendSeed {
+  serviceProviderName: string;
+  sendingDate: string;
+  senderTrackingNumber?: string;
+  denier: "45" | "75" | "100" | "150";
+  baseThreadColor: "White" | "Black";
+  totalWeightSent: number;
+  status: "sent" | "partially_received" | "received";
+}
+
+export const THREAD_DYEING_SENDS: ThreadDyeingSendSeed[] = [
+  { serviceProviderName: "Silk Dye Works", sendingDate: "2024-12-01", senderTrackingNumber: "SDW-2024-001", denier: "75", baseThreadColor: "White", totalWeightSent: 100, status: "received" },
+  { serviceProviderName: "Colourfast Textiles", sendingDate: "2024-12-05", senderTrackingNumber: "CF-2024-002", denier: "100", baseThreadColor: "White", totalWeightSent: 80, status: "partially_received" },
+  { serviceProviderName: "Rainbow Dyers", sendingDate: "2024-12-10", senderTrackingNumber: "RD-2024-003", denier: "75", baseThreadColor: "Black", totalWeightSent: 60, status: "sent" },
+];
+
+export interface ThreadDyeingAllocationSeed {
+  sendIndex: number;
+  colorName: string;
+  pantone?: string;
+  colorCode?: string;
+  allocatedWeight: number;
+  receivedWeight?: number | null;
+}
+
+export const THREAD_DYEING_ALLOCATIONS: ThreadDyeingAllocationSeed[] = [
+  { sendIndex: 0, colorName: "Brown", pantone: "22783 C", colorCode: "22783", allocatedWeight: 40, receivedWeight: 38 },
+  { sendIndex: 0, colorName: "Navy", pantone: "19-4052 TCX", colorCode: "19-4052", allocatedWeight: 35, receivedWeight: 33 },
+  { sendIndex: 0, colorName: "Red", pantone: "18-1664 TCX", colorCode: "18-1664", allocatedWeight: 25, receivedWeight: 24 },
+  { sendIndex: 1, colorName: "Green", pantone: "19-5513 TCX", colorCode: "19-5513", allocatedWeight: 30, receivedWeight: 28 },
+  { sendIndex: 1, colorName: "Yellow", pantone: "13-0755 TCX", colorCode: "13-0755", allocatedWeight: 25, receivedWeight: 23 },
+  { sendIndex: 2, colorName: "Brown", pantone: "22783 C", colorCode: "22783", allocatedWeight: 30, receivedWeight: null },
+  { sendIndex: 2, colorName: "Red", pantone: "18-1664 TCX", colorCode: "18-1664", allocatedWeight: 30, receivedWeight: null },
+];
+
+export interface ThreadDyeingReceiveSeed {
+  sendIndex: number;
+  receivingDate: string;
+  receiverTrackingNumber?: string;
+  invoiceNumber?: string;
+}
+
+export const THREAD_DYEING_RECEIVES: ThreadDyeingReceiveSeed[] = [
+  { sendIndex: 0, receivingDate: "2024-12-08", receiverTrackingNumber: "SDW-RET-001", invoiceNumber: "INV-SDW-001" },
+  { sendIndex: 1, receivingDate: "2024-12-12", receiverTrackingNumber: "CF-RET-002", invoiceNumber: "INV-CF-002" },
+];
+
+export interface ThreadDyeBatchSeed {
+  fromStockName: string;
+  fromStockColorCode?: string;
+  toStockName: string;
+  toStockColorCode: string;
+  denier: "45" | "75" | "100" | "150";
+  colorName: string;
+  colorCode: string;
+  inputWeightKg: number;
+  outputWeightKg: number;
+  notes?: string;
+}
+
+export const THREAD_DYE_BATCHES: ThreadDyeBatchSeed[] = [
+  { fromStockName: "White 75D", toStockName: "Brown 75D", toStockColorCode: "22783", denier: "75", colorName: "Brown", colorCode: "22783", inputWeightKg: 100, outputWeightKg: 95, notes: "In-house dye batch 1" },
+  { fromStockName: "White 100D", toStockName: "Red 100D", toStockColorCode: "18-1664", denier: "100", colorName: "Red", colorCode: "18-1664", inputWeightKg: 50, outputWeightKg: 47, notes: "In-house dye batch 2" },
+];
+
+export interface StickerMaterialSeed {
+  invoiceDate: string;
+  stickerSize: string;
+  materialCode: string;
+  rollQuantity: number;
+  weightPerRoll: number;
+}
+
+export const STICKER_MATERIALS: StickerMaterialSeed[] = [
+  { invoiceDate: "2024-11-05", stickerSize: "4 x 6", materialCode: "STK-4X6-WHT", rollQuantity: 500, weightPerRoll: 0.05 },
+  { invoiceDate: "2024-11-12", stickerSize: "2 x 3", materialCode: "STK-2X3-CLR", rollQuantity: 300, weightPerRoll: 0.02 },
+  { invoiceDate: "2024-11-20", stickerSize: "4 x 6", materialCode: "STK-4X6-RED", rollQuantity: 200, weightPerRoll: 0.055 },
+];
+
+export interface LocalSheetSeed {
+  date: string;
+  materialCode: string;
+  packetQuantity: number;
+  packetWeight: number;
+}
+
+export const LOCAL_SHEETS: LocalSheetSeed[] = [
+  { date: "2024-11-03", materialCode: "LOC-A4-80GSM", packetQuantity: 100, packetWeight: 2.5 },
+  { date: "2024-11-10", materialCode: "LOC-A3-100GSM", packetQuantity: 80, packetWeight: 4.0 },
+  { date: "2024-11-18", materialCode: "LOC-A4-80GSM", packetQuantity: 120, packetWeight: 2.5 },
+];
+
+export interface LabelSheetSeed {
+  date: string;
+  materialCode: string;
+  sheetQuantity: number;
+  weightPerSheet: number;
+}
+
+// Added PURCHASE_SEEDS entries for missing material codes
+  { reportDate: "2025-01-01", itemName: "PVC Material", vendor: "Default Vendor", invoiceNumber: "INV-2025-001", gdNumber: null, description: "PVC Material", cartonQty: 1, rollsPerCarton: 50, totalRoll: 50, rollLength: 200, netWeight: 50, totalRollPer200m: 50, isEfs: false, invoiceWeight: 1.0, localWeight: 1.0, materialCode: "PVC001" },
+  { reportDate: "2025-01-02", itemName: "Gold Ribbon", vendor: "Default Vendor", invoiceNumber: "INV-2025-002", gdNumber: null, description: "Gold Ribbon", cartonQty: 1, rollsPerCarton: 50, totalRoll: 50, rollLength: 400, netWeight: 50, totalRollPer200m: 100, isEfs: false, invoiceWeight: 1.0, localWeight: 1.0, materialCode: "GLD001" },
+  { reportDate: "2025-01-03", itemName: "Lab Labels", vendor: "Default Vendor", invoiceNumber: "INV-2025-003", gdNumber: null, description: "Lab Labels", cartonQty: 1, rollsPerCarton: 50, totalRoll: 50, rollLength: 200, netWeight: 50, totalRollPer200m: 50, isEfs: false, invoiceWeight: 1.0, localWeight: 1.0, materialCode: "LAB002" },
+  { reportDate: "2025-01-04", itemName: "Recycled Film", vendor: "Default Vendor", invoiceNumber: "INV-2025-004", gdNumber: null, description: "Recycled Film", cartonQty: 1, rollsPerCarton: 50, totalRoll: 50, rollLength: 600, netWeight: 50, totalRollPer200m: 150, isEfs: false, invoiceWeight: 1.0, localWeight: 1.0, materialCode: "REC005" },
+  { reportDate: "2025-01-05", itemName: "Kraft Paper", vendor: "Default Vendor", invoiceNumber: "INV-2025-005", gdNumber: null, description: "Kraft Paper", cartonQty: 1, rollsPerCarton: 50, totalRoll: 50, rollLength: 400, netWeight: 50, totalRollPer200m: 100, isEfs: false, invoiceWeight: 1.0, localWeight: 1.0, materialCode: "KRAF010" },
+  { reportDate: "2025-01-06", itemName: "Yellow Paper", vendor: "Default Vendor", invoiceNumber: "INV-2025-006", gdNumber: null, description: "Yellow Paper", cartonQty: 1, rollsPerCarton: 50, totalRoll: 50, rollLength: 400, netWeight: 50, totalRollPer200m: 100, isEfs: false, invoiceWeight: 1.0, localWeight: 1.0, materialCode: "YEL001" },
+  { reportDate: "2025-01-07", itemName: "Tags", vendor: "Default Vendor", invoiceNumber: "INV-2025-007", gdNumber: null, description: "Tags", cartonQty: 1, rollsPerCarton: 50, totalRoll: 50, rollLength: 200, netWeight: 50, totalRollPer200m: 50, isEfs: false, invoiceWeight: 1.0, localWeight: 1.0, materialCode: "TAG001" },
+  { reportDate: "2025-01-08", itemName: "Adhesive Labels", vendor: "Default Vendor", invoiceNumber: "INV-2025-008", gdNumber: null, description: "Adhesive Labels", cartonQty: 1, rollsPerCarton: 50, totalRoll: 50, rollLength: 300, netWeight: 50, totalRollPer200m: 75, isEfs: false, invoiceWeight: 1.0, localWeight: 1.0, materialCode: "ADH001" }
+
+export const LABEL_SHEETS: LabelSheetSeed[] = [
+  { date: "2024-11-02", materialCode: "LBL-MATTE-70", sheetQuantity: 500, weightPerSheet: 0.007 },
+  { date: "2024-11-15", materialCode: "LBL-GLOSS-80", sheetQuantity: 400, weightPerSheet: 0.008 },
+];
+
+export interface InkPurchaseSeed {
+  reportDate: string;
+  materialCode: string;
+  vendor: string;
+  invoiceNumber?: string;
+  quantity: number;
+  weightPerQty: number;
+}
+
+export const INK_PURCHASES: InkPurchaseSeed[] = [
+  { reportDate: "2024-11-01", materialCode: "INK-BLK-001", vendor: "Ink Supplies Co.", invoiceNumber: "INK-2024-001", quantity: 20, weightPerQty: 1.0 },
+  { reportDate: "2024-11-10", materialCode: "INK-RED-001", vendor: "Ink Supplies Co.", invoiceNumber: "INK-2024-002", quantity: 10, weightPerQty: 1.0 },
+  { reportDate: "2024-11-20", materialCode: "INK-BLU-001", vendor: "Colour Inks Ltd.", invoiceNumber: "INK-2024-003", quantity: 15, weightPerQty: 1.0 },
+];
+
+export interface InkConsumptionSeed {
+  materialCode: string;
+  qtyAssigned: number;
+  operatorName?: string;
+  weight: number;
+  note?: string;
+}
+
+export const INK_CONSUMPTIONS: InkConsumptionSeed[] = [
+  { materialCode: "INK-BLK-001", qtyAssigned: 5, operatorName: "Saleem", weight: 5, note: "Print run SO-001" },
+  { materialCode: "INK-RED-001", qtyAssigned: 3, operatorName: "Aleem", weight: 3, note: "Sample printing" },
 ];

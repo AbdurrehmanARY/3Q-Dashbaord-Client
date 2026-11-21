@@ -6,12 +6,13 @@ import {
   machines,
   operators,
   users,
-  workOrders,
+  printedLabelWorkOrders,
   productionOrders,
   productionOrderLines,
   purchaseRecords,
   inventoryRolls,
 } from "@db/schema";
+import bcrypt from "bcryptjs";
 import { calculateRequiredRolls, calculateTotalRolls } from "@shared/formulas/production-formula";
 import { calculateTotalRollPer200m, calculateInvoiceWeight } from "@shared/formulas/purchase-formula";
 
@@ -55,7 +56,7 @@ async function seed() {
   }).returning();
   console.log("Created operator:", operator.name);
 
-  const [workOrder] = await db.insert(workOrders).values({
+  const [workOrder] = await db.insert(printedLabelWorkOrders).values({
     soNumber: "SO-001",
     poNumber: "PO-001",
     orderDate: "2024-01-15",
@@ -66,16 +67,17 @@ async function seed() {
   }).returning();
   console.log("Created work order:", workOrder.soNumber);
 
+  const passwordHash = await bcrypt.hash("Seed123!@#", 12);
   const seededUsers = await db.insert(users).values([
-    { name: "Office Staff", role: "office_staff" },
-    { name: "Production Manager", role: "production_manager" },
-    { name: "Production Operator", role: "production_operator" },
+    { name: "Office Staff", role: "office_staff", email: "office.staff@3q.test", passwordHash },
+    { name: "Production Manager", role: "production_manager", email: "production.manager@3q.test", passwordHash },
+    { name: "Production Operator", role: "production_operator", email: "production.operator@3q.test", passwordHash },
   ]).returning();
-  console.log("Created users:", seededUsers.map((u) => u.role).join(", "));
+  console.log("Created users:", seededUsers.map((u) => ({ id: u.id, name: u.name, role: u.role, email: u.email })));
 
   const [productionOrder] = await db.insert(productionOrders).values({
     productionNumber: "PRD-00001",
-    workOrderId: workOrder.id,
+    printedWorkOrderId: workOrder.id,
     totalQty: workOrder.totalQty,
     status: "planned",
     plannedAt: new Date(),
@@ -148,3 +150,4 @@ seed()
     console.error("Seeding failed:", error);
     process.exit(1);
   });
+

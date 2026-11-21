@@ -1,6 +1,4 @@
-import { pgTable, serial, varchar, date, integer, timestamp, unique, text, index, pgEnum } from "drizzle-orm/pg-core";
-import { brands } from "./brands.table";
-import { productTypeEnum } from "./product-type.enum";
+import { pgEnum, type pgTable } from "drizzle-orm/pg-core";
 
 /**
  * Work order status is **derived from the production order**, never set by hand:
@@ -25,66 +23,38 @@ export const workOrderStatusEnum = pgEnum("work_order_status", [
   "dispatched",
 ]);
 
-export const workOrders = pgTable(
-  "work_orders",
-  {
-    id: serial("id").primaryKey(),
-    soNumber: varchar("so_number", { length: 100 }).notNull().unique(),
-    poNumber: varchar("po_number", { length: 100 }),
-    orderDate: date("order_date").notNull(),
-    dueDate: date("due_date"),
-    totalQty: integer("total_qty").notNull(),
-    brandId: integer("brand_id").references(() => brands.id),
-    comment: text("comment"),
-    /**
-     * Artwork / reference image for the order, rendered on the detail page. Plain URL text
-     * today; a Cloudinary-hosted URL would drop in here unchanged.
-     */
-    imageUrl: text("image_url"),
-    /**
-     * DC-copy image captured alongside the artwork during dispatch (0028).
-     * Same pattern as imageUrl: plain text holding a base64 data URI or URL.
-     */
-    dcImageUrl: text("dc_image_url"),
-    status: workOrderStatusEnum("status").default("initiate_production").notNull(),
-    /**
-     * Scheduling priority, set by office staff on any order (woven or printed).
-     * Stored as a plain varchar (not a pg enum) so the value set is easy to extend —
-     * validated to `normal | urgent | emergency` by the Zod schema. Default `normal`.
-     */
-    priority: varchar("priority", { length: 20 }).default("normal").notNull(),
-    /**
-     * Why this order exists. Validated to
-     * `normal order | shortfall | additional order | recut order`. Default `normal order`.
-     */
-    orderType: varchar("order_type", { length: 30 }).default("normal order").notNull(),
-    /**
-     * Which manufacturing workflow this order runs through. Defaults to `printed`, so every
-     * pre-existing row keeps its current behaviour untouched. Woven orders additionally
-     * carry a `woven_work_order_details` row with the loom specification.
-     */
-    productType: productTypeEnum("product_type").default("printed").notNull(),
-    /** Dispatch chalan number — required to complete dispatch, and searchable. */
-    dcNumber: varchar("dc_number", { length: 100 }),
-    /** Letter-of-credit number — required to complete dispatch, and searchable. */
-    lcNumber: varchar("lc_number", { length: 100 }),
-    /** FBR (tax authority) invoice number — required to complete dispatch, and searchable. */
-    fbrInvoiceNumber: varchar("fbr_invoice_number", { length: 100 }),
-    /** Dispatch date — captured against a completed order. */
-    dispatchedDate: date("dispatched_date"),
-    /** Quantity actually dispatched; may differ from `totalQty` on a short shipment. */
-    dispatchedQty: integer("dispatched_qty"),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-    updatedAt: timestamp("updated_at").defaultNow().notNull(),
-  },
-  (table) => ({
-    soNumberIdx: unique("work_orders_so_number_idx").on(table.soNumber),
-    brandIdx: index("work_orders_brand_idx").on(table.brandId),
-    statusIdx: index("work_orders_status_idx").on(table.status),
-    productTypeIdx: index("work_orders_product_type_idx").on(table.productType),
-    // Dispatch paperwork is searchable, so both numbers get an index.
-    dcNumberIdx: index("work_orders_dc_number_idx").on(table.dcNumber),
-    lcNumberIdx: index("work_orders_lc_number_idx").on(table.lcNumber),
-    fbrInvoiceIdx: index("work_orders_fbr_invoice_idx").on(table.fbrInvoiceNumber),
-  })
-);
+/**
+ * Shared work-order interface — the common fields that both `printed_label_work_orders`
+ * and `woven_label_work_orders` carry. `productType` is not a DB column on either table
+ * (the table itself implies it); it is injected as a literal in queries that need it.
+ *
+ * Used as the canonical `WorkOrder` type across repositories and services that operate
+ * on either workflow.
+ */
+export interface WorkOrder {
+  id: number;
+  soNumber: string;
+  poNumber: string | null;
+  orderDate: Date | string;
+  dueDate: Date | string | null;
+  totalQty: number;
+  brandId: number | null;
+  comment: string | null;
+  imageUrl: string | null;
+  dcImageUrl: string | null;
+  status: typeof workOrderStatusEnum.enumValues[number];
+  priority: string;
+  orderType: string;
+  dcNumber: string | null;
+  lcNumber: string | null;
+  fbrInvoiceNumber: string | null;
+  dispatchedDate: Date | string | null;
+  dispatchedQty: number | null;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+  /** Injected as a literal in queries — 'printed' or 'woven'. */
+  productType: "printed" | "woven";
+}
+
+/** Insertion shape — omits the auto-generated identity and timestamps. */
+export type NewWorkOrder = Omit<WorkOrder, "id" | "createdAt" | "updatedAt" | "productType">;

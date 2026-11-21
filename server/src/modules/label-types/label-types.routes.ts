@@ -7,8 +7,11 @@ import {
   labelTypeParamsSchema,
   labelTypesQuerySchema,
 } from "./label-types.schema";
+import { requireRole } from "@shared/middleware/rbac";
 
 const router = Router();
+
+router.use(requireRole("production_manager", "ceo"));
 
 /** Label Type Master Data CRUD */
 router.get("/", validateQuery(labelTypesQuerySchema), labelTypesController.getAll);

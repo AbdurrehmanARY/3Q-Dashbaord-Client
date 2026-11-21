@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "branchName": "main",
+  "worktreePath": "D:\\3Q-facility-Dashboard\\client",
+  "upstream": "origin/main",
+  "mergeBase": "9947228d262c6c79b023f1e95a0b9c2bbcea6a70",
+  "firstSeenHead": "9947228d262c6c79b023f1e95a0b9c2bbcea6a70",
+  "lastSeenHead": "9947228d262c6c79b023f1e95a0b9c2bbcea6a70",
+  "lastAnalyzedHead": "9947228d262c6c79b023f1e95a0b9c2bbcea6a70",
+  "stale": false,
+  "staleReason": null,
+  "staleSince": null,
+  "lifecycleEvent": null,
+  "createdAt": "2026-10-29T09:50:24.823Z",
+  "updatedAt": "2026-10-29T11:41:14.824Z"
+}

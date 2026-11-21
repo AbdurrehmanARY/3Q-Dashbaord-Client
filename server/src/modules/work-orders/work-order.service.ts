@@ -93,12 +93,12 @@ export class WorkOrderService {
         pick: data.wovenDetail.pick,
         density: data.wovenDetail.density,
         // Decimal columns take strings through Drizzle.
-        repeat: String(data.wovenDetail.repeat),
-        speed: String(data.wovenDetail.speed ?? 0),
-        extra: String(data.wovenDetail.extra ?? 0),
+        repeat: Number(data.wovenDetail.repeat),
+        speed: Number(data.wovenDetail.speed ?? 0),
+        extra: Number(data.wovenDetail.extra ?? 0),
         sizeLabels: data.wovenDetail.sizeLabels ?? [],
         // Derived server-side — never accepted from the client (clinerules §3).
-        estimatedWeavingHours: String(
+        estimatedWeavingHours: Number(
           estimateWeavingHours({
             totalQty: data.totalQty,
             repeat: data.wovenDetail.repeat,
@@ -109,7 +109,7 @@ export class WorkOrderService {
       });
     }
 
-    return workOrderRepository.create({ ...header, productType: "printed" });
+    return workOrderRepository.create({ ...header });
   }
 
   /**
@@ -225,7 +225,7 @@ export class WorkOrderService {
       // A renamed design code still has to stay unique across the facility.
       if (wovenDetail.designCode) {
         const clash = await workOrderRepository.findByDesignCode(wovenDetail.designCode);
-        if (clash && clash.workOrderId !== Number(id)) {
+        if (clash && clash.id !== Number(id)) {
           throw new ConflictError(`Design code '${wovenDetail.designCode}' is already in use`);
         }
       }
@@ -237,40 +237,40 @@ export class WorkOrderService {
         wovenDetail.repeat !== undefined ||
         wovenDetail.speed !== undefined ||
         commercial.totalQty !== undefined;
-      let estimatedWeavingHoursPatch: { estimatedWeavingHours: string } | undefined;
+      let estimatedWeavingHoursPatch: { estimatedWeavingHours: number } | undefined;
       if (loomChanged) {
-        const current = await workOrderRepository.findWovenDetail(id);
+        const current = await workOrderRepository.findWovenSpec(id);
         const merged = {
           totalQty: commercial.totalQty ?? existing.totalQty,
           pick: wovenDetail.pick ?? current?.pick ?? 0,
-          repeat: wovenDetail.repeat ?? current?.repeat ?? 0,
+          repeat: Number(wovenDetail.repeat ?? current?.repeat ?? 0),
           speed: wovenDetail.speed ?? current?.speed ?? 0,
         };
         estimatedWeavingHoursPatch = {
-          estimatedWeavingHours: String(estimateWeavingHours(merged)),
+          estimatedWeavingHours: Number(estimateWeavingHours(merged)),
         };
       }
 
-      await workOrderRepository.upsertWovenDetail(Number(id), {
+      await workOrderRepository.updateWovenSpec(Number(id), {
         ...(wovenDetail.designCode !== undefined ? { designCode: wovenDetail.designCode } : {}),
         ...(wovenDetail.pick !== undefined ? { pick: wovenDetail.pick } : {}),
         ...(wovenDetail.density !== undefined ? { density: wovenDetail.density } : {}),
-        ...(wovenDetail.repeat !== undefined ? { repeat: String(wovenDetail.repeat) } : {}),
-        ...(wovenDetail.speed !== undefined ? { speed: String(wovenDetail.speed) } : {}),
-        ...(wovenDetail.extra !== undefined ? { extra: String(wovenDetail.extra) } : {}),
+        ...(wovenDetail.repeat !== undefined ? { repeat: Number(wovenDetail.repeat) } : {}),
+        ...(wovenDetail.speed !== undefined ? { speed: Number(wovenDetail.speed) } : {}),
+        ...(wovenDetail.extra !== undefined ? { extra: Number(wovenDetail.extra) } : {}),
         ...(wovenDetail.sizeLabels !== undefined ? { sizeLabels: wovenDetail.sizeLabels } : {}),
         ...estimatedWeavingHoursPatch,
       });
     } else if (commercial.totalQty !== undefined && existing.productType === "woven") {
       // totalQty changed without a loom-spec patch (the common edit): recompute from
       // the stored loom inputs so the persisted estimate never goes stale.
-      const current = await workOrderRepository.findWovenDetail(id);
+      const current = await workOrderRepository.findWovenSpec(id);
       if (current) {
-        await workOrderRepository.upsertWovenDetail(Number(id), {
-          estimatedWeavingHours: String(
+        await workOrderRepository.updateWovenSpec(Number(id), {
+          estimatedWeavingHours: Number(
             estimateWeavingHours({
               totalQty: commercial.totalQty,
-              repeat: current.repeat,
+              repeat: current.repeat ?? 0,
               pick: current.pick,
               speed: current.speed,
             })

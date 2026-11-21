@@ -11,8 +11,11 @@ import {
   listThreadMovementsQuerySchema,
 } from "./thread-inventory.schema";
 import { idParamsSchema } from "@shared/validation/common.schema";
+import { requireRole } from "@shared/middleware/rbac";
 
 const router = Router();
+
+router.use(requireRole("production_manager", "ceo"));
 
 /* --- Stock: primary (undyed) + secondary (dyed) --- */
 router.get("/stocks", validateQuery(listThreadStocksQuerySchema), threadInventoryController.getStocks);

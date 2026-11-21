@@ -207,17 +207,19 @@ describe("isReadyForCompletion", () => {
     expect(isReadyForCompletion([])).toBe(false);
   });
 
-  it("counts waste toward completion but not toward assignment capacity", () => {
+  it("waste deducts from required target, not from assignment capacity", () => {
+    // required = planned - wastedTotal = 20 - 5 = 15
     expect(
-      isReadyForCompletion([{ planned: 20, packagedProduced: 15, wastedTotal: 5 }])
+      isReadyForCompletion([{ planned: 20, required: 15, packagedProduced: 15, wastedTotal: 5 }])
     ).toBe(true);
     expect(
-      isReadyForCompletion([{ planned: 20, packagedProduced: 10, wastedTotal: 5 }])
+      isReadyForCompletion([{ planned: 20, required: 15, packagedProduced: 14, wastedTotal: 5 }])
     ).toBe(false);
+    // Line 1 ready (18 >= 18), line 2 not (5 < 10) → order not ready
     expect(
       isReadyForCompletion([
-        { planned: 20, packagedProduced: 18, wastedTotal: 2 },
-        { planned: 10, packagedProduced: 5, wastedTotal: 0 },
+        { planned: 20, required: 18, packagedProduced: 18, wastedTotal: 2 },
+        { planned: 10, required: 10, packagedProduced: 5, wastedTotal: 0 },
       ])
     ).toBe(false);
   });
@@ -228,12 +230,13 @@ describe("isReadyForCompletion", () => {
     expect(isReadyForCompletion([{ planned: 20, required: 5, packagedProduced: 4, wastedTotal: 0 }])).toBe(false);
   });
 
-  it("counts waste toward the required target", () => {
+  it("required already reflects waste deduction — production must reach the net target", () => {
+    // required = planned - wastedTotal = 20 - 3 = 17; production must reach 17
     expect(
-      isReadyForCompletion([{ planned: 20, required: 10, packagedProduced: 7, wastedTotal: 3 }])
+      isReadyForCompletion([{ planned: 20, required: 17, packagedProduced: 17, wastedTotal: 3 }])
     ).toBe(true);
     expect(
-      isReadyForCompletion([{ planned: 20, required: 10, packagedProduced: 4, wastedTotal: 3 }])
+      isReadyForCompletion([{ planned: 20, required: 17, packagedProduced: 16, wastedTotal: 3 }])
     ).toBe(false);
   });
 
@@ -243,10 +246,18 @@ describe("isReadyForCompletion", () => {
   });
 
   it("completes the order once every line meets its required target", () => {
+    // Line 1: 7 >= 5 (ready); Line 2: required=8 (10-2 waste), 6 >= 8? no → not ready
     expect(
       isReadyForCompletion([
         { planned: 20, required: 5, packagedProduced: 7, wastedTotal: 0 },
         { planned: 10, required: 8, packagedProduced: 6, wastedTotal: 2 },
+      ])
+    ).toBe(false);
+    // Both lines now meet their targets → order is ready
+    expect(
+      isReadyForCompletion([
+        { planned: 20, required: 5, packagedProduced: 7, wastedTotal: 0 },
+        { planned: 10, required: 8, packagedProduced: 8, wastedTotal: 2 },
       ])
     ).toBe(true);
   });

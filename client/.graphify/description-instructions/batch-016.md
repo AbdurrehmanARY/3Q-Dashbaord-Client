@@ -1,0 +1,76 @@
+# Node Description Batch 17 of 38
+
+Graphify is running in assistant/skill mode (no API key). You are the host
+assistant (Claude Code / Codex / Gemini CLI). Read the prompt below and write
+your JSON answer to the answer file.
+
+## Prompt
+
+You are documenting nodes in a knowledge graph.
+For each entry below, write ONE concise factual plain-language sentence
+describing what it is or does. Use only the provided context.
+For a code symbol (kind=code-symbol — a function, class, or constant),
+describe what the function/symbol does based on its name, source location
+and neighbors — e.g. "Resolves the configured ontology profile from graphify.yaml.".
+Write every description in English (en). Do not switch languages.
+No marketing language.
+Respond ONLY with a JSON object mapping each node id (as a string) to its
+one-sentence description — no prose, no markdown fences.
+
+- "components_brand_columns_createbrandcolumns": "createBrandColumns()" | kind=code-symbol | source=src/features/companies/components/brand-columns.tsx:L11 | neighbors=[brand-columns.tsx, BrandTable.tsx]
+- "components_brand_row_actions_brandrowactions": "BrandRowActions()" | kind=code-symbol | source=src/features/companies/components/brand-row-actions.tsx:L28 | neighbors=[brand-columns.tsx, brand-row-actions.tsx]
+- "components_brandtable_brandtable": "BrandTable()" | kind=code-symbol | source=src/features/companies/components/BrandTable.tsx:L16 | neighbors=[BrandTable.tsx, CompanyBrandPage.tsx]
+- "components_company_columns_companycolumns": "companyColumns" | kind=code-symbol | source=src/features/companies/components/company-columns.tsx:L7 | neighbors=[company-columns.tsx, CompanyTable.tsx]
+- "components_company_row_actions_companyrowactions": "CompanyRowActions()" | kind=code-symbol | source=src/features/companies/components/company-row-actions.tsx:L32 | neighbors=[company-columns.tsx, company-row-actions.tsx]
+- "components_companyinfo_companyinfo": "CompanyInfo()" | kind=code-symbol | source=src/features/work-orders/components/CompanyInfo.tsx:L7 | neighbors=[CompanyInfo.tsx, WorkOrderDialog.tsx]
+- "components_companyselect_companyselect": "CompanySelect()" | kind=code-symbol | source=src/features/companies/components/CompanySelect.tsx:L15 | neighbors=[index.ts, CompanySelect.tsx]
+- "components_companytable_companytable": "CompanyTable()" | kind=code-symbol | source=src/features/companies/components/CompanyTable.tsx:L18 | neighbors=[CompanyTable.tsx, CompanyBrandPage.tsx]
+- "components_createbatchdialog_createbatchdialog": "CreateBatchDialog()" | kind=code-symbol | source=src/features/production-orders/components/CreateBatchDialog.tsx:L44 | neighbors=[BatchStageBoard.tsx, CreateBatchDialog.tsx]
+- "components_createbatchdialog_sourcepicker": "SourcePicker()" | kind=code-symbol | source=src/features/production-orders/components/CreateBatchDialog.tsx:L415 | neighbors=[CreateBatchDialog.tsx, EditBatchDialog.tsx]
+- "components_createlabeltypedialog_createlabeltypedialog": "CreateLabelTypeDialog()" | kind=code-symbol | source=src/features/label-types/components/CreateLabelTypeDialog.tsx:L23 | neighbors=[CreateLabelTypeDialog.tsx, LabelTypeMasterPage.tsx]
+- "components_createproductionorderdialog_createproductionorderdialog": "CreateProductionOrderDialog()" | kind=code-symbol | source=src/features/production-orders/components/CreateProductionOrderDialog.tsx:L32 | neighbors=[CreateProductionOrderDialog.tsx, ProductionOrderListPage.tsx]
+- "components_date_picker_datepicker": "DatePicker()" | kind=code-symbol | source=src/shared/components/date-picker.tsx:L29 | neighbors=[date-picker.tsx, purchase-table.tsx]
+- "components_dispatchdialog_dispatchdialog": "DispatchDialog()" | kind=code-symbol | source=src/features/work-orders/components/DispatchDialog.tsx:L28 | neighbors=[DispatchDialog.tsx, work-order-row-actions.tsx]
+- "components_dispatchinfo_dispatchinfo": "DispatchInfo()" | kind=code-symbol | source=src/features/work-orders/components/DispatchInfo.tsx:L6 | neighbors=[DispatchInfo.tsx, WorkOrderDialog.tsx]
+- "components_editbatchdialog_editbatchdialog": "EditBatchDialog()" | kind=code-symbol | source=src/features/production-orders/components/EditBatchDialog.tsx:L49 | neighbors=[BatchStageBoard.tsx, EditBatchDialog.tsx]
+- "components_ink_consumption_columns_inkconsumptioncolumns": "inkConsumptionColumns()" | kind=code-symbol | source=src/features/ink/components/ink-consumption-columns.tsx:L9 | neighbors=[ink-consumption-columns.tsx, InkConsumptionPage.tsx]
+- "components_ink_purchase_columns_inkpurchasecolumns": "inkPurchaseColumns()" | kind=code-symbol | source=src/features/ink/components/ink-purchase-columns.tsx:L14 | neighbors=[ink-purchase-columns.tsx, InkPurchasesPage.tsx]
+- "components_inkconsumptiondialog_inkconsumptiondialog": "InkConsumptionDialog()" | kind=code-symbol | source=src/features/ink/components/InkConsumptionDialog.tsx:L22 | neighbors=[InkConsumptionDialog.tsx, InkConsumptionPage.tsx]
+- "components_inkoperatorbreakdown_inkoperatorbreakdown": "InkOperatorBreakdown()" | kind=code-symbol | source=src/features/ink/components/InkOperatorBreakdown.tsx:L6 | neighbors=[InkOperatorBreakdown.tsx, InkConsumptionPage.tsx]
+- "components_inkpurchasedialog_inkpurchasedialog": "InkPurchaseDialog()" | kind=code-symbol | source=src/features/ink/components/InkPurchaseDialog.tsx:L19 | neighbors=[InkPurchaseDialog.tsx, InkPurchasesPage.tsx]
+- "components_inkstockpanel_inkstockpanel": "InkStockPanel()" | kind=code-symbol | source=src/features/ink/components/InkStockPanel.tsx:L8 | neighbors=[InkStockPanel.tsx, InkPurchasesPage.tsx]
+- "components_inventory_columns_inventorycolumns": "inventoryColumns" | kind=code-symbol | source=src/features/inventory/components/inventory-columns.tsx:L12 | neighbors=[inventory-columns.tsx, inventory-stock-table.tsx]
+- "components_label_type_columns_labeltypecolumns": "labelTypeColumns()" | kind=code-symbol | source=src/features/label-types/components/label-type-columns.tsx:L7 | neighbors=[label-type-columns.tsx, LabelTypeTable.tsx]
+- "components_labeltyperow_labeltyperow": "LabelTypeRow" | kind=code-symbol | source=src/features/production-orders/components/LabelTypeRow.tsx:L130 | neighbors=[EditableLabelTypeTable.tsx, LabelTypeRow.tsx]
+- "components_labeltypetable_labeltypetable": "LabelTypeTable()" | kind=code-symbol | source=src/features/label-types/components/LabelTypeTable.tsx:L19 | neighbors=[LabelTypeTable.tsx, LabelTypeMasterPage.tsx]
+- "components_logproductionrundialog_logproductionrundialog": "LogProductionRunDialog()" | kind=code-symbol | source=src/features/production-runs/components/LogProductionRunDialog.tsx:L35 | neighbors=[LogProductionRunDialog.tsx, ProductionRunsSection.tsx]
+- "components_lowstockalert_lowstockalert": "LowStockAlert()" | kind=code-symbol | source=src/features/dashboard/components/LowStockAlert.tsx:L10 | neighbors=[LowStockAlert.tsx, DashboardPage.tsx]
+- "components_machine_columns_machinecolumns": "machineColumns" | kind=code-symbol | source=src/features/machines-operators/components/machine-columns.tsx:L9 | neighbors=[machine-columns.tsx, machine-table.tsx]
+- "components_machine_row_actions_machinerowactions": "MachineRowActions()" | kind=code-symbol | source=src/features/machines-operators/components/machine-row-actions.tsx:L28 | neighbors=[machine-columns.tsx, machine-row-actions.tsx]
+- "components_material_columns_materialcolumns": "materialColumns" | kind=code-symbol | source=src/features/materials/components/material-columns.tsx:L8 | neighbors=[material-columns.tsx, material-table.tsx]
+- "components_material_row_actions_materialrowactions": "MaterialRowActions()" | kind=code-symbol | source=src/features/materials/components/material-row-actions.tsx:L28 | neighbors=[material-columns.tsx, material-row-actions.tsx]
+- "components_material_table_materialtable": "MaterialTable()" | kind=code-symbol | source=src/features/materials/components/material-table.tsx:L20 | neighbors=[material-table.tsx, MaterialMasterPage.tsx]
+- "components_materialselect_materialselect": "MaterialSelect()" | kind=code-symbol | source=src/features/materials/components/MaterialSelect.tsx:L18 | neighbors=[MaterialSelect.tsx, index.ts]
+- "components_operator_columns_operatorcolumns": "operatorColumns" | kind=code-symbol | source=src/features/machines-operators/components/operator-columns.tsx:L10 | neighbors=[operator-columns.tsx, operator-table.tsx]
+- "components_operator_row_actions_operatorrowactions": "OperatorRowActions()" | kind=code-symbol | source=src/features/machines-operators/components/operator-row-actions.tsx:L28 | neighbors=[operator-columns.tsx, operator-row-actions.tsx]
+- "components_orderinfo_orderinfo": "OrderInfo()" | kind=code-symbol | source=src/features/work-orders/components/OrderInfo.tsx:L5 | neighbors=[OrderInfo.tsx, WorkOrderDialog.tsx]
+- "components_planlabeltypeform_initialrow": "initialRow()" | kind=code-symbol | source=src/features/production-orders/components/PlanLabelTypeForm.tsx:L106 | neighbors=[PlanLabelTypeForm.tsx, PlanLabelTypeForm()]
+- "components_planlabeltypeform_planformsubmitpayload": "PlanFormSubmitPayload" | kind=code-symbol | source=src/features/production-orders/components/PlanLabelTypeForm.tsx:L49 | neighbors=[PlanLabelTypeDialog.tsx, PlanLabelTypeForm.tsx]
+- "components_planned_line_columns_createplannedlinecolumns": "createPlannedLineColumns()" | kind=code-symbol | source=src/features/production-orders/components/planned-line-columns.tsx:L14 | neighbors=[planned-line-columns.tsx, ProductionOrderPlanningPage.tsx]
+
+## Instructions
+
+Write a single JSON object mapping each node id to a one-sentence description
+to: D:\3Q-facility-Dashboard\client\.graphify\description-instructions\batch-016.json
+
+Keep each description factual and concise (one sentence). No markdown, no prose
+outside the JSON object. It is acceptable to omit a node if context is
+insufficient — but include every node you can ground confidently.
+
+Example answer format:
+```json
+{
+  "node_id_1": "Resolves the configured ontology profile from graphify.yaml.",
+  "node_id_2": "Colonel James Barclay, an antagonist in The Crooked Man."
+}
+```

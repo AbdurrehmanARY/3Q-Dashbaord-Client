@@ -6,19 +6,120 @@ import { AppInput } from "@/components/forms/AppInput";
 import { StatusBadge } from "@/components/feedback/StatusBadge";
 import { formatNumber, formatDateTime } from "@/lib/format";
 import { useReconcileLine } from "../hooks/use-production-orders";
-import type { ProductionLineOverview } from "../types";
+import type { ProductionLineOverview, ProductionOrderLine } from "../types";
 
 interface StockReconciliationCardProps {
   orderId: string;
-  lines: ProductionLineOverview[];
+  lines: (ProductionLineOverview | ProductionOrderLine)[];
+}
+
+/** Normalized line shape used throughout StockReconciliationCard */
+interface NormalizedLine {
+  id: number;
+  labelType: string;
+  quantity: number;
+  labelSize: number;
+  rollLength: number;
+  totalRolls: number;
+  totalWeight: number;
+  materialCode: string | null;
+  assignedRolls: number;
+  issuedRolls: number;
+  packaging: {
+    packagedRolls: number;
+    packagedQty: number;
+  };
+  reconciliation: {
+    usedRolls: number;
+    extraRollsReturned: number;
+    usedWeight: number;
+    extraWeight: number;
+    reconciledAt: string | null;
+  };
+  printedRolls: number;
+  cutRolls: number;
+}
+
+/** Normalises a ProductionLineOverview line shape. */
+function normalizeProductionLineOverview(line: ProductionLineOverview): NormalizedLine {
+  const planning = line.planning;
+  return {
+    id: line.id,
+    labelType: line.labelType,
+    quantity: planning.quantity,
+    labelSize: planning.labelSize,
+    rollLength: planning.rollLength,
+    totalRolls: planning.totalRolls,
+    totalWeight: planning.totalWeight ?? 0,
+    materialCode: line.material?.materialCode ?? null,
+    assignedRolls: planning.totalRolls,
+    issuedRolls: line.material?.assignedRolls ?? 0,
+    packaging: {
+      packagedRolls: line.packaging?.packagedRolls ?? 0,
+      packagedQty: line.packaging?.packagedQty ?? 0,
+    },
+    reconciliation: {
+      usedRolls: line.reconciliation?.usedRolls ?? 0,
+      extraRollsReturned: line.reconciliation?.extraRollsReturned ?? 0,
+      usedWeight: line.reconciliation?.usedWeight ?? 0,
+      extraWeight: line.reconciliation?.extraWeight ?? 0,
+      reconciledAt: line.reconciliation?.reconciledAt ?? null,
+    },
+    printedRolls: line.printing?.printedRolls ?? 0,
+    cutRolls: line.cutting?.cutRolls ?? 0,
+  };
+}
+
+/** Normalises a ProductionOrderLine line shape. */
+function normalizeProductionOrderLine(line: ProductionOrderLine): NormalizedLine {
+  const assignedRolls = Number(line.totalRolls); // Use totalRolls as assigned since that's the planned total
+  return {
+    id: line.id,
+    labelType: line.labelType,
+    quantity: Number(line.quantity) || 0,
+    labelSize: Number(line.labelSize) || 0,
+    rollLength: Number(line.rollLength) || 0,
+    totalRolls: Number(line.totalRolls) || 0,
+    totalWeight: 0,
+    materialCode: line.materialCode ?? null,
+    assignedRolls,
+    issuedRolls: Number(line.issuedRolls) || 0,
+    packaging: {
+      packagedRolls: Number(line.packagedRolls) || 0,
+      packagedQty: Number(line.packagedQty) || 0,
+    },
+    reconciliation: {
+      usedRolls: Number(line.usedRolls) || 0,
+      extraRollsReturned: Number(line.extraRollsReturned) || 0,
+      usedWeight: Number(line.usedWeight) || 0,
+      extraWeight: Number(line.extraWeight) || 0,
+      reconciledAt: line.reconciledAt ?? null,
+    },
+    printedRolls: Number(line.printedRolls) || 0,
+    cutRolls: Number(line.cutRolls) || 0,
+  };
+}
+
+/** Normalises a line from either ProductionLineOverview or ProductionOrderLine shape. */
+function normalizeLine(
+  line: ProductionLineOverview | ProductionOrderLine
+): NormalizedLine {
+  // If line has nested "planning" object (ProductionLineOverview), use it
+  if ("planning" in line) {
+    return normalizeProductionLineOverview(line);
+  }
+
+  // Flat ProductionOrderLine shape
+  return normalizeProductionOrderLine(line);
 }
 
 export function StockReconciliationCard({ orderId, lines }: StockReconciliationCardProps) {
+  const normalizedLines = lines.map(normalizeLine);
   const isReadyForReconciliation =
-    lines.length > 0 &&
-    lines.every((line) => {
-      const plannedRolls = line.planning.totalRolls ?? 0;
-      const packagedRolls = line.packaging.packagedRolls ?? 0;
+    normalizedLines.length > 0 &&
+    normalizedLines.every((line) => {
+      const plannedRolls = line.totalRolls;
+      const packagedRolls = line.packaging.packagedRolls;
       return (plannedRolls > 0 && packagedRolls === plannedRolls) || !!line.reconciliation?.reconciledAt;
     });
 
@@ -30,7 +131,7 @@ export function StockReconciliationCard({ orderId, lines }: StockReconciliationC
       description="Record actual rolls/weight used in production and return extra leftover rolls & weight back to the main roll stock."
     >
       <div className="divide-y">
-        {lines.map((line) => (
+        {normalizedLines.map((line) => (
           <LineReconciliationRow key={line.id} orderId={orderId} line={line} />
         ))}
       </div>
@@ -43,13 +144,16 @@ function LineReconciliationRow({
   line,
 }: {
   orderId: string;
-  line: ProductionLineOverview;
+  line: NormalizedLine;
 }) {
   const reconcileMutation = useReconcileLine(orderId);
 
-  const initialUsedRolls = line.reconciliation?.usedRolls ?? line.packaging.packagedRolls ?? line.material.issuedRolls;
-  const initialExtraRolls = line.reconciliation?.extraRollsReturned ?? Math.max(0, line.material.issuedRolls - initialUsedRolls);
-  const initialUsedWeight = line.reconciliation?.usedWeight ?? line.planning.totalWeight ?? 0;
+  const initialUsedRolls =
+    line.reconciliation?.usedRolls ?? line.packaging.packagedRolls ?? line.issuedRolls;
+  const initialExtraRolls =
+    line.reconciliation?.extraRollsReturned ?? Math.max(0, line.issuedRolls - initialUsedRolls);
+  const initialUsedWeight =
+    line.reconciliation?.usedWeight ?? line.totalWeight ?? 0;
   const initialExtraWeight = line.reconciliation?.extraWeight ?? 0;
 
   const [usedRolls, setUsedRolls] = useState<number | string>(initialUsedRolls);
@@ -60,11 +164,14 @@ function LineReconciliationRow({
   const isReconciled = !!line.reconciliation?.reconciledAt;
 
   // Standard roll weight in kg (from material master or calculated from planned totals)
-  const assignedRoll = line.material.assignedRolls || line.material.issuedRolls || line.planning.totalRolls || 0;
-  const requireRoll = line.planning.requiredRolls || 0;
+  const assignedRoll = line.assignedRolls || line.issuedRolls || line.totalRolls || 0;
+  const requireRoll = line.totalRolls || 0;
   const extraRollsUsed = Math.max(0, Number((assignedRoll - requireRoll).toFixed(2)));
 
-  const weightPerRoll = line.material.weightPerRoll || (line.planning.totalWeight > 0 && assignedRoll > 0 ? line.planning.totalWeight / assignedRoll : 0);
+  const weightPerRoll =
+    line.materialCode && line.totalWeight > 0 && assignedRoll > 0
+      ? line.totalWeight / assignedRoll
+      : 0;
 
   const handleUsedRollsChange = (val: string) => {
     setUsedRolls(val);
@@ -135,9 +242,9 @@ function LineReconciliationRow({
         <div>
           <div className="flex items-center gap-2">
             <span className="font-semibold text-sm">{line.labelType}</span>
-            {line.material.materialCode && (
+            {line.materialCode && (
               <span className="font-mono text-xs rounded bg-muted px-2 py-0.5 font-medium">
-                {line.material.materialCode}
+                {line.materialCode}
               </span>
             )}
             {isReconciled ? (

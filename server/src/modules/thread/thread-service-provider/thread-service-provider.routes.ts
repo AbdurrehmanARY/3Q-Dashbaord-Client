@@ -6,8 +6,11 @@ import {
   updateThreadServiceProviderSchema,
 } from "./thread-service-provider.schema";
 import { idParamsSchema } from "@shared/validation/common.schema";
+import { requireRole } from "@shared/middleware/rbac";
 
 const router = Router();
+
+router.use(requireRole("production_manager", "ceo"));
 
 router.get("/", threadServiceProviderController.getAll);
 router.post("/", validateRequest(createThreadServiceProviderSchema), threadServiceProviderController.create);

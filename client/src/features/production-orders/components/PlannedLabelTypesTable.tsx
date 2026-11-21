@@ -53,19 +53,19 @@ export function PlannedLabelTypesTable({
                   {line.labelType}
                 </td>
                 <td className="py-2.5 px-3 text-right font-mono font-semibold">
-                  {formatNumber(line.planning.quantity, 0)}
+                  {formatNumber(line.planning?.quantity ?? 0, 0)}
                 </td>
                 <td className="py-2.5 px-3 text-right font-mono text-muted-foreground">
-                  {formatNumber(line.planning.labelSize, 0)} mm
+                  {formatNumber(line.planning?.labelSize ?? 0, 0)} mm
                 </td>
                 <td className="py-2.5 px-3 text-right font-mono text-muted-foreground">
-                  {formatNumber(line.planning.rollLength, 0)} m
+                  {formatNumber(line.planning?.rollLength ?? 0, 0)} m
                 </td>
                 <td className="py-2.5 px-3 text-right font-mono font-extrabold text-primary">
-                  {formatNumber(line.planning.totalRolls, 2)}
+                  {formatNumber(line.planning?.totalRolls ?? 0, 2)}
                 </td>
                 <td className="py-2.5 px-3 font-medium text-slate-700 dark:text-slate-300">
-                  {line.material.materialCode || "—"} ({formatNumber(line.material.assignedRolls, 0)} rolls)
+                  {line.material?.materialCode ?? "—"} ({formatNumber(line.material?.assignedRolls ?? 0, 0)} rolls)
                 </td>
                 <td className="py-2.5 px-3">
                   <ProductionLineStatusBadge status={line.status} />

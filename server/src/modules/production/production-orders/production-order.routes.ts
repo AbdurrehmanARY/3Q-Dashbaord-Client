@@ -14,8 +14,11 @@ import {
 } from "./production-order.schema";
 import { listProductionOrdersQuerySchema } from "@shared/validation/query.schema";
 import { idParamsSchema, lineIdParamsSchema, paginationQuerySchema } from "@shared/validation/common.schema";
+import { requireProductionManager } from "@shared/middleware/rbac";
 
 const router = Router();
+
+router.use(requireProductionManager());
 
 /* --- Phase 1: Office Staff --- */
 router.get("/", validateQuery(listProductionOrdersQuerySchema), productionOrderController.getProductionOrders);

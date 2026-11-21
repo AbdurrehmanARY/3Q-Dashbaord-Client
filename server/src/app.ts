@@ -30,6 +30,13 @@ import threadDyeingRoutes from "@modules/thread/thread-dyeing/thread-dyeing.rout
 import inkRoutes from "@modules/ink/ink.routes";
 import analyticsRoutes from "@modules/analytics/analytics.routes";
 import labelTypesRoutes from "@modules/label-types/label-types.routes";
+import printedWorkOrderRoutes from "@modules/work-orders/printed/printed-work-order.routes";
+import wovenWorkOrderRoutes from "@modules/work-orders/woven/woven-work-order.routes";
+import printedProductionOrderRoutes from "@modules/production/printed/printed-production-order.routes";
+import wovenProductionOrderRoutes from "@modules/production/woven/woven-production-order.routes";
+import ceoDashboardRoutes from "@modules/ceo-dashboard/ceo-dashboard.routes";
+import authRoutes from "@modules/auth/auth.routes";
+import { authenticate, optionalAuth } from "@shared/middleware/auth";
 
 export const app = express();
 
@@ -87,7 +94,6 @@ apiRouter.use("/materials", materialsRoutes);
 apiRouter.use("/machines", machinesRoutes);
 apiRouter.use("/operators", operatorsRoutes);
 apiRouter.use("/users", usersRoutes);
-apiRouter.use("/work-orders", workOrdersRoutes);
 apiRouter.use("/production-orders", productionOrdersRoutes);
 /** Woven workflow — same production_orders header, woven-specific stages. */
 apiRouter.use("/woven-production", wovenProductionRoutes);
@@ -105,6 +111,25 @@ apiRouter.use("/ink", inkRoutes);
 /** Label Types master data */
 apiRouter.use("/label-types", labelTypesRoutes);
 apiRouter.use("/analytics", analyticsRoutes);
+/* Workflow-separated work orders */
+apiRouter.use("/work-orders/printed", printedWorkOrderRoutes);
+apiRouter.use("/work-orders/woven", wovenWorkOrderRoutes);
+/* General work-orders router must mount AFTER the specific /printed and /woven
+   routers — otherwise ":id" swallows "printed" / "woven" as a route param,
+   causing 400 (zod coerce number fails) instead of reaching the dedicated controllers. */
+apiRouter.use("/work-orders", workOrdersRoutes);
+/* Workflow-separated production orders */
+apiRouter.use("/production/printed", printedProductionOrderRoutes);
+apiRouter.use("/production/woven/orders", wovenProductionOrderRoutes);
+/* Read-only CEO dashboard — six monitoring endpoints */
+apiRouter.use("/ceo", ceoDashboardRoutes);
+
+// Auth routes are public (no authenticate middleware required)
+apiRouter.use("/auth", authRoutes);
+
+// All other API routes require a valid JWT — but in development use optionalAuth
+// so tables/pages can load without a token. In production this stays strict.
+apiRouter.use(isProduction ? authenticate : optionalAuth);
 
 app.use("/api", apiRateLimiter, apiRouter);
 

@@ -3,10 +3,9 @@ import {
   wovenProductionLines,
   wovenThreadPlanItems,
   productionOrders,
-  workOrders,
+  wovenLabelWorkOrders,
   machines,
   operators,
-  wovenWorkOrderDetails,
 } from "@db/schema";
 import { eq, desc, and, sql } from "drizzle-orm";
 import { NotFoundError } from "@shared/errors/ApiError";
@@ -70,17 +69,15 @@ export class WovenProductionRepository {
         productionNumber: productionOrders.productionNumber,
         status: productionOrders.status,
         totalQty: productionOrders.totalQty,
-        workOrderId: workOrders.id,
-        soNumber: workOrders.soNumber,
-        productType: workOrders.productType,
-        pick: wovenWorkOrderDetails.pick,
-        repeat: wovenWorkOrderDetails.repeat,
-        density: wovenWorkOrderDetails.density,
-        speed: wovenWorkOrderDetails.speed,
+        productType: sql<"woven">`'woven'::text`,
+        soNumber: wovenLabelWorkOrders.soNumber,
+        pick: wovenLabelWorkOrders.pick,
+        repeat: sql<string | null>`${wovenLabelWorkOrders.repeat}`,
+        density: wovenLabelWorkOrders.density,
+        speed: sql<string | null>`${wovenLabelWorkOrders.speed}`,
       })
       .from(productionOrders)
-      .innerJoin(workOrders, eq(productionOrders.workOrderId, workOrders.id))
-      .leftJoin(wovenWorkOrderDetails, eq(wovenWorkOrderDetails.workOrderId, workOrders.id))
+      .innerJoin(wovenLabelWorkOrders, eq(productionOrders.wovenWorkOrderId, wovenLabelWorkOrders.id))
       .where(eq(productionOrders.id, Number(productionOrderId)));
     return row;
   }
@@ -318,18 +315,18 @@ export class WovenProductionRepository {
     // Mirror the printed side: the sales order follows its production order's status.
     if (patch.status) {
       const [order] = await tx
-        .select({ workOrderId: productionOrders.workOrderId })
+        .select({ workOrderId: productionOrders.wovenWorkOrderId })
         .from(productionOrders)
         .where(eq(productionOrders.id, productionOrderId));
       if (order) {
         await tx
-          .update(workOrders)
+          .update(wovenLabelWorkOrders)
           .set({
             status: patch.status === "complete" ? "complete" : "production",
             updatedAt: new Date(),
           })
           // `dispatched` is terminal and owned by dispatch — never downgrade it here.
-          .where(and(eq(workOrders.id, order.workOrderId), sql`${workOrders.status} <> 'dispatched'`));
+          .where(and(eq(wovenLabelWorkOrders.id, order.workOrderId!), sql`${wovenLabelWorkOrders.status} <> 'dispatched'`));
       }
     }
   }

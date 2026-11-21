@@ -167,8 +167,10 @@ export interface LineFlow {
   wastedTotal: number;
   cutProduced: number;
   cutAvailable: number;
+  cutWasted: number;
   packagedProduced: number;
   packagedLabels: number;
+  packagedWasted: number;
   /** Quantity that has not yet reached packaging. */
   remainingRolls: number;
   /** Per-size breakdown — populated for woven Size Label lines, empty everywhere else. */
@@ -258,8 +260,10 @@ export function lineFlowOf(
     wastedTotal: sumAll((p) => p.wasted),
     cutProduced: sum("cutting", (p) => p.produced),
     cutAvailable: sum("cutting", (p) => p.available),
+    cutWasted: sum("cutting", (p) => p.wasted),
     packagedProduced,
     packagedLabels: sum("packaging", (_p, b) => n(b.packagedQty)),
+    packagedWasted: sum("packaging", (p) => p.wasted),
     remainingRolls: round2(Math.max(0, planned - packagedProduced)),
     /** Per-size tracking from the line's Size Label plan. */
     sizes: lineSizeFlows(sizes, batches, first),
@@ -328,7 +332,9 @@ export function assertOutputWithinInput(
  * Waste is counted toward completion (produced + wasted >= required) but does NOT
  * grant extra assignment capacity: the user must edit the plan to add more rolls.
  * When a line carries no required breakdown (`required` omitted or 0) the target
- * falls back to `planned`, preserving the historical total-issued semantics.
+ * falls back to `planned`. With the waste-deducted model `required` already has
+ * waste subtracted, so the check is `packagedProduced >= target` — waste is in
+ * the denominator, not added to the numerator.
  */
 export function isReadyForCompletion(
   lines: { planned: number; packagedProduced: number; wastedTotal: number; required?: number }[]
@@ -336,7 +342,7 @@ export function isReadyForCompletion(
   if (lines.length === 0) return false;
   return lines.every((l) => {
     const target = l.required && l.required > 0 ? l.required : l.planned;
-    return target > 0 && l.packagedProduced + l.wastedTotal >= target - EPSILON;
+    return target > 0 && l.packagedProduced >= target - EPSILON;
   });
 }
 

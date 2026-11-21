@@ -1,9 +1,11 @@
 import * as React from "react";
-import { Layers, Palette, Percent, Scissors, CheckCircle2, Disc3, Lock } from "lucide-react";
+import { Layers, Palette, Percent, Scissors, CheckCircle2, Disc3, Lock, RefreshCw } from "lucide-react";
 import { AppCard } from "@/components/cards/AppCard";
 import { AppButton } from "@/components/forms/AppButton";
+import { AppDialog } from "@/components/dialogs/AppDialog";
 import { StatCard } from "@/components/cards/StatCard";
 import { StatusBadge } from "@/components/feedback/StatusBadge";
+import { OperatorAvatar } from "@/components/feedback/OperatorAvatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatNumber, formatDateTime } from "@/lib/format";
 import {
@@ -16,6 +18,7 @@ import { BatchStageBoard } from "./BatchStageBoard";
 import { StageProgressBars } from "./StageProgressBars";
 import { useOrderFlow } from "../hooks/use-batches";
 import { WovenTrackingTable } from "./WovenTrackingTable";
+import { ProductionCompletionReport } from "./ProductionCompletionReport";
 import { WovenThreadReconciliationCard } from "./WovenThreadReconciliationCard";
 import type { WovenLineOverview } from "../woven-types";
 
@@ -35,6 +38,7 @@ export function WovenProductionPanel({ orderId, totalQty }: { orderId: string; t
 
   const [planning, setPlanning] = React.useState(false);
   const [editing, setEditing] = React.useState<WovenLineOverview | null>(null);
+  const [reconcileLine, setReconcileLine] = React.useState<WovenLineOverview | null>(null);
 
   if (isLoading) {
     return (
@@ -75,7 +79,10 @@ export function WovenProductionPanel({ orderId, totalQty }: { orderId: string; t
         <StatCard
           title="Woven / Cut"
           value={`${formatNumber(totals?.wovenQty ?? 0, 0)} / ${formatNumber(totals?.cutQty ?? 0, 0)}`}
-          description={`of ${formatNumber(totals?.quantity ?? 0, 0)} planned`}
+          description={`of ${formatNumber(totals?.quantity ?? 0, 0)} planned · ${formatNumber(
+            totals?.wastedTotal ?? 0,
+            0
+          )} pcs waste`}
           icon={Scissors}
         />
         <StatCard
@@ -148,8 +155,7 @@ export function WovenProductionPanel({ orderId, totalQty }: { orderId: string; t
               <AppButton
                 size="sm"
                 variant="outline"
-                disabled={remainingQty <= 0}
-                title={remainingQty <= 0 ? "The whole order quantity is already planned" : undefined}
+                title={remainingQty > 0 ? `${formatNumber(remainingQty, 0)} pcs unplanned` : "Order quantity fully planned — add more for make-up after waste"}
                 onClick={() => { setEditing(null); setPlanning(true); }}
               >
                 Add Label Type
@@ -192,19 +198,40 @@ export function WovenProductionPanel({ orderId, totalQty }: { orderId: string; t
                       </div>
                     </div>
 
-                    {/* Post-Completion Thread Reconciliation Card */}
-                    <WovenThreadReconciliationCard
-                      orderId={orderId}
-                      lineId={line.id}
-                      threads={line.planning.threads}
-                      isLocked={true}
-                    />
+                    {/* Post-Completion Thread Reconciliation — button-triggered */}
+                    <div className="flex justify-end">
+                      <AppButton
+                        size="sm"
+                        leftIcon={<RefreshCw className="h-4 w-4" />}
+                        onClick={() => setReconcileLine(line)}
+                      >
+                        Reconcile Thread Stock
+                      </AppButton>
+                    </div>
                   </div>
                 ))}
               </AppCard>
 
-              {/* Completed Production Summary */}
-              {lines.map((line) => (
+            <AppDialog
+              open={!!reconcileLine}
+              onOpenChange={(open) => !open && setReconcileLine(null)}
+              title="Thread Stock Reconciliation"
+              description="Enter remaining unused thread weight to return to dyed stock."
+              className="sm:max-w-[600px]"
+            >
+              {reconcileLine && (
+                <WovenThreadReconciliationCard
+                  orderId={orderId}
+                  lineId={reconcileLine.id}
+                  threads={reconcileLine.planning.threads}
+                  isLocked={true}
+                />
+              )}
+            </AppDialog>
+
+            {/* Completed Production Summary */}
+
+          {lines.map((line) => (
                 <AppCard
                   key={line.id}
                   title="Completed Production Summary"
@@ -221,7 +248,18 @@ export function WovenProductionPanel({ orderId, totalQty }: { orderId: string; t
                       </div>
                       <dl className="space-y-1.5 text-xs text-muted-foreground">
                         <div>Started: <strong className="text-foreground">{formatDateTime(line.weaving.startedAt)}</strong></div>
-                        <div>Ended: <strong className="text-foreground">{formatDateTime(line.weaving.endedAt)}</strong></div>
+                        <div>Ended: <strong className="text-foreground">{formatDateTime(line.weaving.completedAt ?? line.weaving.endedAt)}</strong></div>
+                        <div className="flex items-center gap-1.5">
+                          {line.weaving.operatorName ? (
+                            <>
+                              <OperatorAvatar name={line.weaving.operatorName} avatarUrl={line.weaving.operatorAvatarUrl ?? null} size="sm" />
+                              <span className="font-medium text-foreground">{line.weaving.operatorName}</span>
+                            </>
+                          ) : (
+                            <span className="italic">No operator recorded</span>
+                          )}
+                        </div>
+                        {line.weaving.machineName && <div>on <span className="font-medium text-foreground">{line.weaving.machineName}</span></div>}
                         <div>Produced: <strong className="font-bold text-foreground">{formatNumber(line.weaving.wovenQty, 0)} pcs</strong></div>
                       </dl>
                     </div>
@@ -235,7 +273,18 @@ export function WovenProductionPanel({ orderId, totalQty }: { orderId: string; t
                         </StatusBadge>
                       </div>
                       <dl className="space-y-1.5 text-xs text-muted-foreground">
-                        <div>Completed Date: <strong className="text-foreground">{formatDateTime(line.cutting.cuttingDate)}</strong></div>
+                        <div>Completed Date: <strong className="text-foreground">{formatDateTime(line.cutting.completedAt ?? line.cutting.cuttingDate)}</strong></div>
+                        <div className="flex items-center gap-1.5">
+                          {line.cutting.operatorName ? (
+                            <>
+                              <OperatorAvatar name={line.cutting.operatorName} avatarUrl={line.cutting.operatorAvatarUrl ?? null} size="sm" />
+                              <span className="font-medium text-foreground">{line.cutting.operatorName}</span>
+                            </>
+                          ) : (
+                            <span className="italic">No operator recorded</span>
+                          )}
+                        </div>
+                        {line.cutting.machineName && <div>on <span className="font-medium text-foreground">{line.cutting.machineName}</span></div>}
                         <div>Processed: <strong className="font-bold text-foreground">{formatNumber(line.cutting.cutQty, 0)} pcs</strong></div>
                       </dl>
                     </div>
@@ -249,7 +298,17 @@ export function WovenProductionPanel({ orderId, totalQty }: { orderId: string; t
                         </StatusBadge>
                       </div>
                       <dl className="space-y-1.5 text-xs text-muted-foreground">
-                        <div>Completed Date: <strong className="text-foreground">{formatDateTime(line.packaging.packagingDate)}</strong></div>
+                        <div>Completed Date: <strong className="text-foreground">{formatDateTime(line.packaging.completedAt ?? line.packaging.packagingDate)}</strong></div>
+                        <div className="flex items-center gap-1.5">
+                          {line.packaging.operatorName ? (
+                            <>
+                              <OperatorAvatar name={line.packaging.operatorName} avatarUrl={line.packaging.operatorAvatarUrl ?? null} size="sm" />
+                              <span className="font-medium text-foreground">{line.packaging.operatorName}</span>
+                            </>
+                          ) : (
+                            <span className="italic">No operator recorded</span>
+                          )}
+                        </div>
                         <div>Packed: <strong className="font-bold text-foreground">{formatNumber(line.packaging.packagedQty, 0)} pcs</strong></div>
                         <div>Packed Weight: <strong className="font-bold text-foreground">{formatNumber(line.packaging.packagedWeightKg, 2)} kg</strong></div>
                       </dl>
@@ -257,6 +316,7 @@ export function WovenProductionPanel({ orderId, totalQty }: { orderId: string; t
                   </div>
                 </AppCard>
               ))}
+            <ProductionCompletionReport orderId={orderId} />
             </>
           ) : (
             /* Active Production View (Stage Board & Live Progress) */
@@ -304,7 +364,7 @@ export function WovenProductionPanel({ orderId, totalQty }: { orderId: string; t
                   title="Stage Progress"
                   description="Whole order, across every label type"
                 >
-                  <StageProgressBars totals={flow.data.totals} kind="woven" unit="pcs" />
+                  <StageProgressBars totals={flow.data.totals} lines={flow.data.lines} kind="woven" unit="pcs" quantityLabels />
                 </AppCard>
               )}
 

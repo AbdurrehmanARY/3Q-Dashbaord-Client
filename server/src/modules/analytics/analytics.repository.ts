@@ -1,18 +1,26 @@
 import { db } from "@db/index";
-import { workOrders, productionOrderLines, materials, inventoryRolls, purchaseRecords } from "@db/schema";
-import { eq, desc, asc, and, sql } from "drizzle-orm";
-import type { WorkOrder, ProductionOrderLine, Material, InventoryRoll, PurchaseRecord } from "@db/schema";
+import { printedLabelWorkOrders, wovenLabelWorkOrders, productionOrderLines, materials, inventoryRolls, purchaseRecords } from "@db/schema";
+import { desc, asc, and, eq, sql } from "drizzle-orm";
+import type { ProductionOrderLine, Material, InventoryRoll, PurchaseRecord } from "@db/schema";
 
 export class AnalyticsRepository {
   async countWorkOrders() {
-    const [row] = await db.select({ value: sql<number>`count(*)` }).from(workOrders);
-    return Number(row?.value ?? 0);
+    const [printedRow] = await db.select({ value: sql<number>`count(*)` }).from(printedLabelWorkOrders);
+    const [wovenRow] = await db.select({ value: sql<number>`count(*)` }).from(wovenLabelWorkOrders);
+    return Number(printedRow?.value ?? 0) + Number(wovenRow?.value ?? 0);
   }
 
   /** Work orders still in production (not yet completed/dispatched). */
   async countSubmittedWorkOrders() {
-    const [row] = await db.select({ value: sql<number>`count(*)` }).from(workOrders).where(eq(workOrders.status, "initiate_production"));
-    return Number(row?.value ?? 0);
+    const [printedRow] = await db
+      .select({ value: sql<number>`count(*)` })
+      .from(printedLabelWorkOrders)
+      .where(eq(printedLabelWorkOrders.status, "initiate_production"));
+    const [wovenRow] = await db
+      .select({ value: sql<number>`count(*)` })
+      .from(wovenLabelWorkOrders)
+      .where(eq(wovenLabelWorkOrders.status, "initiate_production"));
+    return Number(printedRow?.value ?? 0) + Number(wovenRow?.value ?? 0);
   }
 
   /* Production counts are per label-type line on a production order. A line is complete

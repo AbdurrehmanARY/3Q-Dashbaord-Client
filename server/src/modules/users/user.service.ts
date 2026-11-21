@@ -21,6 +21,7 @@ export class UserService {
     employeeCode?: string;
     email?: string;
     role: UserRole;
+    passwordHash: string;
   }): Promise<User> {
     if (data.email) {
       const existing = await userRepository.findByEmail(data.email);

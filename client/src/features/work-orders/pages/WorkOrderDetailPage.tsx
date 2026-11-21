@@ -402,7 +402,13 @@ function ProductionFlowSection({ orderId, readOnly }: { orderId: string; readOnl
       </div>
 
       <AppCard title="Stage Progress" description="Whole order, across every label type">
-        <StageProgressBars totals={flow.data.totals} kind={flow.data.kind} unit={flow.data.unit} />
+        <StageProgressBars
+          totals={flow.data.totals}
+          lines={flow.data.lines}
+          kind={flow.data.kind}
+          unit={flow.data.kind === "woven" ? "quantities" : flow.data.unit}
+          quantityLabels={flow.data.kind === "woven"}
+        />
       </AppCard>
 
       {/* {flow.data.lines.map((line) => (

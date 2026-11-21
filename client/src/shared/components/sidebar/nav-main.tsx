@@ -20,9 +20,28 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import type { NavItem } from "@/shared/navigation";
+import { useAuthStore } from "@/store/auth-store";
 
 function isRouteActive(url: string, pathname: string) {
   return url === "/" ? pathname === "/" : pathname === url || pathname.startsWith(url + "/");
+}
+
+/**
+ * Filters navigation items based on the user's role. Items with a `roles` array
+ * are only shown if the user's role is included. The filtering is applied
+ * recursively to all nested items.
+ */
+function filterNavItemsByRole(items: NavItem[], userRole: string | undefined): NavItem[] {
+  return items
+    .filter((item) => {
+      if (!item.roles || item.roles.length === 0) return true;
+      if (!userRole) return false;
+      return item.roles.includes(userRole);
+    })
+    .map((item) => ({
+      ...item,
+      items: item.items ? filterNavItemsByRole(item.items, userRole) : undefined,
+    }));
 }
 
 /**
@@ -33,11 +52,15 @@ function isRouteActive(url: string, pathname: string) {
  */
 export function NavMain({ items }: { items: NavItem[] }) {
   const { pathname } = useLocation();
+  const { user } = useAuthStore();
+  const userRole = user?.role;
+
+  const filteredItems = filterNavItemsByRole(items, userRole);
 
   return (
     <SidebarGroup>
       <SidebarMenu>
-        {items.map((item) =>
+        {filteredItems.map((item) =>
           item.items ? (
             <NavGroupItem key={item.title} item={item} pathname={pathname} />
           ) : item.url ? (
@@ -91,18 +114,82 @@ function NavGroupItem({ item, pathname }: { item: NavItem; pathname: string }) {
         </Tooltip>
         <CollapsibleContent>
           <SidebarMenuSub>
-            {item.items?.map((sub) =>
-              sub.url ? (
-                <SidebarMenuSubItem key={sub.url}>
-                  <SidebarMenuSubButton render={<NavLink to={sub.url} />} isActive={isRouteActive(sub.url, pathname)}>
-                    <span>{sub.title}</span>
-                  </SidebarMenuSubButton>
-                </SidebarMenuSubItem>
-              ) : null
-            )}
+            {item.items?.map((sub) => (
+              <NavSubItem key={sub.url} item={sub} pathname={pathname} />
+            ))}
           </SidebarMenuSub>
         </CollapsibleContent>
       </Collapsible>
     </SidebarMenuItem>
+  );
+}
+
+/**
+ * Renders items recursively for arbitrary nesting depth. This replaces the old
+ * flat `SidebarMenuSubButton` approach in `NavGroupItem`, enabling deep CEO
+ * dashboard hierarchies:
+ *   CEO Dashboard
+ *     → Work Order Dashboard
+ *       → Printed Work Orders
+ *       → Woven Work Orders
+ *     → Production Dashboard
+ *       → Printed Production
+ *       → Woven Production
+ */
+function NavSubItem({ item, pathname }: { item: NavItem; pathname: string }) {
+  const { state, isMobile } = useSidebar();
+  const hasChildren = item.items && item.items.length > 0;
+  const isActive = item.url ? isRouteActive(item.url, pathname) : false;
+  const isAnyChildActive = hasChildren
+    ? item.items!.some((sub) => sub.url && isRouteActive(sub.url, pathname))
+    : false;
+
+  if (hasChildren) {
+    // Recursive case: branch item → render collapsible with nested SidebarMenuSub
+    const [open, setOpen] = useState(isAnyChildActive);
+
+    return (
+      <SidebarMenuSubItem>
+        <Collapsible open={open} onOpenChange={setOpen} className="group/collapsible">
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <CollapsibleTrigger
+                  className={cn(sidebarMenuButtonVariants(), "w-full", "data-[size=md]:text-sm")}
+                  data-active={isAnyChildActive || isActive || undefined}
+                />
+              }
+            >
+              {item.icon && <item.icon />}
+              <span>{item.title}</span>
+              <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+            </TooltipTrigger>
+            <TooltipContent side="right" align="center" hidden={state !== "collapsed" || isMobile}>
+              {item.title}
+            </TooltipContent>
+          </Tooltip>
+          <CollapsibleContent>
+            <SidebarMenuSub>
+              {item.items!.map((sub) => (
+                <NavSubItem key={sub.url} item={sub} pathname={pathname} />
+              ))}
+            </SidebarMenuSub>
+          </CollapsibleContent>
+        </Collapsible>
+      </SidebarMenuSubItem>
+    );
+  }
+
+  // Leaf case: no children → render as simple SidebarMenuSubButton
+  return (
+    <SidebarMenuSubItem>
+      <SidebarMenuSubButton
+        render={item.url ? <NavLink to={item.url} /> : undefined}
+        isActive={isActive}
+      >
+        {item.icon && <item.icon />}
+        <span>{item.title}</span>
+      </SidebarMenuSubButton>
+    </SidebarMenuSubItem>
   );
 }

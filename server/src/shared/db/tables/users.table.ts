@@ -1,8 +1,7 @@
 import { pgTable, serial, varchar, boolean, timestamp, pgEnum, index } from "drizzle-orm/pg-core";
 
 /**
- * The three production workflow roles. Packaging is performed by a
- * `production_operator` — there is deliberately no packaging-specific role.
+ * The four system roles.
  */
 export const userRoleEnum = pgEnum("user_role", [
   "office_staff",
@@ -23,6 +22,7 @@ export const users = pgTable(
     employeeCode: varchar("employee_code", { length: 100 }),
     email: varchar("email", { length: 255 }).unique(),
     role: userRoleEnum("role").notNull(),
+    passwordHash: varchar("password_hash", { length: 255 }).notNull(),
     isActive: boolean("is_active").default(true).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),

@@ -30,11 +30,22 @@ const STAGE_STYLE: Record<BatchStage, { icon: React.ElementType; bar: string; te
 
 export interface StageTotals {
   planned: number;
-  /** Required rolls (plan minus extra) — the progress target; falls back to planned when 0. */
+  /** Work-order total quantity — the figure the required target derives from. */
+  quantity?: number;
+  /** Required rolls (plan minus extra buffer) — the progress target; falls back to planned when 0.
+   *  With the waste-deducted model this is `planned - wastedTotal`. */
   required?: number;
   printedProduced: number;
+  /** Waste at the first stage (printing or weaving). */
+  printedWasted: number;
   cutProduced: number;
+  /** Waste at cutting. */
+  cutWasted: number;
   packagedProduced: number;
+  /** Waste at packaging. */
+  packagedWasted: number;
+  /** Σ waste across every stage and batch on the line — shown alongside produced for context. */
+  wastedTotal: number;
 }
 
 interface StageProgressBarsProps {
@@ -45,6 +56,8 @@ interface StageProgressBarsProps {
   kind?: LineKind;
   unit?: string;
   compact?: boolean;
+  /** When true, shows labeled quantities: "{done} produced / {planned} required {unit}" instead of "{done}/{planned} {unit}". */
+  quantityLabels?: boolean;
 }
 
 /**
@@ -61,13 +74,36 @@ export function StageProgressBars({
   kind = "printed",
   unit = "rolls",
   compact,
+  quantityLabels = false,
 }: StageProgressBarsProps) {
   const stages = stageRowsOf(totals, kind);
+  const required = Number(totals.required);
+  const target = required > 0 ? required : Number(totals.planned) || 0;
 
   return (
     <div className="space-y-3">
+      {/* Production column: links the work-order total quantity to the required target. */}
+      {!compact && totals.quantity !== undefined && (
+        <div className="flex items-baseline justify-between gap-2 text-xs">
+          <span className="font-semibold uppercase tracking-wider text-muted-foreground">
+            Production
+          </span>
+          <span className="font-mono tabular-nums text-muted-foreground">
+            <span className="font-semibold text-foreground">
+              {formatNumber(Number(totals.quantity), 0)} total {unit}
+            </span>
+            {" · " + formatNumber(target, 0) + " required"}
+            {Number(totals.wastedTotal) > 0 && (
+              <span>
+                {" · " + formatNumber(Number(totals.wastedTotal), 0) + " wasted"}
+              </span>
+            )}
+          </span>
+        </div>
+      )}
+
       {stages.map((s) => (
-        <StageBar key={s.stage} {...s} unit={unit} />
+        <StageBar key={s.stage} {...s} unit={unit} quantityLabels={quantityLabels} />
       ))}
 
       {!compact && lines && lines.length > 1 && (
@@ -79,7 +115,7 @@ export function StageProgressBars({
               </p>
               <div className="space-y-1.5">
                 {stageRowsOf(line, line.kind ?? kind).map((s) => (
-                  <StageBar key={s.stage} {...s} unit={unit} dense />
+                  <StageBar key={s.stage} {...s} unit={unit} dense quantityLabels={quantityLabels} />
                 ))}
               </div>
             </div>
@@ -97,9 +133,9 @@ function stageRowsOf(t: StageTotals, kind: LineKind) {
   const pct = (done: number) => (target > 0 ? Math.min(100, (done / target) * 100) : 0);
   const [first] = STAGES_OF[kind];
   return [
-    { stage: first, done: t.printedProduced, planned: target, percent: pct(t.printedProduced) },
-    { stage: "cutting" as const, done: t.cutProduced, planned: target, percent: pct(t.cutProduced) },
-    { stage: "packaging" as const, done: t.packagedProduced, planned: target, percent: pct(t.packagedProduced) },
+    { stage: first, done: t.printedProduced, planned: target, percent: pct(t.printedProduced), wasted: t.printedWasted },
+    { stage: "cutting" as const, done: t.cutProduced, planned: target, percent: pct(t.cutProduced), wasted: t.cutWasted },
+    { stage: "packaging" as const, done: t.packagedProduced, planned: target, percent: pct(t.packagedProduced), wasted: t.packagedWasted },
   ];
 }
 
@@ -108,15 +144,19 @@ function StageBar({
   done,
   planned,
   percent,
+  wasted,
   unit,
   dense,
+  quantityLabels,
 }: {
   stage: BatchStage;
   done: number;
   planned: number;
   percent: number;
+  wasted: number;
   unit: string;
   dense?: boolean;
+  quantityLabels?: boolean;
 }) {
   const style = STAGE_STYLE[stage];
   const Icon = style.icon;
@@ -135,7 +175,10 @@ function StageBar({
         <span className={`font-mono tabular-nums ${dense ? "text-[10px]" : "text-xs"}`}>
           <span className="font-semibold">{percent.toFixed(0)}%</span>
           <span className="ml-1.5 text-muted-foreground">
-            {formatNumber(done, 0)}/{formatNumber(planned, 0)} {unit}
+            {quantityLabels
+              ? formatNumber(done, 0) + " produced / " + formatNumber(planned, 0) + " required " + unit
+              : formatNumber(done, 0) + "/" + formatNumber(planned, 0) + " " + unit}
+            {wasted > 0 && <span> — {formatNumber(wasted, 0)} wasted</span>}
           </span>
         </span>
       </div>

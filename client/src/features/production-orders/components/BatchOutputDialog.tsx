@@ -24,8 +24,10 @@ interface BatchOutputDialogProps {
  * 6 rolls" — which is what makes correcting a mistyped figure a re-entry rather than a
  * compensating adjustment.
  *
- * Waste is recordable at every stage. Unused reusable input at cutting/packaging is still
- * released upstream; destroyed input is recorded as waste and creates make-up headroom.
+ * Waste is recordable at every stage (printing, weaving, cutting, packaging) since
+ * migration 0027_waste_all_stages. Waste does NOT create headroom — remainingPlannedTx's
+ * ceiling excludes waste — so the user must re-plan the label type (raising its quantity)
+ * to make up for lost pieces.
  */
 export function BatchOutputDialog({ open, onClose, batch, kind, orderId }: BatchOutputDialogProps) {
   const recordOutput = useRecordOutput(orderId);

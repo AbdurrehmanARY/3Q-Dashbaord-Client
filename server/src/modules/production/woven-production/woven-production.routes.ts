@@ -10,8 +10,11 @@ import {
 } from "./woven-production.schema";
 import { idParamsSchema, lineIdParamsSchema } from "@shared/validation/common.schema";
 import { z } from "zod";
+import { requireProductionManager } from "@shared/middleware/rbac";
 
 const router = Router();
+
+router.use(requireProductionManager());
 
 /** `/:id` is the production order; `/:id/lines/:lineId` addresses one woven line. */
 const orderLineParamsSchema = z.object({

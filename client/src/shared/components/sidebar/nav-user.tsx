@@ -10,14 +10,18 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "@/components/ui/sidebar";
+import { useNavigate } from "react-router-dom";
+import { useAuthStore } from "@/store/auth-store";
 
-/**
- * The account menu now lives in the sidebar footer (the shadcn "sidebar-07" pattern)
- * instead of duplicating it in the header — there is no auth in this app, so this stays
- * decorative (see CLAUDE.md), same as the header `UserMenu` it replaces.
- */
 export function NavUser() {
   const { isMobile } = useSidebar();
+  const navigate = useNavigate();
+  const { user, logout } = useAuthStore();
+
+  const handleLogout = () => {
+    logout();
+    navigate("/login");
+  };
 
   return (
     <SidebarMenu>
@@ -37,8 +41,10 @@ export function NavUser() {
               </AvatarFallback>
             </Avatar>
             <div className="grid flex-1 text-left text-sm leading-tight">
-              <span className="truncate font-medium">Admin User</span>
-              <span className="truncate text-xs text-sidebar-foreground/60">admin@3qfacility.com</span>
+              <span className="truncate font-medium">{user?.name ?? "Admin User"}</span>
+              <span className="truncate text-xs text-sidebar-foreground/60">
+                {user?.email ?? "admin@3qfacility.com"}
+              </span>
             </div>
             <ChevronsUpDown className="ml-auto size-4" />
           </DropdownMenuTrigger>
@@ -52,11 +58,7 @@ export function NavUser() {
               <DropdownMenuLabel>My Account</DropdownMenuLabel>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
-              <UserCircle2 className="text-muted-foreground" />
-              Profile
-            </DropdownMenuItem>
-            <DropdownMenuItem>
+            <DropdownMenuItem onClick={handleLogout}>
               <LogOut className="text-muted-foreground" />
               Logout
             </DropdownMenuItem>

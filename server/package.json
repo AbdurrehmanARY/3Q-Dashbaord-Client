@@ -20,6 +20,7 @@
     "db:push": "drizzle-kit push",
     "db:seed": "tsx --env-file .env src/shared/db/seed.ts",
     "db:seed:master": "tsx --env-file .env src/shared/db/seed-master.ts",
+    "db:seed:master-data": "tsx --env-file .env src/shared/db/seed-master-data.ts",
     "db:copy:from-local": "tsx --env-file .env src/shared/db/copy-from-local.ts",
     "db:migrate:production-runs": "tsx --env-file .env src/shared/db/migrate-production-runs.ts",
     "test": "vitest run",
@@ -33,6 +34,7 @@
   },
   "dependencies": {
     "@types/compression": "^1.8.1",
+    "bcryptjs": "^3.0.3",
     "compression": "^1.8.1",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
@@ -40,13 +42,16 @@
     "express": "^4.21.0",
     "express-rate-limit": "^8.6.1",
     "helmet": "^8.3.0",
+    "jsonwebtoken": "^9.0.3",
     "nodemailer": "^9.0.5",
     "postgres": "^3.4.0",
     "zod": "^3.25.0"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
     "@types/cors": "^2.8.19",
     "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^22.0.0",
     "@types/nodemailer": "^8.0.1",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
